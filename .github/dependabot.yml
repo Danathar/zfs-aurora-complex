@@ -1,0 +1,8 @@
+# Keep GitHub Action pins current without pulling in template-specific update
+# rules that do not match this repository's layout.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

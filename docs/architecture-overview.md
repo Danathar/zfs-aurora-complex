@@ -79,9 +79,10 @@ If yes:
 If no:
 
 1. clone the pinned `Danathar/akmods` fork
-2. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
-3. build per-kernel payloads when more than one kernel is present
-4. merge those payloads into one shared Fedora-wide cache image
+2. patch its upstream `Justfile` so publish names come from `images.yaml`
+3. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
+4. build per-kernel payloads when more than one kernel is present
+5. merge those payloads into one shared Fedora-wide cache image
 
 ### 3. Native Final Image Build
 

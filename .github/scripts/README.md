@@ -21,7 +21,7 @@ If a term is unfamiliar, check the shared glossary first:
 | Compute branch-safe image tag prefix | `compute-branch-metadata` | `ci_tools.compute_branch_metadata` |
 | Promote candidate digest to latest and audit tags | `promote-stable` | `ci_tools.promote_stable` |
 | Sign one published image tag by digest | `sign-image` | `ci_tools.sign_image` |
-| Clone pinned upstream akmods tooling | `akmods-clone-pinned` | `ci_tools.akmods_clone_pinned` |
+| Clone pinned upstream akmods tooling and patch publish-name behavior | `akmods-clone-pinned` | `ci_tools.akmods_clone_pinned` |
 | Configure target image path for the akmods build wrapper | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
 | Build and publish shared self-hosted ZFS akmods image | `akmods-build-and-publish` | `ci_tools.akmods_build_and_publish` |
 

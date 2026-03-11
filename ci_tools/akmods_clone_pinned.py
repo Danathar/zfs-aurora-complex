@@ -15,6 +15,46 @@ from ci_tools.common import CiToolError, require_env, run_cmd
 
 
 AKMODS_WORKTREE = Path("/tmp/akmods")
+JUSTFILE = AKMODS_WORKTREE / "Justfile"
+UPSTREAM_AKMODS_NAME_LINE = (
+    "akmods_name := 'akmods' + if akmods_target != 'common' { '-' +akmods_target } else { '' }"
+)
+PATCHED_AKMODS_NAME_LINE = (
+    "akmods_name := env('AKMODS_IMAGE_NAME', "
+    "shell('yq \".images.$1[\\\"$2\\\"].$3.name\" images.yaml', version, kernel_flavor, akmods_target))"
+)
+
+
+def patch_publish_name_resolution() -> None:
+    """
+    Patch the cloned upstream Justfile so publish names come from images.yaml.
+
+    Why this repository needs the patch:
+    1. upstream derives the pushed image name from `AKMODS_TARGET`, which turns
+       `zfs` into a hardcoded `akmods-zfs` publish path
+    2. this repository intentionally publishes to
+       `zfs-kinoite-containerfile-akmods` instead
+    3. the workflow already updates `images.yaml` with that repo-specific name,
+       so teaching the Justfile to read `.name` keeps one source of truth
+    """
+    if not JUSTFILE.exists():
+        raise CiToolError(f"Expected upstream Justfile at {JUSTFILE}")
+
+    content = JUSTFILE.read_text(encoding="utf-8")
+    if PATCHED_AKMODS_NAME_LINE in content:
+        print("Akmods Justfile already patched for repo-specific publish names.")
+        return
+    if UPSTREAM_AKMODS_NAME_LINE not in content:
+        raise CiToolError(
+            "Upstream akmods Justfile no longer matches the expected publish-name "
+            "line. Revisit ci_tools/akmods_clone_pinned.py before continuing."
+        )
+
+    JUSTFILE.write_text(
+        content.replace(UPSTREAM_AKMODS_NAME_LINE, PATCHED_AKMODS_NAME_LINE),
+        encoding="utf-8",
+    )
+    print("Patched upstream Justfile to honor images.yaml publish names.")
 
 
 def main() -> None:
@@ -40,6 +80,7 @@ def main() -> None:
     if resolved_ref != upstream_ref:
         raise CiToolError(f"Pinned ref mismatch: expected {upstream_ref}, got {resolved_ref}")
 
+    patch_publish_name_resolution()
     print(f"Using pinned akmods ref: {resolved_ref}")
 
 
