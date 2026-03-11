@@ -1,0 +1,304 @@
+name: Build And Promote Main Image
+
+on:
+  schedule:
+    - cron: "00 06 * * *"
+
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - README.md
+      - "**/README.md"
+      - docs/**
+      - "**/*.md"
+
+  workflow_dispatch:
+    inputs:
+      rebuild_akmods:
+        description: Force rebuild of shared self-hosted ZFS akmods
+        required: false
+        default: false
+        type: boolean
+      promote_to_stable:
+        description: Promote the tested candidate tag to latest after success
+        required: false
+        default: true
+        type: boolean
+      use_input_lock:
+        description: Use lock file inputs instead of moving latest tags
+        required: false
+        default: false
+        type: boolean
+      lock_file:
+        description: Lock file path for replay mode
+        required: false
+        default: ci/inputs.lock.json
+        type: string
+      build_container_image:
+        description: Build container image/ref override for the akmods job
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  AKMODS_UPSTREAM_REPO: https://github.com/Danathar/akmods.git
+  AKMODS_UPSTREAM_REF: 9d13b6950811cdaae2e8ab748c85c5da35810ae3
+  IMAGE_NAME: zfs-kinoite-containerfile
+  AKMODS_REPO: zfs-kinoite-containerfile-akmods
+  DEFAULT_BASE_IMAGE: ghcr.io/ublue-os/kinoite-main:latest
+  DEFAULT_BUILD_CONTAINER_IMAGE: ghcr.io/ublue-os/devcontainer:latest
+  DEFAULT_BREW_IMAGE: ghcr.io/ublue-os/brew:latest
+  DEFAULT_ZFS_MINOR_VERSION: "2.4"
+
+jobs:
+  build-zfs-akmods:
+    name: Build Shared ZFS Akmods Cache
+    runs-on: ubuntu-24.04
+    outputs:
+      fedora_version: ${{ steps.resolve.outputs.version }}
+      kernel_release: ${{ steps.resolve.outputs.kernel_release }}
+      kernel_releases: ${{ steps.resolve.outputs.kernel_releases }}
+      base_image_ref: ${{ steps.resolve.outputs.base_image_ref }}
+      base_image_name: ${{ steps.resolve.outputs.base_image_name }}
+      base_image_tag: ${{ steps.resolve.outputs.base_image_tag }}
+      base_image_pinned: ${{ steps.resolve.outputs.base_image_pinned }}
+      base_image_digest: ${{ steps.resolve.outputs.base_image_digest }}
+      build_container_ref: ${{ steps.resolve.outputs.build_container_ref }}
+      build_container_pinned: ${{ steps.resolve.outputs.build_container_pinned }}
+      build_container_digest: ${{ steps.resolve.outputs.build_container_digest }}
+      zfs_minor_version: ${{ steps.resolve.outputs.zfs_minor_version }}
+      akmods_upstream_ref: ${{ steps.resolve.outputs.akmods_upstream_ref }}
+      use_input_lock: ${{ steps.resolve.outputs.use_input_lock }}
+      lock_file_path: ${{ steps.resolve.outputs.lock_file_path }}
+      akmods_cache_exists: ${{ steps.cache.outputs.exists }}
+    permissions:
+      contents: read
+      packages: write
+    container:
+      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
+      options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Resolve build inputs for this run
+        id: resolve
+        shell: bash
+        env:
+          USE_INPUT_LOCK: ${{ github.event.inputs.use_input_lock || 'false' }}
+          LOCK_FILE: ${{ github.event.inputs.lock_file || 'ci/inputs.lock.json' }}
+          BUILD_CONTAINER_REF: ${{ github.event.inputs.build_container_image || env.DEFAULT_BUILD_CONTAINER_IMAGE }}
+          DEFAULT_BASE_IMAGE: ${{ env.DEFAULT_BASE_IMAGE }}
+          DEFAULT_ZFS_MINOR_VERSION: ${{ env.DEFAULT_ZFS_MINOR_VERSION }}
+          DEFAULT_AKMODS_REF: ${{ env.AKMODS_UPSTREAM_REF }}
+        run: |
+          python3 -m ci_tools.cli resolve-build-inputs
+
+      - name: Write build inputs manifest
+        shell: bash
+        env:
+          USE_INPUT_LOCK: ${{ steps.resolve.outputs.use_input_lock }}
+          LOCK_FILE_PATH: ${{ steps.resolve.outputs.lock_file_path }}
+          FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+          KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+          KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
+          BASE_IMAGE_REF: ${{ steps.resolve.outputs.base_image_ref }}
+          BASE_IMAGE_NAME: ${{ steps.resolve.outputs.base_image_name }}
+          BASE_IMAGE_TAG: ${{ steps.resolve.outputs.base_image_tag }}
+          BASE_IMAGE_PINNED: ${{ steps.resolve.outputs.base_image_pinned }}
+          BASE_IMAGE_DIGEST: ${{ steps.resolve.outputs.base_image_digest }}
+          BUILD_CONTAINER_REF: ${{ steps.resolve.outputs.build_container_ref }}
+          BUILD_CONTAINER_PINNED: ${{ steps.resolve.outputs.build_container_pinned }}
+          BUILD_CONTAINER_DIGEST: ${{ steps.resolve.outputs.build_container_digest }}
+          ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+          AKMODS_UPSTREAM_REF: ${{ steps.resolve.outputs.akmods_upstream_ref }}
+        run: |
+          python3 -m ci_tools.cli write-build-inputs-manifest
+
+      - name: Upload build inputs manifest
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-inputs-${{ github.run_id }}
+          path: artifacts/build-inputs.json
+          if-no-files-found: error
+
+      - name: Check for existing shared akmods cache
+        id: cache
+        shell: bash
+        env:
+          FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+          KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+          KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
+          AKMODS_REPO: ${{ env.AKMODS_REPO }}
+        run: |
+          python3 -m ci_tools.cli check-akmods-cache
+
+      - name: Clone upstream akmods tooling
+        if: github.event_name == 'schedule' || github.event.inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+        shell: bash
+        env:
+          AKMODS_UPSTREAM_REPO: ${{ env.AKMODS_UPSTREAM_REPO }}
+          AKMODS_UPSTREAM_REF: ${{ steps.resolve.outputs.akmods_upstream_ref }}
+        run: |
+          python3 -m ci_tools.cli akmods-clone-pinned
+
+      - name: Configure shared ZFS target in self-hosted namespace
+        if: github.event_name == 'schedule' || github.event.inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+        shell: bash
+        env:
+          FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+          AKMODS_REPO: ${{ env.AKMODS_REPO }}
+          AKMODS_DESCRIPTION: Shared cache image for pre-built zfs akmod RPMs
+        run: |
+          python3 -m ci_tools.cli akmods-configure-zfs-target
+
+      - name: Build and publish shared self-hosted ZFS akmods image
+        if: github.event_name == 'schedule' || github.event.inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+        shell: bash
+        env:
+          AKMODS_KERNEL: main
+          AKMODS_VERSION: ${{ steps.resolve.outputs.version }}
+          KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+          KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
+          AKMODS_REPO: ${{ env.AKMODS_REPO }}
+          AKMODS_TARGET: zfs
+          ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+          CI: "1"
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m ci_tools.cli akmods-build-and-publish
+
+  build-candidate-image:
+    name: Build Candidate Image
+    needs: build-zfs-akmods
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Prepare lowercase registry paths
+        shell: bash
+        run: |
+          echo "IMAGE_ORG=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+          echo "IMAGE_REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Compute candidate tag
+        id: tags
+        shell: bash
+        env:
+          FEDORA_VERSION: ${{ needs.build-zfs-akmods.outputs.fedora_version }}
+        run: |
+          echo "candidate_tag=candidate-${GITHUB_SHA::7}-${FEDORA_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build candidate image locally
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056
+        with:
+          containerfiles: |
+            ./Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.tags.outputs.candidate_tag }}
+          build-args: |
+            BASE_IMAGE=${{ needs.build-zfs-akmods.outputs.base_image_pinned }}
+            BREW_IMAGE=${{ env.DEFAULT_BREW_IMAGE }}
+            AKMODS_IMAGE=ghcr.io/${{ env.IMAGE_ORG }}/${{ env.AKMODS_REPO }}:main-${{ needs.build-zfs-akmods.outputs.fedora_version }}
+            IMAGE_REPO=ghcr.io/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}
+            SIGNING_KEY_FILENAME=${{ env.IMAGE_NAME }}.pub
+          oci: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Push candidate image to GHCR
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.tags.outputs.candidate_tag }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Install skopeo and cosign for signature upload
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+        
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad
+        with:
+          cosign-release: v2.6.1
+
+      - name: Sign candidate image digest
+        shell: bash
+        env:
+          IMAGE_ORG: ${{ env.IMAGE_ORG }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ steps.tags.outputs.candidate_tag }}
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          python3 -m ci_tools.cli sign-image
+
+  promote-stable:
+    name: Promote Candidate To Stable
+    needs:
+      - build-zfs-akmods
+      - build-candidate-image
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Prepare lowercase registry paths
+        shell: bash
+        run: |
+          echo "IMAGE_ORG=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Install skopeo and cosign
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad
+        with:
+          cosign-release: v2.6.1
+
+      - name: Promote candidate image to latest and audit tags
+        shell: bash
+        env:
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          FEDORA_VERSION: ${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          python3 -m ci_tools.cli promote-stable
+
+      - name: Sign promoted stable image digest
+        shell: bash
+        env:
+          IMAGE_ORG: ${{ env.IMAGE_ORG }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: latest
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          python3 -m ci_tools.cli sign-image

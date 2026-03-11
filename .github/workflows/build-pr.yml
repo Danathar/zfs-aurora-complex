@@ -1,0 +1,66 @@
+name: Validate Pull Request Image Build
+
+on:
+  pull_request:
+    paths-ignore:
+      - README.md
+      - "**/README.md"
+      - docs/**
+      - "**/*.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  AKMODS_UPSTREAM_REPO: https://github.com/Danathar/akmods.git
+  AKMODS_UPSTREAM_REF: 9d13b6950811cdaae2e8ab748c85c5da35810ae3
+  IMAGE_NAME: zfs-kinoite-containerfile
+  AKMODS_REPO: zfs-kinoite-containerfile-akmods
+  DEFAULT_BASE_IMAGE: ghcr.io/ublue-os/kinoite-main:latest
+  DEFAULT_BUILD_CONTAINER_IMAGE: ghcr.io/ublue-os/devcontainer:latest
+  DEFAULT_BREW_IMAGE: ghcr.io/ublue-os/brew:latest
+  DEFAULT_ZFS_MINOR_VERSION: "2.4"
+
+jobs:
+  build-pr-image:
+    name: Build PR Image (No Push)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Prepare lowercase registry paths
+        shell: bash
+        run: |
+          echo "IMAGE_ORG=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Resolve inputs and verify shared akmods cache
+        id: prepare
+        shell: bash
+        env:
+          USE_INPUT_LOCK: false
+          LOCK_FILE: ci/inputs.lock.json
+          BUILD_CONTAINER_REF: ${{ env.DEFAULT_BUILD_CONTAINER_IMAGE }}
+          DEFAULT_BASE_IMAGE: ${{ env.DEFAULT_BASE_IMAGE }}
+          DEFAULT_ZFS_MINOR_VERSION: ${{ env.DEFAULT_ZFS_MINOR_VERSION }}
+          DEFAULT_AKMODS_REF: ${{ env.AKMODS_UPSTREAM_REF }}
+          AKMODS_REPO: ${{ env.AKMODS_REPO }}
+        run: |
+          python3 -m ci_tools.cli prepare-validation-build
+
+      - name: Build validation image locally
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056
+        with:
+          containerfiles: |
+            ./Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: pr-validation
+          build-args: |
+            BASE_IMAGE=${{ steps.prepare.outputs.base_image_pinned }}
+            BREW_IMAGE=${{ env.DEFAULT_BREW_IMAGE }}
+            AKMODS_IMAGE=ghcr.io/${{ env.IMAGE_ORG }}/${{ env.AKMODS_REPO }}:main-${{ steps.prepare.outputs.version }}
+            IMAGE_REPO=ghcr.io/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}
+            SIGNING_KEY_FILENAME=${{ env.IMAGE_NAME }}.pub
+          oci: false

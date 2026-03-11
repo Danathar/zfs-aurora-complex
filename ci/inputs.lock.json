@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "description": "Pinned inputs for workflow_dispatch replay mode. Replace the placeholder values below with fields from a build-inputs artifact before enabling use_input_lock=true.",
+  "base_image": "REPLACE_ME",
+  "build_container": "REPLACE_ME",
+  "zfs_minor_version": "2.4",
+  "akmods_upstream_ref": "9d13b6950811cdaae2e8ab748c85c5da35810ae3"
+}
