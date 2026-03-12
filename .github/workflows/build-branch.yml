@@ -120,7 +120,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y skopeo
 
-      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad
+      - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
         if: env.HAS_SIGNING_SECRET == 'true'
         with:
           cosign-release: v2.6.1
