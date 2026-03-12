@@ -15,6 +15,16 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
+
+
+# The build copies repo helper modules into `/shared`, but Python started with
+# `python3 /containerfiles/.../install_zfs_from_akmods_cache.py` only adds the
+# script directory to `sys.path`. Add the image root explicitly so the shared
+# helper package is importable both in CI tests and inside the built image.
+IMAGE_ROOT = Path(__file__).resolve().parents[2]
+if str(IMAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(IMAGE_ROOT))
 
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
