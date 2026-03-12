@@ -45,7 +45,7 @@ Why:
 ## What To Validate After Changing The Pin
 
 1. `Build Shared ZFS Akmods Cache` still succeeds
-2. merged shared cache image contains `kmod-zfs` RPMs for every base-image kernel
+2. shared cache image contains the `kmod-zfs` RPM needed for the supported primary kernel
 3. final candidate image still installs ZFS userspace and modules correctly
 4. promotion and signing still succeed on `main`
 

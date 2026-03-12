@@ -40,6 +40,10 @@ class ResolvedBuildInputs:
     We keep this as a dataclass so multiple commands can share the same resolved
     values without each command re-implementing the environment and registry
     lookup flow.
+
+    Important policy note:
+    - `kernel_releases` records every detected kernel directory in the base image
+    - `kernel_release` is the supported primary kernel this repo builds and validates against
     """
 
     version: str
@@ -198,7 +202,7 @@ def resolve_build_inputs() -> BuildInputResolution:
 
     This is the core logic behind the main workflow and the non-main validation
     workflows. Sharing it here means every path pins the same base image, build
-    container, Fedora version, and kernel list.
+    container, Fedora version, and supported primary kernel.
     """
 
     # Workflow inputs are supplied through environment variables.
@@ -336,8 +340,8 @@ def main() -> None:
             "Base image label/kernel directory mismatch: "
             f"label={resolution.label_kernel_release} newest_dir={inputs.kernel_release}"
         )
-    print(f"Kernel release: {inputs.kernel_release}")
-    print(f"Kernel releases in base image: {' '.join(inputs.kernel_releases)}")
+    print(f"Supported primary kernel release: {inputs.kernel_release}")
+    print(f"Detected kernel releases in base image: {' '.join(inputs.kernel_releases)}")
     print(f"Fedora version: {inputs.version}")
     print(f"ZFS minor version: {inputs.zfs_minor_version}")
 

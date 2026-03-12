@@ -72,7 +72,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                             return_value=AkmodsCacheStatus(
                                 source_image="ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
                                 image_exists=True,
-                                missing_releases=(),
+                                missing_release="",
                             ),
                         ) as inspect_cache:
                             main()
@@ -90,7 +90,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 image_org="danathar",
                 source_repo="zfs-kinoite-containerfile-akmods",
                 fedora_version="43",
-                kernel_releases=["6.18.13-200.fc43.x86_64", "6.18.16-200.fc43.x86_64"],
+                kernel_release="6.18.16-200.fc43.x86_64",
             )
             clone_pinned.assert_called_once_with()
 
@@ -118,7 +118,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                             return_value=AkmodsCacheStatus(
                                 source_image="ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
                                 image_exists=True,
-                                missing_releases=("6.18.16-200.fc43.x86_64",),
+                                missing_release="6.18.16-200.fc43.x86_64",
                             ),
                         ):
                             with self.assertRaises(CiToolError) as context:

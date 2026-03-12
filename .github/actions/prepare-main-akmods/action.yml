@@ -125,7 +125,6 @@ runs:
       env:
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
-        KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
@@ -134,7 +133,7 @@ runs:
       if: steps.cache.outputs.exists == 'true' && steps.cache.outputs.metadata_exists != 'true'
       shell: bash
       env:
-        KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
+        KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_VERSION: ${{ steps.resolve.outputs.version }}
         AKMODS_KERNEL: main
         AKMODS_REPO: ${{ inputs.akmods_repo }}
@@ -168,7 +167,6 @@ runs:
         AKMODS_KERNEL: main
         AKMODS_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
-        KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         AKMODS_TARGET: zfs
         ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}

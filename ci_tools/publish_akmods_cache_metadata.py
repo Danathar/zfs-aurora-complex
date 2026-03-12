@@ -13,7 +13,7 @@ from ci_tools.common import normalize_owner, optional_env, require_env, require_
 
 
 def main() -> None:
-    kernel_releases = require_env("KERNEL_RELEASES").split()
+    kernel_release = require_env("KERNEL_RELEASE")
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
     akmods_repo = optional_env("AKMODS_REPO") or require_env_or_default("AKMODS_REPO")
     kernel_flavor = optional_env("AKMODS_KERNEL", "main")
@@ -43,7 +43,7 @@ def main() -> None:
         akmods_repo=akmods_repo,
         kernel_flavor=kernel_flavor,
         akmods_version=akmods_version,
-        kernel_releases=kernel_releases,
+        kernel_releases=[kernel_release],
     )
 
 
