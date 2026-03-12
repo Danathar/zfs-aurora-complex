@@ -10,13 +10,13 @@ Goal: Keep the image build logic explicit while reducing the older multi-kernel 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shutil
 import subprocess
-import tarfile
+
+from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
 
 LAYOUT_DIR = Path("/tmp/akmods-zfs")
@@ -142,46 +142,6 @@ def copy_oci_layout_from_registry(image_ref: str, layout_dir: Path = LAYOUT_DIR)
         ],
         capture_output=False,
     )
-
-
-def load_layer_files_from_oci_layout(layout_dir: Path) -> list[Path]:
-    """Resolve manifest layer digests into local tarball paths."""
-
-    manifest_path = layout_dir / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    layer_files = [
-        layout_dir / layer["digest"].removeprefix("sha256:")
-        for layer in manifest.get("layers", [])
-        if layer.get("digest")
-    ]
-    if not layer_files:
-        raise RuntimeError(f"No layers found in OCI layout {layout_dir}")
-    return layer_files
-
-
-def _is_safe_tar_member(name: str) -> bool:
-    """
-    Reject absolute or parent-directory entries before extraction.
-
-    Why: the cache image is expected to unpack under `/tmp`, not escape it.
-    Matching the old shell guard here keeps the helper fail-closed.
-    """
-
-    path = PurePosixPath(name)
-    return not path.is_absolute() and ".." not in path.parts
-
-
-def unpack_layer_tarballs(layer_files: list[Path], destination: Path) -> None:
-    """Extract every layer tarball after validating member paths."""
-
-    for layer_path in layer_files:
-        with tarfile.open(layer_path) as layer_tar:
-            for member in layer_tar.getmembers():
-                if not _is_safe_tar_member(member.name):
-                    raise RuntimeError(
-                        f"Unsafe tar path found in layer {layer_path}: {member.name}"
-                    )
-            layer_tar.extractall(destination)
 
 
 def discover_zfs_rpms(rpm_root: Path = RPM_SEARCH_ROOT) -> list[Path]:

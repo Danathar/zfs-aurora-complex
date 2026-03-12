@@ -46,11 +46,10 @@ So the `main` GitHub Actions workflow does this:
 
 1. resolve and pin the exact base image, detected kernel list, primary boot kernel, builder image, and ZFS line for the run
 2. reuse or rebuild the shared akmods cache image for that primary kernel
-3. publish or repair a tiny metadata tag that records which supported kernel that shared cache covers
-4. build a candidate image tag in the same repository
-5. sign that candidate digest
-6. promote the tested candidate digest to `latest` and to an immutable audit tag
-7. sign the promoted `latest` digest
+3. build a candidate image tag in the same repository
+4. sign that candidate digest
+5. promote the tested candidate digest to `latest` and to an immutable audit tag
+6. sign the promoted `latest` digest
 
 If candidate fails, `latest` does not move.
 
@@ -94,7 +93,6 @@ Shared akmods cache image:
 
 - `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
 - architecture-specific inspection tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-x86_64`
-- metadata tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-metadata`
 
 The important simplification is this:
 
@@ -144,6 +142,7 @@ If the fork is updated after upstream changes:
 Containerfile                         native image build definition
 build_files/build-image.sh            build-time orchestration inside the image
 containerfiles/zfs-akmods/            compose-time ZFS install helper
+shared/                               shared Python helpers copied into CI and image build context
 ci/defaults.json                      checked-in defaults shared by workflows and helpers
 files/scripts/                        image-local helper scripts
 ci_tools/                             workflow helper commands
@@ -179,7 +178,7 @@ At a high level, the final image build now works like this:
 Three workflow-side simplifications now support that image build:
 
 1. `ci/defaults.json` is the one checked-in source of truth for default image refs, image names, and the pinned akmods fork commit
-2. the shared akmods cache publishes a `main-<fedora>-metadata` metadata tag so later validation runs can usually answer cache-reuse questions from registry metadata alone
+2. cache checks now inspect the shared akmods cache image directly, which removes the extra sidecar image and keeps the reuse rule easier to follow
 3. small repo-owned Python helpers now handle registry-context export, candidate-tag generation, branch-tag composition, and signing-policy file generation instead of leaving that logic inline in workflow or shell snippets
 
 One Fedora-version detail matters here:

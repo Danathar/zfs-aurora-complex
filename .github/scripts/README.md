@@ -19,7 +19,6 @@ If a term is unfamiliar, check the shared glossary first:
 | Check shared akmods cache | `check-akmods-cache` | `ci_tools.check_akmods_cache` |
 | Export normalized registry context for later workflow steps | `export-registry-context` | `ci_tools.export_registry_context` |
 | Export checked-in repo defaults for workflow steps | `export-repo-defaults` | `ci_tools.export_repo_defaults` |
-| Publish or repair the shared-cache metadata tag | `publish-akmods-cache-metadata` | `ci_tools.publish_akmods_cache_metadata` |
 | Resolve pull request (PR) and branch validation inputs and verify shared akmods cache | `prepare-validation-build` | `ci_tools.prepare_validation_build` |
 | Compute branch-safe image tag prefix | `compute-branch-metadata` | `ci_tools.compute_branch_metadata` |
 | Compose final branch image tag | `compose-branch-image-tag` | `ci_tools.compose_branch_image_tag` |

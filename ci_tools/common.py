@@ -13,9 +13,10 @@ import json
 import os
 import re
 import subprocess
-import tarfile
 from pathlib import Path
 from typing import Mapping, Sequence
+
+from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
 
 class CiToolError(RuntimeError):
@@ -215,35 +216,6 @@ def skopeo_copy(
         command.extend(["--src-creds", creds, "--dest-creds", creds])
     command.extend([source, destination])
     run_cmd(command, capture_output=False)
-
-
-def unpack_layer_tarballs(layer_files: list[Path], destination: Path) -> None:
-    """
-    Extract image layer tar files into one filesystem tree.
-
-    We pass `filter="data"` so extraction is safer:
-    - blocks absolute paths and parent-directory escapes
-    - blocks unsafe link targets
-    This is a "fail closed" safety check for untrusted tar metadata.
-    """
-    for layer_file in layer_files:
-        with tarfile.open(layer_file, "r") as tar:
-            tar.extractall(destination, filter="data")
-
-
-def load_layer_files_from_oci_layout(image_dir: Path) -> list[Path]:
-    """
-    Return filesystem layer tar paths from one local `skopeo copy ... dir:` tree.
-
-    OCI dir layouts store layer digests in `manifest.json`; the actual filenames
-    are the same digest strings without the `sha256:` prefix.
-    """
-    manifest_path = image_dir / "manifest.json"
-    manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    layer_digests = [
-        str(layer.get("digest") or "") for layer in manifest_data.get("layers", []) if layer.get("digest")
-    ]
-    return [image_dir / digest.replace("sha256:", "") for digest in layer_digests]
 
 
 def natural_sort_key(value: str) -> list[int | str]:

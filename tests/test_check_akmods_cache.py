@@ -28,35 +28,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64")
             )
 
-    def test_inspect_akmods_cache_prefers_metadata_sidecar(self) -> None:
-        def fake_exists(image_ref: str) -> bool:
-            return image_ref in {
-                "docker://ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
-                "docker://ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43-metadata",
-            }
-
-        with patch("ci_tools.check_akmods_cache.skopeo_exists", side_effect=fake_exists):
-            with patch(
-                "ci_tools.check_akmods_cache.skopeo_inspect_json",
-                return_value={
-                    "Labels": {
-                        "org.danathar.zfs-kinoite.akmods.kernel-releases": "6.18.16-200.fc43.x86_64"
-                    }
-                },
-            ):
-                with patch("ci_tools.check_akmods_cache.skopeo_copy") as skopeo_copy:
-                    status = inspect_akmods_cache(
-                        image_org="danathar",
-                        source_repo="zfs-kinoite-containerfile-akmods",
-                        fedora_version="43",
-                        kernel_release="6.18.16-200.fc43.x86_64",
-                    )
-
-        self.assertTrue(status.reusable)
-        self.assertEqual(status.inspection_method, "metadata-tag")
-        skopeo_copy.assert_not_called()
-
-    def test_inspect_akmods_cache_falls_back_when_metadata_sidecar_is_missing(self) -> None:
+    def test_inspect_akmods_cache_reads_shared_cache_image(self) -> None:
         def fake_exists(image_ref: str) -> bool:
             return image_ref == "docker://ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43"
 

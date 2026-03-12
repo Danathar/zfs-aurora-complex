@@ -22,8 +22,7 @@ If a term is unfamiliar, check the shared glossary first:
 3. [`ci_tools/check_akmods_cache.py`](../ci_tools/check_akmods_cache.py)
 4. [`ci_tools/prepare_validation_build.py`](../ci_tools/prepare_validation_build.py)
    - read-only cache validation plus pinned-akmods-ref fetch validation
-5. [`ci_tools/akmods_cache_metadata.py`](../ci_tools/akmods_cache_metadata.py)
-6. [`ci_tools/export_registry_context.py`](../ci_tools/export_registry_context.py)
+5. [`ci_tools/export_registry_context.py`](../ci_tools/export_registry_context.py)
    - normalizes registry paths and detects automation accounts
 
 ### 4. Akmods build control
@@ -32,7 +31,6 @@ If a term is unfamiliar, check the shared glossary first:
    - clones the pinned upstream fork and verifies the exact commit SHA
 2. [`ci_tools/akmods_configure_zfs_target.py`](../ci_tools/akmods_configure_zfs_target.py)
 3. [`ci_tools/akmods_build_and_publish.py`](../ci_tools/akmods_build_and_publish.py)
-4. [`ci_tools/publish_akmods_cache_metadata.py`](../ci_tools/publish_akmods_cache_metadata.py)
 
 ### 5. Native image composition
 
@@ -40,6 +38,7 @@ If a term is unfamiliar, check the shared glossary first:
 2. [`build_files/build-image.sh`](../build_files/build-image.sh)
 3. [`files/scripts/configure_signing_policy.py`](../files/scripts/configure_signing_policy.py)
 4. [`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](../containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py)
+5. [`shared/oci_layout.py`](../shared/oci_layout.py)
 
 ### 6. Tagging and signing
 

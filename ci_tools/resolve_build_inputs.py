@@ -42,13 +42,13 @@ class ResolvedBuildInputs:
     lookup flow.
 
     Important policy note:
-    - `kernel_releases` records every detected kernel directory in the base image
+    - `detected_kernel_releases` records every detected kernel directory in the base image
     - `kernel_release` is the supported primary kernel this repo builds and validates against
     """
 
     version: str
     kernel_release: str
-    kernel_releases: tuple[str, ...]
+    detected_kernel_releases: tuple[str, ...]
     base_image_ref: str
     base_image_name: str
     base_image_tag: str
@@ -160,10 +160,10 @@ def detect_base_image_kernel_releases(image_ref: str) -> list[str]:
             "find /lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\\n'",
         ]
     )
-    kernel_releases = sort_kernel_releases(output.splitlines())
-    if not kernel_releases:
+    detected_kernel_releases = sort_kernel_releases(output.splitlines())
+    if not detected_kernel_releases:
         raise CiToolError(f"No installed kernel directories found in {image_ref}")
-    return kernel_releases
+    return detected_kernel_releases
 
 
 def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
@@ -179,7 +179,7 @@ def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
         {
             "version": inputs.version,
             "kernel_release": inputs.kernel_release,
-            "kernel_releases": " ".join(inputs.kernel_releases),
+            "detected_kernel_releases": " ".join(inputs.detected_kernel_releases),
             "base_image_ref": inputs.base_image_ref,
             "base_image_name": inputs.base_image_name,
             "base_image_tag": inputs.base_image_tag,
@@ -196,16 +196,19 @@ def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
     )
 
 
-def resolve_build_inputs() -> BuildInputResolution:
+def resolve_configured_inputs() -> tuple[bool, str, str, str, str, str]:
     """
-    Resolve one complete set of build inputs from env and registry state.
+    Resolve top-level workflow inputs before any registry lookups happen.
 
-    This is the core logic behind the main workflow and the non-main validation
-    workflows. Sharing it here means every path pins the same base image, build
-    container, Fedora version, and supported primary kernel.
+    Return values are:
+    1. lock replay mode flag
+    2. lock file path
+    3. build container ref
+    4. base image ref
+    5. ZFS minor version
+    6. pinned akmods source ref
     """
 
-    # Workflow inputs are supplied through environment variables.
     use_input_lock = optional_env("USE_INPUT_LOCK", "false").lower() == "true"
     lock_file_path = require_env("LOCK_FILE")
     build_container_ref = require_env("BUILD_CONTAINER_REF")
@@ -214,8 +217,6 @@ def resolve_build_inputs() -> BuildInputResolution:
     )
 
     if use_input_lock:
-        # Replay mode: load values from `ci/inputs.lock.json` (or another lock file).
-        # This is how we rebuild with the exact same inputs as an older run.
         lock_data = _load_lock_file(lock_file_path)
         base_image_ref = str(lock_data.get("base_image") or "")
         lock_build_container_ref = str(lock_data.get("build_container") or "")
@@ -228,7 +229,6 @@ def resolve_build_inputs() -> BuildInputResolution:
             raise CiToolError("Lock file base_image still contains placeholder value")
         if lock_build_container_ref and "REPLACE_ME" in lock_build_container_ref:
             raise CiToolError("Lock file build_container still contains placeholder value")
-
         if lock_build_container_ref and build_container_ref != lock_build_container_ref:
             raise CiToolError(
                 "Replay mismatch: build container input "
@@ -237,16 +237,42 @@ def resolve_build_inputs() -> BuildInputResolution:
                 f"build_container_image={lock_build_container_ref} when use_input_lock=true."
             )
 
-        # Lock files can leave some fields empty; default them when missing.
         if not zfs_minor_version:
             zfs_minor_version = require_env_or_default("DEFAULT_ZFS_MINOR_VERSION")
         if not akmods_upstream_ref:
             akmods_upstream_ref = default_akmods_ref
     else:
-        # Normal mode: resolve from configured defaults (moving tags).
         base_image_ref = require_env_or_default("DEFAULT_BASE_IMAGE")
         zfs_minor_version = require_env_or_default("DEFAULT_ZFS_MINOR_VERSION")
         akmods_upstream_ref = default_akmods_ref
+
+    return (
+        use_input_lock,
+        lock_file_path,
+        build_container_ref,
+        base_image_ref,
+        zfs_minor_version,
+        akmods_upstream_ref,
+    )
+
+
+def resolve_build_inputs() -> BuildInputResolution:
+    """
+    Resolve one complete set of build inputs from env and registry state.
+
+    This is the core logic behind the main workflow and the non-main validation
+    workflows. Sharing it here means every path pins the same base image, build
+    container, Fedora version, and supported primary kernel.
+    """
+
+    (
+        use_input_lock,
+        lock_file_path,
+        build_container_ref,
+        base_image_ref,
+        zfs_minor_version,
+        akmods_upstream_ref,
+    ) = resolve_configured_inputs()
 
     # Read base image metadata from registry.
     # Labels carry kernel information and stream version information.
@@ -263,8 +289,8 @@ def resolve_build_inputs() -> BuildInputResolution:
         raise CiToolError(f"Failed to read ostree.linux label from {base_image_ref}")
 
     base_image_pinned = f"{base_image_name}@{base_image_digest}"
-    kernel_releases = detect_base_image_kernel_releases(base_image_pinned)
-    kernel_release = kernel_releases[-1]
+    detected_kernel_releases = detect_base_image_kernel_releases(base_image_pinned)
+    kernel_release = detected_kernel_releases[-1]
     fedora_version = extract_fedora_version(kernel_release)
     source_tag = extract_source_tag(base_image_ref)
 
@@ -306,7 +332,7 @@ def resolve_build_inputs() -> BuildInputResolution:
         inputs=ResolvedBuildInputs(
             version=fedora_version,
             kernel_release=kernel_release,
-            kernel_releases=tuple(kernel_releases),
+            detected_kernel_releases=tuple(detected_kernel_releases),
             base_image_ref=base_image_ref,
             base_image_name=base_image_name,
             base_image_tag=base_image_tag,
@@ -341,7 +367,10 @@ def main() -> None:
             f"label={resolution.label_kernel_release} newest_dir={inputs.kernel_release}"
         )
     print(f"Supported primary kernel release: {inputs.kernel_release}")
-    print(f"Detected kernel releases in base image: {' '.join(inputs.kernel_releases)}")
+    print(
+        "Detected kernel releases in base image: "
+        f"{' '.join(inputs.detected_kernel_releases)}"
+    )
     print(f"Fedora version: {inputs.version}")
     print(f"ZFS minor version: {inputs.zfs_minor_version}")
 

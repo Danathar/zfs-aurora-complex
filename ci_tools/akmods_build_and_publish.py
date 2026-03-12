@@ -1,8 +1,8 @@
 """
 Script: ci_tools/akmods_build_and_publish.py
 What: Builds and publishes the ZFS akmods image from `/tmp/akmods`.
-Doing: Pins the primary kernel info, builds one shared Fedora-wide cache image,
-and publishes metadata describing that supported kernel.
+Doing: Pins the primary kernel info, writes the upstream `cache.json` file, and
+builds one shared Fedora-wide cache image.
 Why: Keeps the workflow logic in one tested file instead of repeated shell.
 Goal: Publish the akmods cache image consumed by later build steps.
 """
@@ -15,12 +15,10 @@ from pathlib import Path
 
 from ci_tools.common import (
     CiToolError,
-    normalize_owner,
     optional_env,
     require_env,
     run_cmd,
 )
-from ci_tools.akmods_cache_metadata import publish_shared_cache_metadata, shared_cache_tag
 
 
 AKMODS_WORKTREE = Path("/tmp/akmods")
@@ -131,7 +129,7 @@ def build_and_push_kernel_release(kernel_release: str) -> None:
     print(f"Building akmods for kernel release: {kernel_release}")
     write_kernel_cache_file(kernel_release=kernel_release)
 
-    # Upstream tooling reads the cache metadata we just wrote and publishes the
+    # Upstream tooling reads the cache.json file we just wrote and publishes the
     # shared Fedora-wide tag plus the architecture-specific inspection tag.
     run_cmd(["just", "build"], cwd=str(AKMODS_WORKTREE), capture_output=False)
     run_cmd(["just", "push"], cwd=str(AKMODS_WORKTREE), capture_output=False)
@@ -158,13 +156,6 @@ def main() -> None:
     run_cmd(["just", "login"], cwd=str(AKMODS_WORKTREE), capture_output=False)
     build_and_push_kernel_release(kernel_release)
     run_cmd(["just", "manifest"], cwd=str(AKMODS_WORKTREE), capture_output=False)
-    publish_shared_cache_metadata(
-        image_org=normalize_owner(require_env("GITHUB_REPOSITORY_OWNER")),
-        akmods_repo=require_env("AKMODS_REPO"),
-        kernel_flavor=require_env("AKMODS_KERNEL"),
-        akmods_version=require_env("AKMODS_VERSION"),
-        kernel_releases=[kernel_release],
-    )
 
 
 if __name__ == "__main__":

@@ -30,7 +30,6 @@ The objective is to validate that we can safely:
 2. stable OS image: `ghcr.io/danathar/zfs-kinoite-containerfile:latest`
 3. stable audit tag: `ghcr.io/danathar/zfs-kinoite-containerfile:stable-<run>-<sha>`
 4. shared akmods cache image: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
-5. shared akmods cache metadata tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-metadata`
 
 ### Branch Artifacts
 
@@ -60,10 +59,11 @@ The repo then makes one explicit policy choice:
 
 Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image already contains a matching `kmod-zfs-<kernel_release>` RPM for the supported primary kernel.
 
-That check now prefers the metadata tag first:
+That check now uses one direct inspection path:
 
-1. inspect `main-<fedora>-metadata` and read its cached supported-kernel label
-2. only if that metadata tag is missing or malformed, unpack the full shared cache image and inspect the RPM filenames directly
+1. copy the shared cache image into a local Open Container Initiative (OCI) layout
+2. unpack the filesystem layers from that local copy
+3. inspect the extracted RPM filenames directly
 
 If the supported kernel is missing, rebuild is forced.
 
@@ -89,9 +89,8 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 
 1. clones the pinned `Danathar/akmods` commit
 2. points its target output to `zfs-kinoite-containerfile-akmods`
-3. seeds cache metadata for the supported primary kernel
+3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
-5. publishes the `main-<fedora>-metadata` metadata tag for future fast-path reuse checks
 
 ### 4. Build Candidate Or Branch Image
 

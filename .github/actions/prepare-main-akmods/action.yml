@@ -22,10 +22,10 @@ inputs:
     description: Whether this run should rebuild the shared akmods cache even if a reusable cache already exists.
     required: true
   registry_actor:
-    description: Registry username used for metadata backfill and cache publishing.
+    description: Registry username used for shared-cache publishing.
     required: true
   registry_token:
-    description: Registry token used for metadata backfill and cache publishing.
+    description: Registry token used for shared-cache publishing.
     required: true
 
 outputs:
@@ -35,9 +35,9 @@ outputs:
   kernel_release:
     description: Primary kernel release resolved for this run.
     value: ${{ steps.resolve.outputs.kernel_release }}
-  kernel_releases:
-    description: Full kernel release list resolved for this run.
-    value: ${{ steps.resolve.outputs.kernel_releases }}
+  detected_kernel_releases:
+    description: Full detected kernel release list resolved for this run.
+    value: ${{ steps.resolve.outputs.detected_kernel_releases }}
   base_image_ref:
     description: Base image ref before digest pinning.
     value: ${{ steps.resolve.outputs.base_image_ref }}
@@ -98,7 +98,7 @@ runs:
         LOCK_FILE_PATH: ${{ steps.resolve.outputs.lock_file_path }}
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
-        KERNEL_RELEASES: ${{ steps.resolve.outputs.kernel_releases }}
+        DETECTED_KERNEL_RELEASES: ${{ steps.resolve.outputs.detected_kernel_releases }}
         BASE_IMAGE_REF: ${{ steps.resolve.outputs.base_image_ref }}
         BASE_IMAGE_NAME: ${{ steps.resolve.outputs.base_image_name }}
         BASE_IMAGE_TAG: ${{ steps.resolve.outputs.base_image_tag }}
@@ -128,19 +128,6 @@ runs:
         AKMODS_REPO: ${{ inputs.akmods_repo }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
-
-    - name: Publish metadata tag for existing shared akmods cache
-      if: steps.cache.outputs.exists == 'true' && steps.cache.outputs.metadata_exists != 'true'
-      shell: bash
-      env:
-        KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
-        AKMODS_VERSION: ${{ steps.resolve.outputs.version }}
-        AKMODS_KERNEL: main
-        AKMODS_REPO: ${{ inputs.akmods_repo }}
-        REGISTRY_ACTOR: ${{ inputs.registry_actor }}
-        REGISTRY_TOKEN: ${{ inputs.registry_token }}
-      run: |
-        python3 -m ci_tools.cli publish-akmods-cache-metadata
 
     - name: Clone pinned upstream akmods tooling
       shell: bash
