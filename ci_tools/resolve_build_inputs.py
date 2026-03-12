@@ -1,6 +1,6 @@
 """
 Script: ci_tools/resolve_build_inputs.py
-What: Resolves and validates input references for one main workflow run.
+What: Resolves and validates input references for one `main` workflow run.
 Doing: Uses lock file or defaults, resolves digests/tags, and writes outputs.
 Why: Keeps all jobs in the run on the same inputs.
 Goal: Provide trusted base/build/kernel values for downstream steps.

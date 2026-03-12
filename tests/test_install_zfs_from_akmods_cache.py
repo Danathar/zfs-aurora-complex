@@ -155,7 +155,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
     def test_build_install_plan_rejects_missing_kernel_payload(self) -> None:
         first_kmod = Path("/tmp/kmod-zfs-6.18.13.rpm")
 
-        with self.assertRaisesRegex(RuntimeError, "Cached akmods are stale"):
+        with self.assertRaisesRegex(RuntimeError, "Cached akmods do not cover this kernel"):
             helper.build_install_plan(
                 [
                     "6.18.13-200.fc43.x86_64",

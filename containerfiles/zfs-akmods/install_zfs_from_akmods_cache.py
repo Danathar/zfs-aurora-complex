@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script: containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
-What: Install ZFS RPMs from the self-hosted akmods cache into the image build root.
+What: Install ZFS RPMs (Red Hat Package Manager package files) from the self-hosted akmods cache into the image build root.
 Doing: Pulls the shared akmods image, maps each `kmod-zfs` RPM to a kernel release, installs one primary RPM through `rpm-ostree`, then unpacks the remaining kernel payloads directly.
 Why: The multi-kernel workaround is too brittle to keep as one long inline Containerfile shell block.
 Goal: Preserve the current fallback-kernel behavior while moving the hard-to-read logic into a tested helper.
@@ -92,7 +92,7 @@ def fedora_major_version(*, run_cmd=_run_cmd) -> str:
     Why use `rpm -E %fedora` here instead of shell glue in the Containerfile:
     1. The helper already owns the runtime decision-making for this step.
     2. This keeps the Containerfile declarative.
-    3. It preserves the exact Fedora detection behavior the old bash wrapper used.
+    3. It preserves the exact Fedora detection behavior the earlier shell wrapper used.
     """
 
     fedora_version = run_cmd(["rpm", "-E", "%fedora"]).strip()
@@ -282,7 +282,7 @@ def build_install_plan(
         if kernel_release not in kmod_rpm_by_kernel:
             raise RuntimeError(
                 "No kmod-zfs RPM found for base kernel "
-                f"{kernel_release}. Cached akmods are stale; rebuild akmods."
+                f"{kernel_release}. Cached akmods do not cover this kernel; rebuild akmods."
             )
 
     primary_kernel_release = sorted(image_kernels, key=version_sort_key)[-1]
@@ -381,7 +381,7 @@ def validate_installed_modules(
         if not module_path.is_file():
             raise RuntimeError(
                 "No ZFS module for base kernel "
-                f"{kernel_release}. Cached akmods are stale; rebuild akmods."
+                f"{kernel_release}. Cached akmods do not cover this kernel; rebuild akmods."
             )
         _run_cmd(["depmod", "-a", kernel_release], capture_output=False)
 

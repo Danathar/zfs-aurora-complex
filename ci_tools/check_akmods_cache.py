@@ -1,8 +1,8 @@
 """
 Script: ci_tools/check_akmods_cache.py
 What: Checks whether the shared akmods cache can be reused for the current base-image kernels.
-Doing: Pulls cache image, unpacks layers, checks for matching `kmod-zfs` RPMs, then writes `exists=true|false`.
-Why: Skip rebuild when safe, but rebuild when any required module set is stale.
+Doing: Pulls the cache image, unpacks layers when needed, checks for matching `kmod-zfs` RPMs, then writes `exists=true|false`.
+Why: Skip rebuild when safe, but rebuild when any required module set is missing or older than the current kernel set.
 Goal: Control rebuild decisions in main and validation workflows.
 """
 
@@ -55,7 +55,7 @@ class AkmodsCacheStatus:
 
 def _has_kernel_matching_rpm(root_dir: Path, kernel_release: str) -> bool:
     # We only trust cache reuse when an RPM exists for this exact kernel string.
-    # If the cache only has RPMs for older kernels, that cache is stale.
+    # If the cache only has RPMs for older kernels, that cache is out of date.
     rpm_dir = root_dir / "rpms" / "kmods" / "zfs"
     if not rpm_dir.exists():
         return False
@@ -104,7 +104,7 @@ def inspect_akmods_cache(
             cached_kernel_releases = parse_kernel_releases_from_labels(labels)
         except CiToolError as exc:
             print(
-                f"Metadata sidecar {metadata_image} is malformed ({exc}); "
+                f"Metadata tag {metadata_image} is malformed ({exc}); "
                 "falling back to full shared-cache inspection."
             )
         else:
@@ -116,7 +116,7 @@ def inspect_akmods_cache(
                 image_exists=True,
                 missing_releases=tuple(missing_releases),
                 metadata_image=metadata_image,
-                inspection_method="metadata-sidecar",
+                inspection_method="metadata-tag",
             )
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -161,7 +161,7 @@ def main() -> None:
         write_github_outputs(
             {
                 "exists": "true",
-                "metadata_exists": "true" if status.inspection_method == "metadata-sidecar" else "false",
+                "metadata_exists": "true" if status.inspection_method == "metadata-tag" else "false",
             }
         )
         print(
@@ -173,7 +173,7 @@ def main() -> None:
     write_github_outputs(
         {
             "exists": "false",
-            "metadata_exists": "true" if status.inspection_method == "metadata-sidecar" else "false",
+            "metadata_exists": "true" if status.inspection_method == "metadata-tag" else "false",
         }
     )
     print(

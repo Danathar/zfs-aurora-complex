@@ -1,8 +1,8 @@
 """
 Script: ci_tools/akmods_cache_metadata.py
-What: Shared helpers for the akmods cache metadata sidecar image.
+What: Shared helpers for the akmods cache metadata image.
 Doing: Defines metadata labels, metadata tag names, label parsing, and metadata-image publishing.
-Why: Main, branch, and PR cache checks should not need to unpack the full shared cache image on the fast path.
+Why: Main, branch, and pull request cache checks should not need to unpack the full shared cache image on the fast path.
 Goal: Keep cache-reuse decisions cheap and explicit while preserving a backward-compatible fallback path.
 """
 
@@ -27,13 +27,13 @@ def shared_cache_tag(*, kernel_flavor: str, akmods_version: str) -> str:
 
 
 def shared_cache_metadata_tag(*, kernel_flavor: str, akmods_version: str) -> str:
-    """Return the metadata sidecar tag paired with one shared cache tag."""
+    """Return the metadata tag paired with one shared cache tag."""
     return f"{shared_cache_tag(kernel_flavor=kernel_flavor, akmods_version=akmods_version)}-metadata"
 
 
 def metadata_labels(*, kernel_flavor: str, akmods_version: str, kernel_releases: list[str]) -> dict[str, str]:
     """
-    Return image labels written onto the metadata sidecar image.
+    Return image labels written onto the metadata tag image.
 
     We sort and de-duplicate the kernel list so every publisher writes the same
     label string for the same logical kernel set.
@@ -58,7 +58,7 @@ def parse_kernel_releases_from_labels(labels: Mapping[str, object]) -> tuple[str
 
     The metadata image exists purely so `skopeo inspect` can answer whether the
     shared akmods cache covers the current base-kernel set. Missing or malformed
-    labels should therefore fail closed and trigger the slower fallback path.
+    labels should therefore stop the fast path and trigger the slower fallback path.
     """
     kernel_release_string = str(labels.get(AKMODS_CACHE_KERNEL_RELEASES_LABEL) or "").strip()
     if not kernel_release_string:
@@ -77,11 +77,11 @@ def publish_shared_cache_metadata(
     kernel_releases: list[str],
 ) -> None:
     """
-    Build and push the metadata sidecar image for one shared akmods cache tag.
+    Build and push the metadata image for one shared akmods cache tag.
 
-    The sidecar image is intentionally tiny. Its only job is to carry explicit
-    labels describing which kernel releases the sibling shared cache image
-    covers, so future cache checks can stay in metadata space instead of
+    This metadata image is intentionally tiny. Its only job is to carry explicit
+    labels describing which kernel releases the matching shared cache image
+    covers, so future cache checks can read those labels first instead of
     unpacking the whole cache image every time.
     """
     labels = metadata_labels(
@@ -138,6 +138,6 @@ def publish_shared_cache_metadata(
         run_cmd(["podman", "push", local_ref, remote_ref], capture_output=False)
 
     print(
-        "Published akmods cache metadata sidecar: "
+        "Published akmods cache metadata tag: "
         f"ghcr.io/{image_org}/{akmods_repo}:{metadata_tag}"
     )

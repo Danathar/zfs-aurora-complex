@@ -1,8 +1,8 @@
 """
 Script: ci_tools/publish_akmods_cache_metadata.py
-What: Publishes the metadata sidecar tag for an existing or newly built shared akmods cache.
-Doing: Optionally logs in to GHCR, then builds and pushes a tiny metadata image that records the covered kernel releases.
-Why: Later cache checks can inspect this sidecar tag instead of unpacking the full shared cache image.
+What: Publishes the metadata tag for an existing or newly built shared akmods cache.
+Doing: Optionally logs in to GitHub Container Registry (GHCR), then builds and pushes a tiny metadata image that records the covered kernel releases.
+Why: Later cache checks can inspect this metadata tag instead of unpacking the full shared cache image.
 Goal: Keep shared-cache reuse checks fast while remaining backward-compatible with older tags.
 """
 
@@ -21,7 +21,7 @@ def main() -> None:
 
     # Main rebuilds are already logged in through upstream akmods tooling, but a
     # metadata-backfill step may run on a reused cache image. In that case we do
-    # one explicit registry login here before pushing the sidecar tag.
+    # one explicit registry login here before pushing the metadata tag.
     registry_actor = optional_env("REGISTRY_ACTOR")
     registry_token = optional_env("REGISTRY_TOKEN")
     if registry_actor and registry_token:

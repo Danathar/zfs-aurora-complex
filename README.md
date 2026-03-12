@@ -11,14 +11,16 @@
 >
 > It is probably WAY more complicated than it needs to be. I'm still reading through the code it made. That said, it does work, seemingly. ;)
 >
-> This repository is the native-Containerfile follow-up to the older BlueBuild-based `Kinoite-ZFS` repository. The goal here is not feature maximalism. The goal is a simpler control plane: one image repository, one shared akmods cache image, direct build arguments, and standard OCI tooling.
+> The goal here is not feature maximalism. The goal is a simpler build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
 This repository builds a signed Kinoite image with:
 
-- ZFS userspace and kernel modules installed from a self-hosted akmods cache image
+- ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
 - `distrobox`
 - Homebrew from the official `ghcr.io/ublue-os/brew:latest` OCI image
 - a single-repository signing policy for future signed `bootc upgrade` flows
+
+The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
 
 ## Why This Repo Exists
 
@@ -29,13 +31,10 @@ The problem has not changed:
 3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
 4. If you do not gate builds carefully, you can publish a Kinoite image whose kernel and ZFS modules do not match.
 
-What changed here is the image build model.
-
-The older repo used BlueBuild and a generated build workspace. This repo intentionally does not.
-Instead it uses:
+This repository intentionally uses:
 
 1. a standard `Containerfile`
-2. direct `buildah`/OCI build arguments
+2. direct `buildah`/Open Container Initiative (OCI) build arguments
 3. one image repository (`ghcr.io/danathar/zfs-kinoite-containerfile`)
 4. one shared akmods cache repository (`ghcr.io/danathar/zfs-kinoite-containerfile-akmods`)
 
@@ -43,11 +42,11 @@ Instead it uses:
 
 Stable users should only see tested outputs.
 
-So the `main` workflow does this:
+So the `main` GitHub Actions workflow does this:
 
 1. resolve and pin the exact base image, kernel set, builder image, and ZFS line for the run
 2. reuse or rebuild the shared akmods cache image for that exact kernel set
-3. publish or repair a tiny metadata sidecar tag that records which kernels that shared cache covers
+3. publish or repair a tiny metadata tag that records which kernels that shared cache covers
 4. build a candidate image tag in the same repository
 5. sign that candidate digest
 6. promote the tested candidate digest to `latest` and to an immutable audit tag
@@ -56,6 +55,8 @@ So the `main` workflow does this:
 If candidate fails, `latest` does not move.
 
 ## What Gets Published
+
+All of these tags are stored in GitHub Container Registry (GHCR), which is the container-image registry behind `ghcr.io`.
 
 OS image tags in one repository:
 
@@ -69,13 +70,49 @@ Shared akmods cache image:
 
 - `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
 - architecture-specific inspection tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-x86_64`
-- metadata sidecar tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-metadata`
+- metadata tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-metadata`
 
 The important simplification is this:
 
 - there is no separate `*-candidate` image repository anymore
 - there is no branch-scoped public akmods alias repo anymore
 - there is no host repair script for stable-vs-candidate trust drift anymore
+
+## How Akmods Source Is Chosen
+
+This repository still uses your fork:
+
+- `https://github.com/Danathar/akmods.git`
+
+But it does **not** build from the moving `main` branch tip.
+
+Instead, it builds from one exact commit recorded in:
+
+- [`ci/defaults.json`](./ci/defaults.json)
+
+Right now that file contains:
+
+1. the fork URL
+2. one exact Git commit identifier (usually shortened to commit SHA)
+
+What that means in practice:
+
+1. the GitHub Actions workflow run (usually shortened to CI, for continuous integration) makes a temporary clone of your fork into `/tmp/akmods`
+2. it fetches only that one pinned commit
+3. it verifies that Git actually checked out that exact commit
+4. it uses that temporary checkout for the rest of the akmods build
+
+What it does **not** mean:
+
+1. the workflow run is not creating a new long-lived clone anywhere in your account
+2. the workflow run is not ignoring your fork
+3. the workflow run is not automatically picking up whatever new commits later appear on your fork's `main` branch
+
+If you update your fork after upstream changes:
+
+1. your fork stays the source repository
+2. this repo will still keep using the currently pinned commit
+3. the new fork commit only starts being used after you update the pin in `ci/defaults.json`
 
 ## Repository Layout
 
@@ -88,7 +125,7 @@ files/scripts/                        image-local helper scripts
 ci_tools/                             workflow helper commands
 .github/actions/                      local composite actions used by the workflows
 .github/workflows/                    GitHub Actions pipelines
-.github/scripts/README.md             workflow step -> CLI command map
+.github/scripts/README.md             workflow step -> command-line interface (CLI) command map
 docs/                                 teaching-style documentation
 ```
 
@@ -101,7 +138,7 @@ docs/                                 teaching-style documentation
   - branch-tagged test builds
   - read-only reuse of the shared akmods cache
 - `.github/workflows/build-pr.yml`
-  - pull-request validation build
+  - pull request (PR) validation build
   - no push and no signing
 
 Docs-only changes do not trigger image builds.
@@ -112,13 +149,13 @@ At a high level, the final image build now works like this:
 
 1. `Containerfile` starts from `ghcr.io/ublue-os/kinoite-main`
 2. `COPY --from=ghcr.io/ublue-os/brew:latest /system_files /` imports the official brew payload
-3. `build_files/build-image.sh` enables the brew services/timers, installs `distrobox`, installs ZFS RPMs from the shared akmods cache image, writes signing policy, and commits the ostree container
+3. `build_files/build-image.sh` enables the brew services/timers, installs `distrobox`, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
 4. `bootc container lint` validates the final image
 
-Two CI-side simplifications now support that image build:
+Two workflow-side simplifications now support that image build:
 
 1. `ci/defaults.json` is the one checked-in source of truth for default image refs, image names, and the pinned akmods fork commit
-2. the shared akmods cache publishes a `main-<fedora>-metadata` sidecar tag so later validation runs can usually answer cache-reuse questions from registry metadata alone
+2. the shared akmods cache publishes a `main-<fedora>-metadata` metadata tag so later validation runs can usually answer cache-reuse questions from registry metadata alone
 
 The ZFS install step still has one important workaround:
 
@@ -140,7 +177,7 @@ sudo bootc switch ghcr.io/danathar/zfs-kinoite-containerfile:latest
 systemctl reboot
 ```
 
-Why this is simpler than the old repo:
+Why this image flow stays easier to reason about:
 
 1. the stable and candidate image tags live in the same repository
 2. after you boot into this image family once, the in-image policy only needs to trust one repository path
@@ -157,7 +194,7 @@ distrobox --version
 brew --version
 ```
 
-For VM testing with a secondary disk:
+For virtual machine (VM) testing with a secondary disk:
 
 ```bash
 sudo wipefs -a /dev/vdb

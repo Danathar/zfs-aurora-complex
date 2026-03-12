@@ -5,34 +5,34 @@ If a term is unfamiliar, check the shared glossary first:
 
 ## Purpose
 
-This project provides a controlled way to run ZFS on Kinoite while using a
-native `Containerfile` instead of BlueBuild.
+This project provides a controlled way to run ZFS on Kinoite with a native
+`Containerfile` build.
 
 The technical target is still the same:
 
 1. track the moving Kinoite/Fedora kernel stream
-2. build matching ZFS akmods for that exact kernel set
-3. install those RPMs into the final image
+2. build matching ZFS akmods, meaning the ZFS kernel-module packages built for that exact kernel set
+3. install those RPMs (Red Hat Package Manager package files) into the final image
 4. publish stable tags only after candidate succeeds
 
 ## Real Simplification Goals
 
-This repository intentionally removes three major layers from the older design:
+This repository intentionally keeps three things out of the image build flow:
 
-1. no BlueBuild recipe generation
+1. no generated recipe layer
 2. no separate candidate image repository
 3. no branch/candidate akmods alias repository flow
 
 That means the main complexity now lives in two places only:
 
 1. input pinning and akmods cache control in `ci_tools/`
-2. compose-time ZFS install logic in `containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`
+2. image-build-time ZFS install logic in `containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`
 
 ## Outputs
 
 ### OS Image Repository
 
-All OS image tags live in the same repository:
+All operating-system image tags live in the same repository:
 
 - candidate tag: `ghcr.io/danathar/zfs-kinoite-containerfile:candidate-<sha>-<fedora>`
 - stable tag: `ghcr.io/danathar/zfs-kinoite-containerfile:latest`
@@ -41,7 +41,7 @@ All OS image tags live in the same repository:
 
 ### Shared Akmods Cache Repository
 
-The shared cache remains separate because it is a different artifact class:
+The shared cache remains separate because it is a different kind of build output:
 
 - `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
 - `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-x86_64`
@@ -65,7 +65,7 @@ The main workflow resolves and pins:
 5. pinned akmods fork commit
 6. ZFS minor version line
 
-Those values are written to a `build-inputs-<run_id>` artifact for replay.
+Those values are written to a saved workflow output file named `build-inputs-<run_id>` so the same input set can be replayed later.
 
 ### 2. Shared Akmods Cache Reuse Or Rebuild
 
@@ -74,20 +74,20 @@ The workflow checks whether the shared cache image already contains a matching
 
 That check now has two layers:
 
-1. first inspect `main-<fedora>-metadata`, a tiny sidecar tag that only carries
+1. first inspect `main-<fedora>-metadata`, a tiny metadata tag that only carries
    labels listing the covered kernel releases
-2. if that sidecar tag is missing or malformed, fall back to unpacking the full
+2. if that metadata tag is missing or malformed, fall back to unpacking the full
    shared cache image and checking the RPM filenames directly
 
-Even when the shared cache is reusable, the workflows now still clone the
-pinned `Danathar/akmods` commit once per run.
+Even when the shared cache is reusable, the workflows still clone the pinned
+`Danathar/akmods` commit once per run.
 
 Why:
 
-1. a bad akmods pin can hide for a while if CI keeps reusing an old shared cache
-2. cloning the pinned ref is the cheapest way to prove that the configured SHA
-   still exists upstream
-3. this keeps branch, PR, push, and schedule paths honest with each other
+1. a bad akmods pin can hide for a while if the workflow keeps reusing an older shared cache
+2. cloning the pinned ref is the cheapest way to prove that the configured commit SHA
+   still exists in your fork
+3. this keeps branch, pull request, push, and schedule paths honest with each other
 
 If yes:
 
@@ -99,14 +99,21 @@ If no:
 2. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
 3. build per-kernel payloads when more than one kernel is present
 4. merge those payloads into one shared Fedora-wide cache image
-5. publish the matching `main-<fedora>-metadata` sidecar tag
+5. publish the matching `main-<fedora>-metadata` metadata tag
 
 Important design change:
 
 - this repo no longer patches the cloned akmods `Justfile` at runtime
 - the repo-specific publish-name logic now lives in the pinned `Danathar/akmods`
   fork commit itself
-- that keeps the runtime clone step boring: clone, detach, verify SHA, stop
+- that keeps the runtime clone step boring: clone, check out the exact commit, verify the commit SHA, stop
+
+Plain-language summary of the pin:
+
+1. the source repository is still your fork, `Danathar/akmods`
+2. this repo records one exact commit from that fork in `ci/defaults.json`
+3. the GitHub Actions workflow run clones that one commit into `/tmp/akmods` for the current run only
+4. pushing new commits to your fork does nothing here until the pin is updated
 
 ### 3. Native Final Image Build
 
@@ -115,7 +122,7 @@ The final image is defined by the repository root [`Containerfile`](../Container
 It does four important things:
 
 1. starts from the pinned `BASE_IMAGE`
-2. copies the official `ublue-os/brew` OCI payload into the image root
+2. copies the official `ublue-os/brew` Open Container Initiative (OCI) payload into the image root
 3. runs [`build_files/build-image.sh`](../build_files/build-image.sh)
 4. runs `bootc container lint`
 
@@ -129,11 +136,11 @@ It does four important things:
 
 ### 4. Multi-Kernel ZFS Install Logic
 
-The hardest part remains the same as in the older repo:
+The hardest part is still this:
 
 1. the shared akmods cache can contain multiple `kmod-zfs-<kernel_release>` RPMs
-2. those RPM files still share one RPM identity, `kmod-zfs`
-3. `rpm-ostree` will not keep multiple same-name RPM identities installed side-by-side
+2. those RPM files still share one package identity, `kmod-zfs`
+3. `rpm-ostree` will not keep multiple same-name package identities installed side-by-side
 
 So the helper does this:
 
@@ -156,9 +163,9 @@ It:
 4. signs candidate after publish
 5. signs `latest` after promotion
 
-Because candidate and stable tags are in the same repository, the trust model is much simpler than the old repo:
+Because candidate and stable tags are in the same repository, the trust model is simpler:
 
-- no second image namespace
+- no second image path under `ghcr.io`
 - no stable-vs-candidate policy drift
 - no host-side repair script to normalize two repository names
 

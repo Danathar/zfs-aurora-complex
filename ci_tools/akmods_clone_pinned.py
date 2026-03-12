@@ -1,7 +1,7 @@
 """
 Script: ci_tools/akmods_clone_pinned.py
 What: Clones the exact akmods commit configured for this repository into `/tmp/akmods`.
-Doing: Recreates the directory, fetches one commit, checks detached HEAD, and verifies the SHA.
+Doing: Recreates the directory, fetches one commit, checks that Git is pointed at the fetched commit itself instead of a moving branch tip, and verifies the commit SHA.
 Why: Ensures we build from a known source version without mutating the cloned worktree at runtime.
 Goal: Prepare a clean akmods checkout for later configure/build steps.
 """
@@ -31,14 +31,14 @@ def main() -> None:
     AKMODS_WORKTREE.mkdir(parents=True, exist_ok=True)
 
     # Create a minimal local repository and fetch only the one commit we need.
-    # Fetching a detached SHA keeps this step deterministic and fast.
+    # Checking out the fetched commit directly keeps this step deterministic and fast.
     run_cmd(["git", "init", "."], cwd=str(AKMODS_WORKTREE))
     run_cmd(["git", "remote", "add", "origin", upstream_repo], cwd=str(AKMODS_WORKTREE))
     run_cmd(["git", "fetch", "--depth", "1", "origin", upstream_ref], cwd=str(AKMODS_WORKTREE))
     run_cmd(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=str(AKMODS_WORKTREE))
 
-    # Defense-in-depth: fail if Git resolved to anything other than the exact
-    # pinned SHA the workflow asked for.
+    # Extra safety check: fail if Git resolved to anything other than the exact
+    # pinned commit SHA the workflow asked for.
     resolved_ref = run_cmd(["git", "rev-parse", "HEAD"], cwd=str(AKMODS_WORKTREE)).strip()
     if resolved_ref != upstream_ref:
         raise CiToolError(f"Pinned ref mismatch: expected {upstream_ref}, got {resolved_ref}")

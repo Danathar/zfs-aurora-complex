@@ -1,13 +1,13 @@
 name: Publish Native Image
 
-description: Push one locally built image tag to GHCR and optionally sign it.
+description: Push one locally built image tag to GitHub Container Registry (GHCR) and optionally sign it.
 
 inputs:
   image_registry:
     description: Registry path, for example ghcr.io/danathar.
     required: true
   image_name:
-    description: Image name under the registry namespace.
+    description: Image name under the registry owner path.
     required: true
   image_tag:
     description: Image tag to push and optionally sign.

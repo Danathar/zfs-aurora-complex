@@ -9,7 +9,7 @@ If a term is unfamiliar, check the shared glossary first:
 
 - [`.github/workflows/build.yml`](../.github/workflows/build.yml)
 
-### 2. Command map and CLI
+### 2. Command map and command-line interface (CLI)
 
 - [`.github/scripts/README.md`](../.github/scripts/README.md)
 - [`ci/defaults.json`](../ci/defaults.json)
@@ -27,7 +27,7 @@ If a term is unfamiliar, check the shared glossary first:
 ### 4. Akmods build control
 
 1. [`ci_tools/akmods_clone_pinned.py`](../ci_tools/akmods_clone_pinned.py)
-   - clones the pinned upstream fork and verifies the exact SHA
+   - clones the pinned upstream fork and verifies the exact commit SHA
 2. [`ci_tools/akmods_configure_zfs_target.py`](../ci_tools/akmods_configure_zfs_target.py)
 3. [`ci_tools/akmods_build_and_publish.py`](../ci_tools/akmods_build_and_publish.py)
 4. [`ci_tools/publish_akmods_cache_metadata.py`](../ci_tools/publish_akmods_cache_metadata.py)
@@ -46,7 +46,7 @@ If a term is unfamiliar, check the shared glossary first:
 3. [`ci_tools/sign_image.py`](../ci_tools/sign_image.py)
    - used by branch/main publish flows when the signing secret is present
 4. [`.github/actions/`](../.github/actions)
-   - local composite actions used to keep workflow YAML readable
+   - local composite actions used to keep the workflow files readable
 
 ### 7. Tests
 

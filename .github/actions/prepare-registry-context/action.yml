@@ -1,16 +1,16 @@
 name: Prepare Registry Context
 
-description: Compute normalized GHCR paths and actor classification for later steps.
+description: Compute normalized GitHub Container Registry (GHCR) paths and whether the current account is an automation bot.
 
 outputs:
   image_org:
-    description: Lowercase image namespace used in GHCR paths.
+    description: Lowercase image-owner portion used in GHCR paths.
     value: ${{ steps.context.outputs.image_org }}
   image_registry:
     description: Base GHCR registry path for the current owner.
     value: ${{ steps.context.outputs.image_registry }}
   actor_is_bot:
-    description: Whether the current GitHub actor is an automation bot account.
+    description: Whether the current GitHub account is an automation bot account.
     value: ${{ steps.context.outputs.actor_is_bot }}
 
 runs:

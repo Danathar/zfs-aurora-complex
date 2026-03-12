@@ -1,4 +1,4 @@
-name: Load CI Defaults
+name: Load Continuous Integration Defaults
 
 description: Load checked-in workflow defaults from ci/defaults.json.
 
@@ -22,7 +22,7 @@ outputs:
     description: Default build container ref.
     value: ${{ steps.defaults.outputs.default_build_container_image }}
   default_brew_image:
-    description: Default brew OCI image ref.
+    description: Default brew Open Container Initiative (OCI) image ref.
     value: ${{ steps.defaults.outputs.default_brew_image }}
   default_zfs_minor_version:
     description: Default OpenZFS minor line.

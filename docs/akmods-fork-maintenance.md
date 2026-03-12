@@ -14,7 +14,13 @@ Current control points:
 
 ## Why The Pin Exists
 
-The repo does not build against a floating akmods branch tip.
+This repo does not build against the moving `main` branch of your fork.
+
+Instead, it records one exact akmods commit in:
+
+- [`ci/defaults.json`](../ci/defaults.json)
+
+That exact commit is the akmods source used by the GitHub Actions workflow runs.
 
 Why:
 
@@ -43,6 +49,25 @@ Why:
 3. final candidate image still installs ZFS userspace and modules correctly
 4. promotion and signing still succeed on `main`
 
+## Plain-Language Model
+
+The moving pieces are:
+
+1. your fork repository: `Danathar/akmods`
+2. the pinned commit SHA, meaning the exact Git commit ID stored in this repo
+3. the temporary clone the workflow run creates in `/tmp/akmods`
+
+How they relate:
+
+1. the workflow run still uses your fork as the source repository
+2. the workflow run clones only the pinned commit, not the whole moving branch
+3. that clone in `/tmp/akmods` exists only for the current run
+4. when the run ends, that temporary checkout is discarded
+
+Most important consequence:
+
+- pushing a new commit to `Danathar/akmods` does **not** change this repo's builds until you update the pinned SHA here
+
 ## Failure Discipline
 
 If a new akmods pin breaks the build, revert the pin first.
@@ -55,5 +80,5 @@ This repository no longer patches the cloned akmods `Justfile` at runtime.
 That means:
 
 1. if this repo needs repo-specific publish-name behavior, that logic must exist in the pinned `Danathar/akmods` commit itself
-2. the clone step here is intentionally boring on purpose: clone, detach, verify SHA, stop
+2. the clone step here is intentionally boring on purpose: clone, check out the exact commit, verify the commit SHA, stop
 3. if a future akmods change breaks repo-specific publishing, fix the fork and repin it instead of reintroducing a local patch layer

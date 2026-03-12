@@ -49,7 +49,7 @@ def load_repo_defaults() -> dict[str, str]:
     Keeping these defaults in version control makes workflow input changes
     reviewable. The workflows still pass explicit overrides when needed, but the
     default values themselves live in one file instead of being copied across
-    multiple workflow YAML files.
+    multiple workflow files.
     """
     if not REPO_DEFAULTS_FILE.exists():
         raise CiToolError(f"Missing repository defaults file: {REPO_DEFAULTS_FILE}")
@@ -67,9 +67,9 @@ def require_env_or_default(name: str) -> str:
     """
     Return an environment variable, falling back to checked-in repo defaults.
 
-    This keeps the Python helpers honest even if workflow YAML becomes thinner
-    over time. A command still fails closed when the value is missing from both
-    env and `ci/defaults.json`.
+    This keeps the Python helpers honest even if the workflow files become
+    thinner over time. A command still stops with an error when the value is
+    missing from both env and `ci/defaults.json`.
     """
     value = os.environ.get(name)
     if value is not None and value != "":

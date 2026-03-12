@@ -322,7 +322,7 @@ def main() -> None:
     #
     # Disable Buildah layer caching for the multi-kernel loop. Each iteration
     # binds in a different host-side cache directory, and reusing image layers
-    # across those builds can stamp newer labels onto stale earlier-kernel RPMs.
+    # across those builds can stamp newer labels onto older earlier-kernel RPMs.
     os.environ["BUILDAH_LAYERS"] = "false"
     print("Disabled Buildah layer cache for multi-kernel akmods rebuild.")
     run_cmd(["just", "login"], cwd=str(AKMODS_WORKTREE), capture_output=False)

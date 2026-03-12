@@ -8,6 +8,11 @@ If a term is unfamiliar, check the shared glossary first:
 This page is the map of the documentation itself: what each document is for,
 who should read it, and in what order.
 
+The documentation in this repo is intentionally written for someone who is
+learning these build, packaging, and GitHub workflow concepts while reading.
+When practical, terms are explained where they first appear, and the glossary
+fills in the rest.
+
 ## Documentation Tree
 
 ```text
@@ -21,7 +26,7 @@ docs/
   zfs-kinoite-testing.md      <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how to maintain the pinned akmods fork
 .github/scripts/
-  README.md                   <- workflow step -> CLI command -> Python module map
+  README.md                   <- workflow step -> command-line interface (CLI) command -> Python module map
 ```
 
 ## What To Read First (By Goal)

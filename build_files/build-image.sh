@@ -12,7 +12,7 @@
 set -euo pipefail
 
 # Build-time configuration is passed from the Containerfile as environment
-# variables so the script can stay reusable in CI and local tests.
+# variables so the script can stay reusable in GitHub Actions workflow runs and local tests.
 : "${AKMODS_IMAGE:?Missing AKMODS_IMAGE}"
 : "${IMAGE_REPO:?Missing IMAGE_REPO}"
 : "${SIGNING_KEY_FILENAME:?Missing SIGNING_KEY_FILENAME}"
@@ -35,7 +35,8 @@ rpm-ostree install distrobox
 python3 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 
 # Write repository-specific trust policy into the final image so future signed
-# updates from the same GHCR path work without extra host-side repair steps.
+# updates from the same GitHub Container Registry (GHCR) path work without extra
+# host-side repair steps.
 IMAGE_REPO="${IMAGE_REPO}" \
 SIGNING_KEY_FILENAME="${SIGNING_KEY_FILENAME}" \
 /files/scripts/configure-signing-policy.sh
@@ -55,7 +56,7 @@ install -D -m 0644 \
 #    something users need at runtime after deployment.
 # 3. Some builders leave resolver files bind-mounted under `/run/systemd`.
 #    Those specific paths can be busy, so cleanup here must be best-effort
-#    instead of failing the entire image build on a harmless mount artifact.
+#    instead of failing the entire image build on a harmless leftover mount.
 mountpoint -q /run/systemd/resolve && umount /run/systemd/resolve || true
 find /run/systemd -mindepth 1 \
   ! -path '/run/systemd/resolve' \

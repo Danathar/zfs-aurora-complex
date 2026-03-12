@@ -1,6 +1,6 @@
 """
 Script: ci_tools/sign_image.py
-What: Signs and verifies one published image tag in GHCR.
+What: Signs and verifies one published image tag in GitHub Container Registry (GHCR).
 Doing: Resolves the tag to a digest, signs that digest with cosign, then verifies it immediately.
 Why: Signing by digest is the reliable way to keep bootc/rpm-ostree trust tied to exact image content.
 Goal: Provide one reusable signing helper for candidate, branch, and stable tags.

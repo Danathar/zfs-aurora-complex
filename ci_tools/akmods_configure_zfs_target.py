@@ -3,7 +3,7 @@ Script: ci_tools/akmods_configure_zfs_target.py
 What: Updates the ZFS target entry in `/tmp/akmods/images.yaml`.
 Doing: Writes owner/repo/tag values with `yq`.
 Why: Makes the publish destination explicit and easy to audit.
-Goal: Point akmods output to the correct GHCR image path.
+Goal: Point akmods output to the correct GitHub Container Registry (GHCR) image path.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def main() -> None:
     akmods_repo = require_env("AKMODS_REPO")
     akmods_description = require_env("AKMODS_DESCRIPTION")
     # Normalize owner means: convert to lowercase for consistent registry paths.
-    # This owner value is the registry namespace (for example `danathar` in
+    # This owner value is the image-owner portion (for example `danathar` in
     # `ghcr.io/danathar/akmods-zfs`).
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
 

@@ -64,7 +64,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                     )
 
         self.assertTrue(status.reusable)
-        self.assertEqual(status.inspection_method, "metadata-sidecar")
+        self.assertEqual(status.inspection_method, "metadata-tag")
         skopeo_copy.assert_not_called()
 
     def test_inspect_akmods_cache_falls_back_when_metadata_sidecar_is_missing(self) -> None:

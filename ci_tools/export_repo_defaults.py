@@ -2,7 +2,7 @@
 Script: ci_tools/export_repo_defaults.py
 What: Loads the checked-in repository defaults and exports them for GitHub Actions.
 Doing: Reads `ci/defaults.json`, writes lowercase step outputs, and writes the original env-style names to `GITHUB_ENV`.
-Why: Keeps workflow YAML thin while preserving one version-controlled source of truth for defaults.
+Why: Keeps the workflow files short while preserving one version-controlled source of truth for defaults.
 Goal: Let workflows and helper scripts agree on the same default refs and image names.
 """
 

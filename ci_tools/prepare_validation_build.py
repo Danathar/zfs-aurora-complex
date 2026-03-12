@@ -1,8 +1,8 @@
 """
 Script: ci_tools/prepare_validation_build.py
-What: Resolves inputs and verifies shared akmods cache for read-only validation runs.
-Doing: Pins the same build inputs as `main`, writes them to step outputs, then fail-closes if the shared akmods source is missing or stale.
-Why: Branch and PR workflows should validate the real production inputs without rebuilding or mutating the shared akmods cache.
+What: Resolves inputs and verifies the shared akmods cache for read-only validation runs.
+Doing: Pins the same build inputs as `main`, writes them to step outputs, then stops with an error if the shared akmods source is missing or no longer matches the required kernels.
+Why: Branch and pull request workflows should validate the real production inputs without rebuilding or changing the shared akmods cache.
 Goal: Keep one shared preparation command for non-main workflows instead of duplicating YAML logic.
 """
 
@@ -18,15 +18,15 @@ def _shared_cache_failure_message(*, source_image: str, missing_releases: tuple[
     """
     Build one readable failure message for read-only validation workflows.
 
-    The branch and PR paths intentionally do not rebuild the shared
+    The branch and pull request paths intentionally do not rebuild the shared
     `zfs-kinoite-containerfile-akmods:main-<fedora>` tag. If that shared source
-    is missing or stale, the correct repair action is to refresh it from the
-    main workflow.
+    is missing or no longer matches the required kernels, the correct repair
+    action is to refresh it from the main workflow.
     """
 
     kernels_text = " ".join(missing_releases)
     return (
-        f"Shared akmods source tag {source_image} is missing or stale for kernels {kernels_text}. "
+        f"Shared akmods source tag {source_image} is missing or does not cover kernels {kernels_text}. "
         "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
         "then rerun this workflow."
     )
@@ -43,7 +43,7 @@ def main() -> None:
     # Validation builds usually reuse the shared akmods cache, so without this
     # explicit clone they would never prove that the pinned akmods fork commit is
     # still fetchable. Running the same clone/verify step here keeps branch and
-    # PR paths honest with the main schedule/rebuild path.
+    # pull request paths honest with the main schedule/rebuild path.
     clone_pinned_akmods()
 
     status = inspect_akmods_cache(
