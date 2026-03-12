@@ -88,19 +88,18 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
             with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
                 with patch.object(script, "build_and_push_kernel_release") as build_release:
                     with patch.object(script, "run_cmd") as run_cmd:
-                        with patch.object(script, "publish_shared_cache_metadata") as publish_metadata:
-                            with patch.dict(
-                                script.os.environ,
-                                {
-                                    "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
-                                    "GITHUB_REPOSITORY_OWNER": "Danathar",
-                                    "AKMODS_REPO": "zfs-kinoite-containerfile-akmods",
-                                    "AKMODS_KERNEL": "main",
-                                    "AKMODS_VERSION": "43",
-                                },
-                                clear=False,
-                            ):
-                                script.main()
+                        with patch.dict(
+                            script.os.environ,
+                            {
+                                "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
+                                "GITHUB_REPOSITORY_OWNER": "Danathar",
+                                "AKMODS_REPO": "zfs-kinoite-containerfile-akmods",
+                                "AKMODS_KERNEL": "main",
+                                "AKMODS_VERSION": "43",
+                            },
+                            clear=False,
+                        ):
+                            script.main()
 
         build_release.assert_called_once_with("6.18.16-200.fc43.x86_64")
         self.assertEqual(
@@ -109,13 +108,6 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
                 call(["just", "login"], cwd=str(Path(tempdir)), capture_output=False),
                 call(["just", "manifest"], cwd=str(Path(tempdir)), capture_output=False),
             ],
-        )
-        publish_metadata.assert_called_once_with(
-            image_org="danathar",
-            akmods_repo="zfs-kinoite-containerfile-akmods",
-            kernel_flavor="main",
-            akmods_version="43",
-            kernel_releases=["6.18.16-200.fc43.x86_64"],
         )
 
     def test_main_without_kernel_release_keeps_upstream_default_behavior(self) -> None:

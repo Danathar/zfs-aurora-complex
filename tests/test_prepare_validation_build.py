@@ -2,7 +2,7 @@
 Script: tests/test_prepare_validation_build.py
 What: Tests for the shared non-main validation preparation command.
 Doing: Mocks resolved inputs and cache status so we can check success/failure behavior without live registry calls.
-Why: Branch and PR workflows depend on one shared command to pin inputs and fail closed when shared akmods are stale.
+Why: Branch and PR workflows depend on one shared command to pin inputs and fail closed when shared akmods are out of date.
 Goal: Keep that read-only validation path explicit and safe.
 """
 
@@ -25,7 +25,7 @@ def _resolved_inputs() -> BuildInputResolution:
         inputs=ResolvedBuildInputs(
             version="43",
             kernel_release="6.18.16-200.fc43.x86_64",
-            kernel_releases=(
+            detected_kernel_releases=(
                 "6.18.13-200.fc43.x86_64",
                 "6.18.16-200.fc43.x86_64",
             ),
@@ -81,7 +81,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
             self.assertIn("version=43", outputs)
             self.assertIn("kernel_release=6.18.16-200.fc43.x86_64", outputs)
             self.assertIn(
-                "kernel_releases=6.18.13-200.fc43.x86_64 6.18.16-200.fc43.x86_64",
+                "detected_kernel_releases=6.18.13-200.fc43.x86_64 6.18.16-200.fc43.x86_64",
                 outputs,
             )
             self.assertIn("base_image_tag=latest-20260307.1", outputs)
@@ -94,7 +94,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
             )
             clone_pinned.assert_called_once_with()
 
-    def test_fails_closed_when_shared_cache_is_missing_or_stale(self) -> None:
+    def test_fails_closed_when_shared_cache_is_missing_or_out_of_date(self) -> None:
         resolution = _resolved_inputs()
 
         with tempfile.TemporaryDirectory() as temp_dir:

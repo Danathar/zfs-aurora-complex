@@ -24,7 +24,6 @@ class CliTests(unittest.TestCase):
             "compute-candidate-tag",
             "export-repo-defaults",
             "export-registry-context",
-            "publish-akmods-cache-metadata",
             "prepare-validation-build",
             "compute-branch-metadata",
             "promote-stable",

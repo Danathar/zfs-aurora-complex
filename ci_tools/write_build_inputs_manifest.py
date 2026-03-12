@@ -40,7 +40,7 @@ def main() -> None:
             "lock_file_path": require_env("LOCK_FILE_PATH"),
             "fedora_version": require_env("FEDORA_VERSION"),
             "kernel_release": require_env("KERNEL_RELEASE"),
-            "kernel_releases": require_env("KERNEL_RELEASES").split(),
+            "detected_kernel_releases": require_env("DETECTED_KERNEL_RELEASES").split(),
             "base_image_ref": require_env("BASE_IMAGE_REF"),
             "base_image_name": require_env("BASE_IMAGE_NAME"),
             "base_image_tag": require_env("BASE_IMAGE_TAG"),

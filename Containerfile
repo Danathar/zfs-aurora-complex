@@ -10,6 +10,7 @@ FROM scratch AS ctx
 COPY build_files /
 COPY containerfiles /containerfiles
 COPY files /files
+COPY shared /shared
 COPY cosign.pub /cosign.pub
 
 FROM ${BREW_IMAGE} AS brew

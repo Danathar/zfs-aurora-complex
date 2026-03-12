@@ -20,7 +20,7 @@ def _shared_cache_failure_message(*, source_image: str, missing_release: str) ->
 
     The branch and pull request paths intentionally do not rebuild the shared
     `zfs-kinoite-containerfile-akmods:main-<fedora>` tag. If that shared source
-    is missing or no longer matches the required kernels, the correct repair
+    is missing or no longer matches the required primary kernel, the correct repair
     action is to refresh it from the main workflow.
     """
 

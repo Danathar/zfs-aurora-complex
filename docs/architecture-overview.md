@@ -95,12 +95,11 @@ The repo's policy is:
 3. require ZFS support only for that supported primary kernel
 4. use image rollback, not older bundled kernels in the same image, as the recovery path
 
-That check now has two layers:
+That check now does one direct inspection path:
 
-1. first inspect `main-<fedora>-metadata`, a tiny metadata tag that only carries
-   labels listing the supported kernel release
-2. if that metadata tag is missing or malformed, fall back to unpacking the full
-   shared cache image and checking the RPM filenames directly
+1. copy the shared cache image into a local Open Container Initiative (OCI) layout
+2. unpack its filesystem layers
+3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel
 
 Even when the shared cache is reusable, the workflows still clone the pinned
 `Danathar/akmods` commit once per run.
@@ -121,7 +120,6 @@ If no:
 1. clone the pinned `Danathar/akmods` fork
 2. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
 3. build the shared cache image for the supported primary kernel
-4. publish the matching `main-<fedora>-metadata` metadata tag
 
 Important design change:
 

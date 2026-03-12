@@ -12,16 +12,11 @@ from dataclasses import dataclass
 import tempfile
 from pathlib import Path
 
-from ci_tools.akmods_cache_metadata import (
-    parse_kernel_releases_from_labels,
-    shared_cache_metadata_tag,
-)
 from ci_tools.common import (
     CiToolError,
     load_layer_files_from_oci_layout,
     normalize_owner,
     require_env,
-    skopeo_inspect_json,
     skopeo_copy,
     skopeo_exists,
     unpack_layer_tarballs,
@@ -42,7 +37,6 @@ class AkmodsCacheStatus:
     source_image: str
     image_exists: bool
     missing_release: str = ""
-    metadata_image: str = ""
     inspection_method: str = "unpacked-image"
 
     @property
@@ -77,52 +71,30 @@ def inspect_akmods_cache(
     """
 
     source_image = f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
-    metadata_image = (
-        f"ghcr.io/{image_org}/{source_repo}:"
-        f"{shared_cache_metadata_tag(kernel_flavor='main', akmods_version=fedora_version)}"
-    )
     if not skopeo_exists(f"docker://{source_image}"):
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=False,
             missing_release=kernel_release,
-            metadata_image=metadata_image,
             inspection_method="missing-image",
         )
-
-    if skopeo_exists(f"docker://{metadata_image}"):
-        inspect_json = skopeo_inspect_json(f"docker://{metadata_image}")
-        labels = inspect_json.get("Labels") or {}
-        try:
-            cached_kernel_releases = parse_kernel_releases_from_labels(labels)
-        except CiToolError as exc:
-            print(
-                f"Metadata tag {metadata_image} is malformed ({exc}); "
-                "falling back to full shared-cache inspection."
-            )
-        else:
-            return AkmodsCacheStatus(
-                source_image=source_image,
-                image_exists=True,
-                missing_release="" if kernel_release in cached_kernel_releases else kernel_release,
-                metadata_image=metadata_image,
-                inspection_method="metadata-tag",
-            )
 
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         akmods_dir = root / "akmods"
         skopeo_copy(f"docker://{source_image}", f"dir:{akmods_dir}")
 
-        layer_files = load_layer_files_from_oci_layout(akmods_dir)
-        unpack_layer_tarballs(layer_files, root)
+        try:
+            layer_files = load_layer_files_from_oci_layout(akmods_dir)
+            unpack_layer_tarballs(layer_files, root)
+        except RuntimeError as exc:
+            raise CiToolError(str(exc)) from exc
 
         missing_release = "" if _has_kernel_matching_rpm(root, kernel_release) else kernel_release
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=True,
             missing_release=missing_release,
-            metadata_image=metadata_image,
             inspection_method="unpacked-image",
         )
 
@@ -141,29 +113,19 @@ def main() -> None:
     )
 
     if not status.image_exists:
-        write_github_outputs({"exists": "false", "metadata_exists": "false"})
+        write_github_outputs({"exists": "false"})
         print(f"No existing shared akmods cache image for Fedora {fedora_version}; rebuild is required.")
         return
 
     if status.reusable:
-        write_github_outputs(
-            {
-                "exists": "true",
-                "metadata_exists": "true" if status.inspection_method == "metadata-tag" else "false",
-            }
-        )
+        write_github_outputs({"exists": "true"})
         print(
             f"Found matching {status.source_image} kmods for primary kernel {kernel_release}; "
             f"akmods rebuild can be skipped. Inspection method: {status.inspection_method}."
         )
         return
 
-    write_github_outputs(
-        {
-            "exists": "false",
-            "metadata_exists": "true" if status.inspection_method == "metadata-tag" else "false",
-        }
-    )
+    write_github_outputs({"exists": "false"})
     print(
         f"Cached {status.source_image} is present but missing kmods for primary kernel "
         f"{status.missing_release}; "

@@ -52,7 +52,7 @@ jobs:
     outputs:
       fedora_version: ${{ steps.prepare.outputs.version }}
       kernel_release: ${{ steps.prepare.outputs.kernel_release }}
-      kernel_releases: ${{ steps.prepare.outputs.kernel_releases }}
+      detected_kernel_releases: ${{ steps.prepare.outputs.detected_kernel_releases }}
       base_image_ref: ${{ steps.prepare.outputs.base_image_ref }}
       base_image_name: ${{ steps.prepare.outputs.base_image_name }}
       base_image_tag: ${{ steps.prepare.outputs.base_image_tag }}

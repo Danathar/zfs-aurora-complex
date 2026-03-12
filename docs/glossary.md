@@ -19,7 +19,6 @@ This page defines terms used across this repository's docs and workflow comments
 - `composite action`: a local reusable GitHub Action made from several smaller steps. This repo uses them to keep the workflow files shorter without moving logic out of version control.
 - `build context`: the set of local files available to the container build.
 - `branch-scoped`: a tag/name that includes the branch identifier so branch artifacts stay isolated.
-- `metadata tag`: a small companion image tag published next to a main image tag. In this repo, `main-<fedora>-metadata` stores the kernel list for the shared akmods cache.
 - `Fedora stream` / `kernel stream`: the ongoing flow of new kernel releases over time.
 - `tag`: a human-readable image label like `latest` or `candidate-deadbee-43`.
 - `image ref`: text that points to a container image, usually `name:tag` or `name@sha256:digest`.
@@ -41,6 +40,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `automation account`: an automated account that triggered the workflow, for example `dependabot[bot]`.
 - `VM`: virtual machine.
 - `OCI`: Open Container Initiative standards used for container image formats and registries.
+- `OCI layout`: a local on-disk directory format for container images. In this repo, cache checks copy an image into that format before unpacking its filesystem layers for inspection.
 - `RPM`: Red Hat Package Manager package format. Fedora packages and kernel-module packages in this repo are all RPM files.
 - `akmods`: Fedora-style tooling that builds kernel-module RPMs for a specific kernel release. In this repo, the "shared akmods cache image" is the container image that stores those prebuilt ZFS kernel-module RPMs.
 - `YAML`: human-readable config format used by GitHub Actions workflows.
