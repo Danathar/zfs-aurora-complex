@@ -10,7 +10,7 @@ This repository is a controlled testbed for ZFS support on Kinoite using a nativ
 The objective is to validate that we can safely:
 
 1. track the current Kinoite/Fedora kernel stream
-2. build ZFS kernel modules against that exact kernel set
+2. build ZFS kernel modules against the primary kernel the image is expected to boot first
 3. install those modules into the final bootc image
 4. fail in the GitHub Actions workflow run before a broken image replaces `latest`
 
@@ -49,16 +49,23 @@ The main workflow resolves build inputs in one of two modes:
 
 After resolving the base image, the workflow inspects `/lib/modules` inside the pinned base image so it knows every installed kernel, not just one metadata label.
 
+The repo then makes one explicit policy choice:
+
+1. record all detected kernels in logs and the saved input file
+2. choose the newest detected kernel as the supported primary kernel
+3. require ZFS support only for that supported kernel
+4. use image rollback, not an older bundled kernel inside the same image, as the recovery path
+
 ### 2. Validate Existing Shared Akmods Cache
 
-Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image already contains a matching `kmod-zfs-<kernel_release>` RPM for every base-image kernel.
+Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image already contains a matching `kmod-zfs-<kernel_release>` RPM for the supported primary kernel.
 
 That check now prefers the metadata tag first:
 
-1. inspect `main-<fedora>-metadata` and read its cached kernel-release label
+1. inspect `main-<fedora>-metadata` and read its cached supported-kernel label
 2. only if that metadata tag is missing or malformed, unpack the full shared cache image and inspect the RPM filenames directly
 
-If any kernel is missing, rebuild is forced.
+If the supported kernel is missing, rebuild is forced.
 
 Separate from cache reuse, every workflow path also clones the pinned
 `Danathar/akmods` commit once.
@@ -82,10 +89,9 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 
 1. clones the pinned `Danathar/akmods` commit
 2. points its target output to `zfs-kinoite-containerfile-akmods`
-3. seeds cache metadata for every detected kernel
-4. builds kernel-specific payloads when needed
-5. merges those payloads into one shared Fedora-wide cache image
-6. publishes the `main-<fedora>-metadata` metadata tag for future fast-path reuse checks
+3. seeds cache metadata for the supported primary kernel
+4. builds the shared cache image for that supported kernel
+5. publishes the `main-<fedora>-metadata` metadata tag for future fast-path reuse checks
 
 ### 4. Build Candidate Or Branch Image
 
@@ -137,6 +143,6 @@ Then `latest` is signed explicitly.
 
 1. Fedora kernel timing vs OpenZFS release timing
 2. shared akmods cache rebuild rules
-3. multi-kernel fallback support in the final image
+3. deciding when the primary-kernel-only contract is acceptable
 
 Those are the real complexity drivers that remain.

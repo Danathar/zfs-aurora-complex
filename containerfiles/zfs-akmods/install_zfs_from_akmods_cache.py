@@ -2,9 +2,9 @@
 """
 Script: containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 What: Install ZFS RPMs (Red Hat Package Manager package files) from the self-hosted akmods cache into the image build root.
-Doing: Pulls the shared akmods image, maps each `kmod-zfs` RPM to a kernel release, installs one primary RPM through `rpm-ostree`, then unpacks the remaining kernel payloads directly.
-Why: The multi-kernel workaround is too brittle to keep as one long inline Containerfile shell block.
-Goal: Preserve the current fallback-kernel behavior while moving the hard-to-read logic into a tested helper.
+Doing: Pulls the shared akmods image, maps each `kmod-zfs` RPM to a kernel release, and installs the RPMs needed for the supported primary kernel.
+Why: The repo intentionally fails closed on the kernel the image is expected to boot first, then relies on image rollback instead of keeping extra bundled kernels ZFS-ready inside the same image.
+Goal: Keep the image build logic explicit while reducing the older multi-kernel fallback complexity.
 """
 
 from __future__ import annotations
@@ -37,11 +37,10 @@ class InstallPlan:
     3. Tests can validate the planning rules without running `rpm-ostree`.
     """
 
-    image_kernels: list[str]
+    detected_kernel_releases: list[str]
     managed_rpms: list[Path]
-    kmod_rpm_by_kernel: dict[str, Path]
-    primary_kernel_release: str
-    primary_kmod_rpm: Path
+    supported_kernel_release: str
+    supported_kmod_rpm: Path
 
 
 def _run_cmd(
@@ -251,10 +250,13 @@ def build_install_plan(
     """
     Split shared userspace RPMs from kernel-specific payload RPMs.
 
-    Why install one `kmod-zfs` through `rpm-ostree` and unpack the rest:
-    1. Cache images may hold multiple `kmod-zfs-<kernel_release>` files.
-    2. Those files still report the same RPM identity (`kmod-zfs`).
-    3. `rpm-ostree` can manage only one of those identical RPM identities.
+    This repo now supports only the primary base-image kernel. We still inspect
+    every detected kernel directory so the build logs explain what the base
+    image contains, but the fail-closed support contract is only:
+
+    1. choose the newest detected kernel as the supported boot target
+    2. require one matching `kmod-zfs` RPM for that kernel
+    3. install that one `kmod-zfs` normally through `rpm-ostree`
     """
 
     managed_rpms: list[Path] = []
@@ -278,27 +280,24 @@ def build_install_plan(
             )
         kmod_rpm_by_kernel[kernel_release] = rpm_path
 
-    for kernel_release in image_kernels:
-        if kernel_release not in kmod_rpm_by_kernel:
-            raise RuntimeError(
-                "No kmod-zfs RPM found for base kernel "
-                f"{kernel_release}. Cached akmods do not cover this kernel; rebuild akmods."
-            )
-
-    primary_kernel_release = sorted(image_kernels, key=version_sort_key)[-1]
-    primary_kmod_rpm = kmod_rpm_by_kernel[primary_kernel_release]
+    supported_kernel_release = sorted(image_kernels, key=version_sort_key)[-1]
+    supported_kmod_rpm = kmod_rpm_by_kernel.get(supported_kernel_release)
+    if supported_kmod_rpm is None:
+        raise RuntimeError(
+            "No kmod-zfs RPM found for the supported primary kernel "
+            f"{supported_kernel_release}. Cached akmods do not cover the supported kernel; rebuild akmods."
+        )
 
     return InstallPlan(
-        image_kernels=image_kernels,
+        detected_kernel_releases=image_kernels,
         managed_rpms=managed_rpms,
-        kmod_rpm_by_kernel=kmod_rpm_by_kernel,
-        primary_kernel_release=primary_kernel_release,
-        primary_kmod_rpm=primary_kmod_rpm,
+        supported_kernel_release=supported_kernel_release,
+        supported_kmod_rpm=supported_kmod_rpm,
     )
 
 
 def rpm_ostree_install(rpms: list[Path]) -> None:
-    """Install shared RPMs plus the primary kernel module through rpm-ostree."""
+    """Install shared RPMs plus the supported primary kernel module through rpm-ostree."""
 
     install_args = ["rpm-ostree", "install", *(str(rpm) for rpm in rpms)]
     _run_cmd(install_args, capture_output=False)
@@ -311,79 +310,26 @@ def _require_command(name: str) -> None:
         raise RuntimeError(f"Required command is not available: {name}")
 
 
-def unpack_rpm_payload(rpm_path: Path, destination_root: Path = Path("/")) -> None:
-    """
-    Expand one kernel-module RPM payload directly into the image root.
-
-    This keeps fallback-kernel module files present even though `rpm-ostree`
-    cannot keep multiple identical `kmod-zfs` RPM identities side by side.
-    """
-
-    rpm2cpio = subprocess.Popen(
-        ["rpm2cpio", str(rpm_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=False,
-    )
-    assert rpm2cpio.stdout is not None
-    assert rpm2cpio.stderr is not None
-    cpio = subprocess.run(
-        ["cpio", "-idmu", "--quiet"],
-        cwd=str(destination_root),
-        stdin=rpm2cpio.stdout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    rpm2cpio.stdout.close()
-    rpm2cpio_stderr = rpm2cpio.stderr.read().decode("utf-8", errors="replace")
-    rpm2cpio_returncode = rpm2cpio.wait()
-    rpm2cpio.stderr.close()
-
-    if rpm2cpio_returncode != 0:
-        detail = rpm2cpio_stderr.strip() or f"exit {rpm2cpio_returncode}"
-        raise RuntimeError(f"rpm2cpio failed for {rpm_path}: {detail}")
-    if cpio.returncode != 0:
-        detail = cpio.stderr.strip() or cpio.stdout.strip() or f"exit {cpio.returncode}"
-        raise RuntimeError(f"cpio failed for {rpm_path}: {detail}")
-
-
-def apply_extra_kmod_payloads(plan: InstallPlan) -> None:
-    """Unpack all non-primary kernel-module RPM payloads into the image root."""
-
-    if len(plan.image_kernels) <= 1:
-        return
-
-    _require_command("rpm2cpio")
-    _require_command("cpio")
-
-    for kernel_release in plan.image_kernels:
-        kmod_rpm = plan.kmod_rpm_by_kernel[kernel_release]
-        if kmod_rpm == plan.primary_kmod_rpm:
-            continue
-        unpack_rpm_payload(kmod_rpm)
-
-
 def validate_installed_modules(
-    image_kernels: list[str],
+    kernel_release: str,
     *,
     modules_root: Path = MODULES_ROOT,
+    run_cmd=_run_cmd,
 ) -> None:
     """
-    Verify ZFS modules exist for every base-image kernel and refresh depmod.
+    Verify the ZFS module exists for the supported primary kernel and refresh depmod.
 
     During image builds `uname -r` usually points at the builder kernel, not the
-    target image kernel, so we must run `depmod` manually for each release.
+    target image kernel, so we must run `depmod` manually for that release.
     """
 
-    for kernel_release in image_kernels:
-        module_path = modules_root / kernel_release / "extra" / "zfs" / "zfs.ko"
-        if not module_path.is_file():
-            raise RuntimeError(
-                "No ZFS module for base kernel "
-                f"{kernel_release}. Cached akmods do not cover this kernel; rebuild akmods."
-            )
-        _run_cmd(["depmod", "-a", kernel_release], capture_output=False)
+    module_path = modules_root / kernel_release / "extra" / "zfs" / "zfs.ko"
+    if not module_path.is_file():
+        raise RuntimeError(
+            "No ZFS module for supported primary kernel "
+            f"{kernel_release}. Cached akmods do not cover the supported kernel; rebuild akmods."
+        )
+    run_cmd(["depmod", "-a", kernel_release], capture_output=False)
 
 
 def main() -> None:
@@ -397,15 +343,21 @@ def main() -> None:
 
     image_ref = resolve_akmods_image()
     image_kernels = image_kernels_from_modules_root()
+    if len(image_kernels) > 1:
+        print(
+            "Detected multiple kernels in the base image: "
+            + " ".join(image_kernels)
+            + ". This repo intentionally supports only the primary kernel "
+            f"{sorted(image_kernels, key=version_sort_key)[-1]}; recovery from a bad image should use image rollback."
+        )
     copy_oci_layout_from_registry(image_ref)
     layer_files = load_layer_files_from_oci_layout(LAYOUT_DIR)
     unpack_layer_tarballs(layer_files, EXTRACT_ROOT)
     zfs_rpms = discover_zfs_rpms()
     install_plan = build_install_plan(image_kernels, zfs_rpms)
 
-    rpm_ostree_install([*install_plan.managed_rpms, install_plan.primary_kmod_rpm])
-    apply_extra_kmod_payloads(install_plan)
-    validate_installed_modules(install_plan.image_kernels)
+    rpm_ostree_install([*install_plan.managed_rpms, install_plan.supported_kmod_rpm])
+    validate_installed_modules(install_plan.supported_kernel_release)
 
 
 if __name__ == "__main__":

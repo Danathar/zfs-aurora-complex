@@ -33,7 +33,7 @@ Symptoms:
 
 - `check-akmods-cache` reports missing or out-of-date RPMs
 - `just build` fails in the akmods worktree
-- merged shared cache image is missing one of the required kernels
+- shared cache image is missing the supported primary kernel
 
 Likely causes:
 
@@ -43,7 +43,7 @@ Likely causes:
 
 What to inspect:
 
-1. the resolved base image digest and kernel list in the saved `build-inputs` file
+1. the resolved base image digest, detected kernel list, and primary kernel in the saved `build-inputs` file
 2. the failing akmods logs around `just build`
 3. the pinned `AKMODS_UPSTREAM_REF`
 4. the configured `ZFS_MINOR_VERSION`
@@ -80,9 +80,23 @@ Common cases:
 Repair path:
 
 1. reproduce the exact input set from the saved `build-inputs` file
-2. verify the shared akmods image still contains the expected RPM names
+2. verify the shared akmods image still contains the expected RPM for the supported primary kernel
 3. inspect which command failed inside the Containerfile logs
 4. patch the helper/build script, not the workflow, when the failure is build-root logic
+
+## Assumptions Behind This Repo
+
+This repo intentionally follows a narrower support contract than some earlier designs:
+
+1. if the primary kernel does not have a matching ZFS module, the build must fail
+2. if a deployed image still proves bad, the recovery path is rollback to the previous image
+3. older bundled kernels inside the same image are not treated as a required ZFS compatibility target
+
+Consequence:
+
+1. the repo is simpler than a "support every bundled kernel" design
+2. but if someone boots an older bundled kernel from the current image directly, ZFS is not guaranteed there
+3. the documented answer to that problem is to roll back the image instead of trying to stay on the current image with an older bundled kernel
 
 ## Failure: Promotion Or Signing
 

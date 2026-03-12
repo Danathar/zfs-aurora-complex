@@ -85,26 +85,6 @@ def require_env_or_default(name: str) -> str:
     )
 
 
-def kernel_releases_from_env(
-    *,
-    kernel_releases_var: str = "KERNEL_RELEASES",
-    kernel_release_var: str = "KERNEL_RELEASE",
-) -> list[str]:
-    """
-    Return kernel releases from workflow env, preferring the plural form.
-
-    `KERNEL_RELEASES` is a whitespace-separated list used when one base image
-    carries more than one kernel under `/lib/modules`.
-    `KERNEL_RELEASE` remains supported as the single-kernel fallback.
-    """
-    releases = [value for value in optional_env(kernel_releases_var).split() if value]
-    if releases:
-        return releases
-
-    release = optional_env(kernel_release_var).strip()
-    return [release] if release else []
-
-
 def run_cmd(
     args: Sequence[str],
     *,

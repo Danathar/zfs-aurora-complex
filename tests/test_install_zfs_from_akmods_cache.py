@@ -1,9 +1,9 @@
 """
 Script: tests/test_install_zfs_from_akmods_cache.py
 What: Tests the helper that installs cached ZFS RPMs into the build root.
-Doing: Exercises the multi-kernel planning rules without invoking `rpm-ostree` or mutating the host.
+Doing: Exercises the primary-kernel planning rules without invoking `rpm-ostree` or mutating the host.
 Why: The old inline Containerfile shell block was hard to reason about and almost impossible to unit test.
-Goal: Keep fallback-kernel support intact while making the decision logic explicit and reviewable.
+Goal: Keep the simplified primary-kernel contract explicit and reviewable.
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
 
             self.assertEqual(zfs_rpms, [keep])
 
-    def test_build_install_plan_selects_newest_kernel_and_splits_rpms(self) -> None:
+    def test_build_install_plan_selects_primary_kernel_and_splits_rpms(self) -> None:
         shared_rpm = Path("/tmp/zfs-2.4.0.rpm")
         first_kmod = Path("/tmp/kmod-zfs-6.18.13.rpm")
         second_kmod = Path("/tmp/kmod-zfs-6.18.16.rpm")
@@ -148,14 +148,17 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
         )
 
         self.assertEqual(plan.managed_rpms, [shared_rpm])
-        self.assertEqual(plan.primary_kernel_release, "6.18.16-200.fc43.x86_64")
-        self.assertEqual(plan.primary_kmod_rpm, second_kmod)
-        self.assertEqual(plan.kmod_rpm_by_kernel["6.18.13-200.fc43.x86_64"], first_kmod)
+        self.assertEqual(plan.supported_kernel_release, "6.18.16-200.fc43.x86_64")
+        self.assertEqual(plan.supported_kmod_rpm, second_kmod)
+        self.assertEqual(
+            plan.detected_kernel_releases,
+            ["6.18.13-200.fc43.x86_64", "6.18.16-200.fc43.x86_64"],
+        )
 
-    def test_build_install_plan_rejects_missing_kernel_payload(self) -> None:
+    def test_build_install_plan_rejects_missing_primary_kernel_payload(self) -> None:
         first_kmod = Path("/tmp/kmod-zfs-6.18.13.rpm")
 
-        with self.assertRaisesRegex(RuntimeError, "Cached akmods do not cover this kernel"):
+        with self.assertRaisesRegex(RuntimeError, "do not cover the supported kernel"):
             helper.build_install_plan(
                 [
                     "6.18.13-200.fc43.x86_64",
@@ -177,6 +180,23 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
                 rpm_name_lookup=lambda _path: "kmod-zfs",
                 kernel_release_lookup=lambda _path: "6.18.16-200.fc43.x86_64",
             )
+
+    def test_validate_installed_modules_checks_only_supported_primary_kernel(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            modules_root = Path(temp_dir)
+            supported_kernel = modules_root / "6.18.16-200.fc43.x86_64" / "extra" / "zfs"
+            supported_kernel.mkdir(parents=True, exist_ok=True)
+            (supported_kernel / "zfs.ko").touch()
+
+            depmod_calls: list[list[str]] = []
+
+            helper.validate_installed_modules(
+                "6.18.16-200.fc43.x86_64",
+                modules_root=modules_root,
+                run_cmd=lambda args, **_kwargs: depmod_calls.append(args) or "",
+            )
+
+        self.assertEqual(depmod_calls, [["depmod", "-a", "6.18.16-200.fc43.x86_64"]])
 
 
 if __name__ == "__main__":

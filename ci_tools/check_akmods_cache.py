@@ -1,8 +1,8 @@
 """
 Script: ci_tools/check_akmods_cache.py
-What: Checks whether the shared akmods cache can be reused for the current base-image kernels.
-Doing: Pulls the cache image, unpacks layers when needed, checks for matching `kmod-zfs` RPMs, then writes `exists=true|false`.
-Why: Skip rebuild when safe, but rebuild when any required module set is missing or older than the current kernel set.
+What: Checks whether the shared akmods cache can be reused for the current primary base-image kernel.
+Doing: Pulls the cache image, unpacks layers when needed, checks for a matching `kmod-zfs` RPM, then writes `exists=true|false`.
+Why: Skip rebuild when safe, but rebuild when the required primary-kernel module set is missing or older than the current target kernel.
 Goal: Control rebuild decisions in main and validation workflows.
 """
 
@@ -18,7 +18,6 @@ from ci_tools.akmods_cache_metadata import (
 )
 from ci_tools.common import (
     CiToolError,
-    kernel_releases_from_env,
     load_layer_files_from_oci_layout,
     normalize_owner,
     require_env,
@@ -33,24 +32,24 @@ from ci_tools.common import (
 @dataclass(frozen=True)
 class AkmodsCacheStatus:
     """
-    Result of checking one shared akmods cache image against required kernels.
+    Result of checking one shared akmods cache image against the required kernel.
 
     `image_exists` tells us whether the source tag is present at all.
-    `missing_releases` is the fail-closed list of kernels not covered by that
-    image. A reusable cache must satisfy both conditions.
+    `missing_release` is the fail-closed kernel not covered by that image.
+    A reusable cache must satisfy both conditions.
     """
 
     source_image: str
     image_exists: bool
-    missing_releases: tuple[str, ...]
+    missing_release: str = ""
     metadata_image: str = ""
     inspection_method: str = "unpacked-image"
 
     @property
     def reusable(self) -> bool:
-        """True only when the cache exists and covers every required kernel."""
+        """True only when the cache exists and covers the required kernel."""
 
-        return self.image_exists and not self.missing_releases
+        return self.image_exists and not self.missing_release
 
 
 def _has_kernel_matching_rpm(root_dir: Path, kernel_release: str) -> bool:
@@ -63,18 +62,12 @@ def _has_kernel_matching_rpm(root_dir: Path, kernel_release: str) -> bool:
     return any(rpm_dir.glob(pattern))
 
 
-def _missing_kernel_releases(root_dir: Path, kernel_releases: list[str]) -> list[str]:
-    """Return kernel releases that do not have a matching cached kmod RPM."""
-
-    return [release for release in kernel_releases if not _has_kernel_matching_rpm(root_dir, release)]
-
-
 def inspect_akmods_cache(
     *,
     image_org: str,
     source_repo: str,
     fedora_version: str,
-    kernel_releases: list[str],
+    kernel_release: str,
 ) -> AkmodsCacheStatus:
     """
     Inspect one shared akmods cache image and report whether it is reusable.
@@ -92,7 +85,7 @@ def inspect_akmods_cache(
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=False,
-            missing_releases=tuple(kernel_releases),
+            missing_release=kernel_release,
             metadata_image=metadata_image,
             inspection_method="missing-image",
         )
@@ -108,13 +101,10 @@ def inspect_akmods_cache(
                 "falling back to full shared-cache inspection."
             )
         else:
-            missing_releases = [
-                release for release in kernel_releases if release not in cached_kernel_releases
-            ]
             return AkmodsCacheStatus(
                 source_image=source_image,
                 image_exists=True,
-                missing_releases=tuple(missing_releases),
+                missing_release="" if kernel_release in cached_kernel_releases else kernel_release,
                 metadata_image=metadata_image,
                 inspection_method="metadata-tag",
             )
@@ -127,11 +117,11 @@ def inspect_akmods_cache(
         layer_files = load_layer_files_from_oci_layout(akmods_dir)
         unpack_layer_tarballs(layer_files, root)
 
-        missing_releases = _missing_kernel_releases(root, kernel_releases)
+        missing_release = "" if _has_kernel_matching_rpm(root, kernel_release) else kernel_release
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=True,
-            missing_releases=tuple(missing_releases),
+            missing_release=missing_release,
             metadata_image=metadata_image,
             inspection_method="unpacked-image",
         )
@@ -140,16 +130,14 @@ def inspect_akmods_cache(
 def main() -> None:
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
     fedora_version = require_env("FEDORA_VERSION")
-    kernel_releases = kernel_releases_from_env()
-    if not kernel_releases:
-        raise CiToolError("Expected at least one kernel release from workflow env")
+    kernel_release = require_env("KERNEL_RELEASE")
     source_repo = require_env("AKMODS_REPO")
 
     status = inspect_akmods_cache(
         image_org=image_org,
         source_repo=source_repo,
         fedora_version=fedora_version,
-        kernel_releases=kernel_releases,
+        kernel_release=kernel_release,
     )
 
     if not status.image_exists:
@@ -165,7 +153,7 @@ def main() -> None:
             }
         )
         print(
-            f"Found matching {status.source_image} kmods for kernels {' '.join(kernel_releases)}; "
+            f"Found matching {status.source_image} kmods for primary kernel {kernel_release}; "
             f"akmods rebuild can be skipped. Inspection method: {status.inspection_method}."
         )
         return
@@ -177,8 +165,8 @@ def main() -> None:
         }
     )
     print(
-        f"Cached {status.source_image} is present but missing kmods for kernels "
-        f"{' '.join(status.missing_releases)}; "
+        f"Cached {status.source_image} is present but missing kmods for primary kernel "
+        f"{status.missing_release}; "
         "akmods rebuild is required."
     )
 

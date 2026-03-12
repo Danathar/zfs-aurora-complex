@@ -86,12 +86,19 @@ That action does four things in one place:
 ### 2. Shared Akmods Cache Reuse Or Rebuild
 
 The workflow checks whether the shared cache image already contains a matching
-`kmod-zfs-<kernel_release>-...rpm` for every kernel shipped in the base image.
+`kmod-zfs-<kernel_release>-...rpm` for the supported primary kernel.
+
+The repo's policy is:
+
+1. detect every installed kernel in the base image for visibility
+2. choose the newest detected kernel as the supported primary kernel
+3. require ZFS support only for that supported primary kernel
+4. use image rollback, not older bundled kernels in the same image, as the recovery path
 
 That check now has two layers:
 
 1. first inspect `main-<fedora>-metadata`, a tiny metadata tag that only carries
-   labels listing the covered kernel releases
+   labels listing the supported kernel release
 2. if that metadata tag is missing or malformed, fall back to unpacking the full
    shared cache image and checking the RPM filenames directly
 
@@ -113,9 +120,8 @@ If no:
 
 1. clone the pinned `Danathar/akmods` fork
 2. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
-3. build per-kernel payloads when more than one kernel is present
-4. merge those payloads into one shared Fedora-wide cache image
-5. publish the matching `main-<fedora>-metadata` metadata tag
+3. build the shared cache image for the supported primary kernel
+4. publish the matching `main-<fedora>-metadata` metadata tag
 
 Important design change:
 
@@ -166,22 +172,31 @@ Fedora-version handling is intentionally dynamic here:
 4. that keeps the root `Containerfile` from hard-coding `43`, `44`, or any
    other future Fedora major version into its local-build fallback
 
-### 4. Multi-Kernel ZFS Install Logic
+### 4. Primary-Kernel ZFS Install Logic
 
-The hardest part is still this:
+This repo no longer tries to keep every bundled kernel inside the current image
+ZFS-ready.
 
-1. the shared akmods cache can contain multiple `kmod-zfs-<kernel_release>` RPMs
-2. those RPM files still share one package identity, `kmod-zfs`
-3. `rpm-ostree` will not keep multiple same-name package identities installed side-by-side
+Instead, the helper does this:
 
-So the helper does this:
+1. inspect every kernel directory under `/lib/modules`
+2. choose the newest detected kernel as the supported primary kernel
+3. require one matching `kmod-zfs` RPM for that kernel
+4. install ZFS userspace RPMs and that one primary `kmod-zfs` through `rpm-ostree`
+5. run `depmod -a <kernel>` for the supported primary kernel
+6. fail the build if that supported kernel does not end up with `zfs.ko`
 
-1. install ZFS userspace RPMs and one primary `kmod-zfs` through `rpm-ostree`
-2. unpack the remaining kernel-module payloads directly into `/`
-3. run `depmod -a <kernel>` for every base kernel
-4. fail if any base kernel ends up missing `zfs.ko`
+Why this is the chosen tradeoff:
 
-That keeps fallback-kernel module coverage while isolating the complexity in a tested Python helper.
+1. the intended safety rule is "do not publish a new image unless the kernel it is expected to boot first has working ZFS"
+2. if a deployed image still proves bad, the recovery path is rollback to the previous image
+3. that makes support for older bundled kernels inside the current image optional rather than required
+4. dropping that broader guarantee removes a large amount of build and compose complexity
+
+Consequence:
+
+- if the current image contains an older bundled kernel and someone boots that older kernel directly, ZFS is not guaranteed to work there
+- the documented recovery path is to roll back the image instead
 
 ### 5. Promotion And Signing
 
@@ -218,7 +233,7 @@ Because candidate and stable tags are in the same repository, the trust model is
 2. keep the final image repo single-path and boring
 3. keep the shared akmods cache explicit and inspectable
 4. pin run inputs so `latest` drift does not change behavior mid-run
-5. keep the hard multi-kernel logic in Python, not inline workflow shell
+5. keep the supported-kernel logic in Python, not inline workflow shell
 6. keep workflow defaults in one checked-in file instead of copying them across YAML files
 
 One unavoidable exception exists:

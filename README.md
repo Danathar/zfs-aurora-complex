@@ -44,15 +44,39 @@ Stable users should only see tested outputs.
 
 So the `main` GitHub Actions workflow does this:
 
-1. resolve and pin the exact base image, kernel set, builder image, and ZFS line for the run
-2. reuse or rebuild the shared akmods cache image for that exact kernel set
-3. publish or repair a tiny metadata tag that records which kernels that shared cache covers
+1. resolve and pin the exact base image, detected kernel list, primary boot kernel, builder image, and ZFS line for the run
+2. reuse or rebuild the shared akmods cache image for that primary kernel
+3. publish or repair a tiny metadata tag that records which supported kernel that shared cache covers
 4. build a candidate image tag in the same repository
 5. sign that candidate digest
 6. promote the tested candidate digest to `latest` and to an immutable audit tag
 7. sign the promoted `latest` digest
 
 If candidate fails, `latest` does not move.
+
+## Assumptions And Recovery Policy
+
+This repo intentionally follows a simpler support contract:
+
+1. the build must fail if ZFS does not match the primary kernel the image is expected to boot first
+2. the build does not promise ZFS support for older kernels that may also be present inside the same image
+3. if a deployed image turns out to be bad anyway, the recovery path is image rollback to the previous known-good image
+
+That means this repo optimizes for:
+
+1. not publishing a bad new image
+2. keeping rollback to the previous image simple
+3. reducing complexity inside the build pipeline
+
+It does not optimize for:
+
+1. booting an older bundled kernel inside the current image and still expecting ZFS to work there
+
+Operator rule:
+
+1. if a newly deployed image fails, roll back to the previous known-good image
+2. stay on that previous image until this repo successfully publishes a newer image whose primary kernel has matching ZFS support
+3. do not treat "boot an older bundled kernel from the bad current image" as the intended recovery workflow
 
 ## What Gets Published
 
@@ -165,9 +189,15 @@ One Fedora-version detail matters here:
 3. when `AKMODS_IMAGE` is not passed, the install helper renders `AKMODS_IMAGE_TEMPLATE`
    with the Fedora major version detected from the chosen base image itself
 
-The ZFS install step still has one important workaround:
+The ZFS install step follows the repo policy above:
 
-- if the base image ships more than one installed kernel under `/lib/modules`, the helper installs one `kmod-zfs` package through `rpm-ostree` and unpacks the remaining kernel payloads directly into the image root before running `depmod`
+1. inspect every detected kernel under `/lib/modules`
+2. choose the newest detected kernel as the supported primary kernel
+3. require a matching `kmod-zfs` RPM for that kernel
+4. install only that kernel's `kmod-zfs` package through `rpm-ostree`
+5. run `depmod` for that supported kernel
+
+If the base image carries older bundled kernels too, those older kernels are not treated as supported ZFS targets inside the same image. The recovery path for a bad image is rollback to the previous image, not booting an older bundled kernel from the current one.
 
 That logic lives in:
 

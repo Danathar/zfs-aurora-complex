@@ -14,7 +14,7 @@ from ci_tools.common import CiToolError, normalize_owner, require_env
 from ci_tools.resolve_build_inputs import resolve_build_inputs, write_resolved_build_outputs
 
 
-def _shared_cache_failure_message(*, source_image: str, missing_releases: tuple[str, ...]) -> str:
+def _shared_cache_failure_message(*, source_image: str, missing_release: str) -> str:
     """
     Build one readable failure message for read-only validation workflows.
 
@@ -24,9 +24,8 @@ def _shared_cache_failure_message(*, source_image: str, missing_releases: tuple[
     action is to refresh it from the main workflow.
     """
 
-    kernels_text = " ".join(missing_releases)
     return (
-        f"Shared akmods source tag {source_image} is missing or does not cover kernels {kernels_text}. "
+        f"Shared akmods source tag {source_image} is missing or does not cover the supported primary kernel {missing_release}. "
         "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
         "then rerun this workflow."
     )
@@ -50,19 +49,19 @@ def main() -> None:
         image_org=image_org,
         source_repo=source_repo,
         fedora_version=inputs.version,
-        kernel_releases=list(inputs.kernel_releases),
+        kernel_release=inputs.kernel_release,
     )
     if not status.reusable:
         raise CiToolError(
             _shared_cache_failure_message(
                 source_image=status.source_image,
-                missing_releases=status.missing_releases,
+                missing_release=status.missing_release,
             )
         )
 
     print(
-        f"Read-only validation will reuse {status.source_image} for kernels "
-        f"{' '.join(inputs.kernel_releases)}."
+        f"Read-only validation will reuse {status.source_image} for primary kernel "
+        f"{inputs.kernel_release}."
     )
 
 
