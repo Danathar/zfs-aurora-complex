@@ -198,6 +198,37 @@ Consequence:
 - if the current image contains an older bundled kernel and someone boots that older kernel directly, ZFS is not guaranteed to work there
 - the documented recovery path is to roll back the image instead
 
+### Retired Design Note: The Older Multi-Kernel Fallback System
+
+Earlier versions of this project used a more complex design.
+
+That older design worked like this:
+
+1. inspect every detected kernel in the base image
+2. build kernel-module payloads for every detected kernel
+3. merge those payloads back into one shared akmods cache image
+4. install one `kmod-zfs` package normally through `rpm-ostree`
+5. unpack the remaining kernel-module payloads directly into the image root
+6. run `depmod` for every detected kernel
+
+Why it existed:
+
+1. some upstream base images exposed more than one installed kernel under `/lib/modules`
+2. the older design tried to guarantee that ZFS would still work even if someone booted an older bundled kernel from the current image
+3. that was a stronger guarantee than simple image rollback
+
+Why this repo no longer uses that design:
+
+1. the stated operator goal is simpler: do not publish a new image unless the primary kernel has matching ZFS support
+2. if a deployed image still proves bad, the documented answer is to roll back to the previous image and stay there
+3. once rollback became the chosen recovery model, supporting every bundled kernel inside the current image stopped being necessary
+4. most of the remaining pipeline complexity lived in that broader guarantee
+
+What was intentionally given up:
+
+1. booting an older bundled kernel from the current image is no longer treated as a supported ZFS recovery path
+2. the supported recovery path is now image rollback to the previous known-good image
+
 ### 5. Promotion And Signing
 
 Promotion is a separate job.
