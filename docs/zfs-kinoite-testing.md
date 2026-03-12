@@ -71,10 +71,10 @@ That check exists because:
 
 What "pinned" means here:
 
-1. this repo uses your fork, not upstream directly
+1. this repo uses the configured fork, not upstream directly
 2. it uses one exact commit from that fork, not the moving `main` branch tip
 3. the GitHub Actions workflow run clones that exact commit into `/tmp/akmods` for the current run only
-4. updating your fork later does not change the build until this repo's pin is updated
+4. updating that fork later does not change the build until this repo's pin is updated
 
 ### 3. Build Shared Akmods Cache When Required
 

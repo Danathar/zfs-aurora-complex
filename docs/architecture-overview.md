@@ -86,7 +86,7 @@ Why:
 
 1. a bad akmods pin can hide for a while if the workflow keeps reusing an older shared cache
 2. cloning the pinned ref is the cheapest way to prove that the configured commit SHA
-   still exists in your fork
+   still exists in the configured fork
 3. this keeps branch, pull request, push, and schedule paths honest with each other
 
 If yes:
@@ -110,10 +110,10 @@ Important design change:
 
 Plain-language summary of the pin:
 
-1. the source repository is still your fork, `Danathar/akmods`
+1. the source repository is still the configured fork, `Danathar/akmods`
 2. this repo records one exact commit from that fork in `ci/defaults.json`
 3. the GitHub Actions workflow run clones that one commit into `/tmp/akmods` for the current run only
-4. pushing new commits to your fork does nothing here until the pin is updated
+4. pushing new commits to that fork does nothing here until the pin is updated
 
 ### 3. Native Final Image Build
 

@@ -14,7 +14,7 @@ Current control points:
 
 ## Why The Pin Exists
 
-This repo does not build against the moving `main` branch of your fork.
+This repo does not build against the moving `main` branch of the configured fork.
 
 Instead, it records one exact akmods commit in:
 
@@ -53,13 +53,13 @@ Why:
 
 The moving pieces are:
 
-1. your fork repository: `Danathar/akmods`
+1. the configured fork repository: `Danathar/akmods`
 2. the pinned commit SHA, meaning the exact Git commit ID stored in this repo
 3. the temporary clone the workflow run creates in `/tmp/akmods`
 
 How they relate:
 
-1. the workflow run still uses your fork as the source repository
+1. the workflow run still uses the configured fork as the source repository
 2. the workflow run clones only the pinned commit, not the whole moving branch
 3. that clone in `/tmp/akmods` exists only for the current run
 4. when the run ends, that temporary checkout is discarded

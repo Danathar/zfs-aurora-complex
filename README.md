@@ -80,7 +80,7 @@ The important simplification is this:
 
 ## How Akmods Source Is Chosen
 
-This repository still uses your fork:
+This repository uses the configured akmods fork:
 
 - `https://github.com/Danathar/akmods.git`
 
@@ -97,22 +97,22 @@ Right now that file contains:
 
 What that means in practice:
 
-1. the GitHub Actions workflow run (usually shortened to CI, for continuous integration) makes a temporary clone of your fork into `/tmp/akmods`
+1. the GitHub Actions workflow run (usually shortened to CI, for continuous integration) makes a temporary clone of that fork into `/tmp/akmods`
 2. it fetches only that one pinned commit
 3. it verifies that Git actually checked out that exact commit
 4. it uses that temporary checkout for the rest of the akmods build
 
 What it does **not** mean:
 
-1. the workflow run is not creating a new long-lived clone anywhere in your account
-2. the workflow run is not ignoring your fork
-3. the workflow run is not automatically picking up whatever new commits later appear on your fork's `main` branch
+1. the workflow run is not creating a new long-lived clone anywhere in the GitHub account that owns the fork
+2. the workflow run is not ignoring the configured fork
+3. the workflow run is not automatically picking up whatever new commits later appear on that fork's `main` branch
 
-If you update your fork after upstream changes:
+If the fork is updated after upstream changes:
 
-1. your fork stays the source repository
+1. that fork stays the source repository
 2. this repo will still keep using the currently pinned commit
-3. the new fork commit only starts being used after you update the pin in `ci/defaults.json`
+3. the new fork commit only starts being used after the pin in `ci/defaults.json` is updated
 
 ## Repository Layout
 

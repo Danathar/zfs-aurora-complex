@@ -12,7 +12,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `artifact`: a saved output file from a workflow run that you can inspect or reuse later.
 - `manifest`: a structured data file that records what a run produced or which exact inputs it used.
 - `checked-in defaults`: version-controlled default values stored in this repo, here in `ci/defaults.json`, instead of being copied into several workflow files.
-- `fork`: your copy of another repository under your own GitHub account. In this repo, `Danathar/akmods` is a fork used as the akmods source repository.
+- `fork`: a copy of another repository under a different GitHub account or organization. In this repo, `Danathar/akmods` is the fork used as the akmods source repository.
 - `workflow`: one named GitHub Actions automation file.
 - `workflow run`: one execution of a GitHub Actions workflow from start to finish.
 - `pipeline`: the ordered set of jobs/steps in one workflow run.
