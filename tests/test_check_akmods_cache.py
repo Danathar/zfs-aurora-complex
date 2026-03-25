@@ -30,7 +30,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
 
     def test_inspect_akmods_cache_reads_shared_cache_image(self) -> None:
         def fake_exists(image_ref: str) -> bool:
-            return image_ref == "docker://ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43"
+            return image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
 
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -66,7 +66,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                         ):
                             status = inspect_akmods_cache(
                                 image_org="danathar",
-                                source_repo="zfs-aurora-containerfile-akmods",
+                                source_repo="zfs-aurora-complex-akmods",
                                 fedora_version="43",
                                 kernel_release="6.18.16-200.fc43.x86_64",
                             )

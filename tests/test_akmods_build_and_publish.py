@@ -93,7 +93,7 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
                             {
                                 "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
                                 "GITHUB_REPOSITORY_OWNER": "Danathar",
-                                "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
+                                "AKMODS_REPO": "zfs-aurora-complex-akmods",
                                 "AKMODS_KERNEL": "main",
                                 "AKMODS_VERSION": "43",
                             },

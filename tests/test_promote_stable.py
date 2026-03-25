@@ -27,7 +27,7 @@ class PromoteStableTests(unittest.TestCase):
                     "REGISTRY_ACTOR": "actor",
                     "REGISTRY_TOKEN": "token",
                     "FEDORA_VERSION": "43",
-                    "IMAGE_NAME": "zfs-aurora-containerfile",
+                    "IMAGE_NAME": "zfs-aurora-complex",
                     "GITHUB_RUN_NUMBER": "12",
                     "GITHUB_SHA": "deadbeefcafefeed",
                 },
@@ -38,22 +38,22 @@ class PromoteStableTests(unittest.TestCase):
                         main()
 
             digest_lookup.assert_called_once_with(
-                "docker://ghcr.io/danathar/zfs-aurora-containerfile:candidate-deadbee-43",
+                "docker://ghcr.io/danathar/zfs-aurora-complex:candidate-deadbee-43",
                 creds="actor:token",
             )
             self.assertEqual(skopeo_copy.call_count, 2)
             self.assertEqual(
                 skopeo_copy.call_args_list[0].args[:2],
                 (
-                    "docker://ghcr.io/danathar/zfs-aurora-containerfile@sha256:abc",
-                    "docker://ghcr.io/danathar/zfs-aurora-containerfile:latest",
+                    "docker://ghcr.io/danathar/zfs-aurora-complex@sha256:abc",
+                    "docker://ghcr.io/danathar/zfs-aurora-complex:latest",
                 ),
             )
             self.assertEqual(
                 skopeo_copy.call_args_list[1].args[:2],
                 (
-                    "docker://ghcr.io/danathar/zfs-aurora-containerfile@sha256:abc",
-                    "docker://ghcr.io/danathar/zfs-aurora-containerfile:stable-12-deadbee",
+                    "docker://ghcr.io/danathar/zfs-aurora-complex@sha256:abc",
+                    "docker://ghcr.io/danathar/zfs-aurora-complex:stable-12-deadbee",
                 ),
             )
 

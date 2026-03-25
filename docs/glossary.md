@@ -1,4 +1,4 @@
-# zfs-aurora-containerfile Glossary
+# zfs-aurora-complex Glossary
 
 This page defines terms used across this repository's docs and workflow comments.
 
@@ -24,7 +24,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `image ref`: text that points to a container image, usually `name:tag` or `name@sha256:digest`.
 - `digest`: an immutable hash that identifies one exact image content snapshot.
 - `GHCR`: GitHub Container Registry, the image registry behind `ghcr.io`.
-- `image owner portion`: the owner or organization part of an image path, for example `danathar` in `ghcr.io/danathar/zfs-aurora-containerfile`.
+- `image owner portion`: the owner or organization part of an image path, for example `danathar` in `ghcr.io/danathar/zfs-aurora-complex`.
 - `rebase` / `rebasing`: switching your installed OS image source to a different container image ref.
 - `floating ref`: a tag-based ref such as `:latest` that can point to different content later.
 - `pinned commit`: one exact Git commit SHA recorded on purpose so a build uses that exact source version and not whatever a branch tip points to later.

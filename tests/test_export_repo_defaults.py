@@ -22,8 +22,8 @@ class ExportRepoDefaultsTests(unittest.TestCase):
         defaults = {
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
             "AKMODS_UPSTREAM_REF": "abcdef123456",
-            "IMAGE_NAME": "zfs-aurora-containerfile",
-            "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
+            "IMAGE_NAME": "zfs-aurora-complex",
+            "AKMODS_REPO": "zfs-aurora-complex-akmods",
             "DEFAULT_BASE_IMAGE": "ghcr.io/example/base:latest",
             "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/example/build:latest",
             "DEFAULT_BREW_IMAGE": "ghcr.io/example/brew:latest",
@@ -39,9 +39,9 @@ class ExportRepoDefaultsTests(unittest.TestCase):
 
             output_text = output_path.read_text(encoding="utf-8")
             env_text = env_path.read_text(encoding="utf-8")
-            self.assertIn("image_name=zfs-aurora-containerfile", output_text)
+            self.assertIn("image_name=zfs-aurora-complex", output_text)
             self.assertIn("default_brew_image=ghcr.io/example/brew:latest", output_text)
-            self.assertIn("IMAGE_NAME=zfs-aurora-containerfile", env_text)
+            self.assertIn("IMAGE_NAME=zfs-aurora-complex", env_text)
             self.assertIn("DEFAULT_ZFS_MINOR_VERSION=2.4", env_text)
 
 

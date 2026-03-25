@@ -58,7 +58,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 {
                     "GITHUB_OUTPUT": output_path,
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
                 },
                 clear=False,
             ):
@@ -70,7 +70,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                         with patch(
                             "ci_tools.prepare_validation_build.inspect_akmods_cache",
                             return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
+                                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
                                 image_exists=True,
                                 missing_release="",
                             ),
@@ -88,7 +88,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
 
             inspect_cache.assert_called_once_with(
                 image_org="danathar",
-                source_repo="zfs-aurora-containerfile-akmods",
+                source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
             )
@@ -104,7 +104,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 {
                     "GITHUB_OUTPUT": output_path,
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
                 },
                 clear=False,
             ):
@@ -116,7 +116,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                         with patch(
                             "ci_tools.prepare_validation_build.inspect_akmods_cache",
                             return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
+                                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
                                 image_exists=True,
                                 missing_release="6.18.16-200.fc43.x86_64",
                             ),
@@ -125,7 +125,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                                 main()
 
             self.assertIn(
-                "ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
+                "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
                 str(context.exception),
             )
             self.assertIn("rebuild_akmods=true", str(context.exception))

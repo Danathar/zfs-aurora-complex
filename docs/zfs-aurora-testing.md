@@ -26,14 +26,14 @@ The objective is to validate that we can safely:
 
 ### Main Artifacts
 
-1. candidate OS image: `ghcr.io/danathar/zfs-aurora-containerfile:candidate-<sha>-<fedora>`
-2. stable OS image: `ghcr.io/danathar/zfs-aurora-containerfile:latest`
-3. stable audit tag: `ghcr.io/danathar/zfs-aurora-containerfile:stable-<run>-<sha>`
-4. shared akmods cache image: `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>`
+1. candidate OS image: `ghcr.io/danathar/zfs-aurora-complex:candidate-<sha>-<fedora>`
+2. stable OS image: `ghcr.io/danathar/zfs-aurora-complex:latest`
+3. stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
+4. shared akmods cache image: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
 
 ### Branch Artifacts
 
-1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
+1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
 2. bot-authored branch runs stop after local validation and do not push any public tag
 3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags, but they may refresh that shared source when it does not yet cover the current primary kernel
 
@@ -88,7 +88,7 @@ What "pinned" means here:
 If the cache is missing, out of date, or a manual rebuild is requested, the workflow run:
 
 1. clones the pinned `Danathar/akmods` commit
-2. points its target output to `zfs-aurora-containerfile-akmods`
+2. points its target output to `zfs-aurora-complex-akmods`
 3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
 

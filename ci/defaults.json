@@ -1,8 +1,8 @@
 {
   "AKMODS_UPSTREAM_REPO": "https://github.com/Danathar/akmods.git",
   "AKMODS_UPSTREAM_REF": "0e06cd70879aa5063c4193710d8c7e37bbc2ab57",
-  "IMAGE_NAME": "zfs-aurora-containerfile",
-  "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
+  "IMAGE_NAME": "zfs-aurora-complex",
+  "AKMODS_REPO": "zfs-aurora-complex-akmods",
   "DEFAULT_BASE_IMAGE": "ghcr.io/ublue-os/aurora:latest",
   "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/ublue-os/devcontainer:latest",
   "DEFAULT_BREW_IMAGE": "ghcr.io/ublue-os/brew:latest",

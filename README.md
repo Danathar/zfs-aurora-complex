@@ -1,4 +1,4 @@
-# zfs-aurora-containerfile
+# zfs-aurora-complex
 
 GitHub Actions workflow: `build.yml`
 
@@ -35,8 +35,8 @@ This repository intentionally uses:
 
 1. a standard `Containerfile`
 2. direct `buildah`/Open Container Initiative (OCI) build arguments
-3. one image repository (`ghcr.io/danathar/zfs-aurora-containerfile`)
-4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-containerfile-akmods`)
+3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
+4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
 
 ## Safety Model
 
@@ -83,16 +83,16 @@ All of these tags are stored in GitHub Container Registry (GHCR), which is the c
 
 OS image tags in one repository:
 
-- candidate image: `ghcr.io/danathar/zfs-aurora-containerfile:candidate-<sha>-<fedora>`
-- stable image: `ghcr.io/danathar/zfs-aurora-containerfile:latest`
-- stable audit tag: `ghcr.io/danathar/zfs-aurora-containerfile:stable-<run>-<sha>`
-- branch test image: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
+- candidate image: `ghcr.io/danathar/zfs-aurora-complex:candidate-<sha>-<fedora>`
+- stable image: `ghcr.io/danathar/zfs-aurora-complex:latest`
+- stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
+- branch test image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
   - bot-authored branch runs validate locally but intentionally do not push this tag
 
 Shared akmods cache image:
 
-- `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>`
-- architecture-specific inspection tag: `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>-x86_64`
+- `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
+- architecture-specific inspection tag: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>-x86_64`
 
 The important simplification is this:
 
@@ -210,7 +210,7 @@ That logic lives in:
 Fresh stock Aurora:
 
 ```bash
-sudo bootc switch ghcr.io/danathar/zfs-aurora-containerfile:latest
+sudo bootc switch ghcr.io/danathar/zfs-aurora-complex:latest
 systemctl reboot
 ```
 
@@ -244,7 +244,7 @@ sudo zfs list
 ## Signature Verification
 
 ```bash
-cosign verify --key cosign.pub ghcr.io/danathar/zfs-aurora-containerfile:latest
+cosign verify --key cosign.pub ghcr.io/danathar/zfs-aurora-complex:latest
 ```
 
 ## Reading Order

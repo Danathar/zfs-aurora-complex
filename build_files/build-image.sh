@@ -51,8 +51,8 @@ python3 /files/scripts/configure_signing_policy.py
 # `pcp`, which creates `/var/lib/pcp/*` directories but does not ship tmpfiles
 # entries for this image build mode, so install a local declaration here.
 install -D -m 0644 \
-  /files/usr/lib/tmpfiles.d/zfs-aurora-containerfile.conf \
-  /usr/lib/tmpfiles.d/zfs-aurora-containerfile.conf
+  /files/usr/lib/tmpfiles.d/zfs-aurora-complex.conf \
+  /usr/lib/tmpfiles.d/zfs-aurora-complex.conf
 
 # Remove build-only runtime state before the final ostree commit.
 # Why these paths are safe to drop:

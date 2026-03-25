@@ -42,15 +42,15 @@ class ConfigureSigningPolicyTests(unittest.TestCase):
             temp_root = Path(temp_dir)
             policy_file = temp_root / "policy.json"
             registries_dir = temp_root / "registries.d"
-            key_path = temp_root / "keys" / "zfs-aurora-containerfile.pub"
+            key_path = temp_root / "keys" / "zfs-aurora-complex.pub"
             key_path.parent.mkdir(parents=True, exist_ok=True)
             key_path.write_text("public-key", encoding="utf-8")
 
             with patch.dict(
                 os.environ,
                 {
-                    "IMAGE_REPO": "ghcr.io/example/zfs-aurora-containerfile",
-                    "SIGNING_KEY_FILENAME": "zfs-aurora-containerfile.pub",
+                    "IMAGE_REPO": "ghcr.io/example/zfs-aurora-complex",
+                    "SIGNING_KEY_FILENAME": "zfs-aurora-complex.pub",
                     "POLICY_FILE": str(policy_file),
                     "REGISTRIES_DIR": str(registries_dir),
                     "KEY_PATH": str(key_path),
@@ -61,13 +61,13 @@ class ConfigureSigningPolicyTests(unittest.TestCase):
 
             policy_data = json.loads(policy_file.read_text(encoding="utf-8"))
             self.assertEqual(
-                policy_data["transports"]["docker"]["ghcr.io/example/zfs-aurora-containerfile"][0]["keyPath"],
+                policy_data["transports"]["docker"]["ghcr.io/example/zfs-aurora-complex"][0]["keyPath"],
                 str(key_path),
             )
 
-            registry_file = registries_dir / "zfs-aurora-containerfile.yaml"
+            registry_file = registries_dir / "zfs-aurora-complex.yaml"
             registry_text = registry_file.read_text(encoding="utf-8")
-            self.assertIn("ghcr.io/example/zfs-aurora-containerfile", registry_text)
+            self.assertIn("ghcr.io/example/zfs-aurora-complex", registry_text)
             self.assertIn("use-sigstore-attachments: true", registry_text)
 
 

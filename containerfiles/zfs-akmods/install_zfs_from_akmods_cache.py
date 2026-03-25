@@ -33,7 +33,7 @@ LAYOUT_DIR = Path("/tmp/akmods-zfs")
 EXTRACT_ROOT = Path("/tmp")
 RPM_SEARCH_ROOT = EXTRACT_ROOT / "rpms" / "kmods" / "zfs"
 MODULES_ROOT = Path("/lib/modules")
-DEFAULT_AKMODS_IMAGE_TEMPLATE = "ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-{fedora}"
+DEFAULT_AKMODS_IMAGE_TEMPLATE = "ghcr.io/danathar/zfs-aurora-complex-akmods:main-{fedora}"
 
 
 @dataclass(frozen=True)

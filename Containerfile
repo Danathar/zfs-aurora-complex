@@ -23,9 +23,9 @@ FROM ${BASE_IMAGE}
 # not pass an explicit akmods image reference, the helper can render this
 # template with the Fedora version detected from the chosen base image.
 ARG AKMODS_IMAGE=""
-ARG AKMODS_IMAGE_TEMPLATE="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-{fedora}"
-ARG IMAGE_REPO="ghcr.io/danathar/zfs-aurora-containerfile"
-ARG SIGNING_KEY_FILENAME="zfs-aurora-containerfile.pub"
+ARG AKMODS_IMAGE_TEMPLATE="ghcr.io/danathar/zfs-aurora-complex-akmods:main-{fedora}"
+ARG IMAGE_REPO="ghcr.io/danathar/zfs-aurora-complex"
+ARG SIGNING_KEY_FILENAME="zfs-aurora-complex.pub"
 
 # Convert the build arguments into environment variables once so the helper
 # script can read stable names while the Containerfile stays declarative.
