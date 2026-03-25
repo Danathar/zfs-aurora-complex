@@ -178,6 +178,8 @@ jobs:
     # the candidate image without moving the public `latest` tag.
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true'
     runs-on: ubuntu-24.04
+    env:
+      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
     permissions:
       contents: read
       packages: write
@@ -216,7 +218,7 @@ jobs:
       # A freshly split repo may not have its signing secret configured yet, so
       # publication should still succeed and leave the image unsigned for now.
       - name: Sign promoted stable image digest
-        if: secrets.SIGNING_SECRET != ''
+        if: env.HAS_SIGNING_SECRET == 'true'
         shell: bash
         env:
           IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
@@ -229,7 +231,7 @@ jobs:
           python3 -m ci_tools.cli sign-image
 
       - name: Explain skipped stable signing without secret
-        if: secrets.SIGNING_SECRET == ''
+        if: env.HAS_SIGNING_SECRET != 'true'
         shell: bash
         run: |
           echo "SIGNING_SECRET is not configured for this repository, so the promoted stable image was published without a cosign signature."
