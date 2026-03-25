@@ -250,7 +250,7 @@ Because candidate and stable tags are in the same repository, the trust model is
 1. `build.yml`: candidate-first build and promotion
    - the workflow now uses small Python helpers for registry-context export and
      candidate-tag generation instead of inline shell snippets
-2. `build-branch.yml`: read-only validation inputs plus branch-tagged push
+2. `build-branch.yml`: branch-tagged push with shared-cache reuse or rebuild when required
    - bot-authored branch runs still build locally but intentionally skip push and signing
    - human-authored branch runs push/sign normally
    - the final branch image tag is now composed by a small Python helper

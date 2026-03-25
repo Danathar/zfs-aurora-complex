@@ -121,12 +121,13 @@ Repair path:
 
 ## Branch Or Pull Request Validation Failures
 
-These workflows intentionally do not rebuild the shared akmods cache.
+Pull request validation intentionally does not rebuild the shared akmods cache.
+Human-owned branch builds can now refresh the shared cache when they move to a new kernel stream.
 
-So if `build-branch.yml` or `build-pr.yml` fails in `prepare-validation-build`, the right repair path is usually:
+So if `build-pr.yml` fails in `prepare-validation-build`, or if `build-branch.yml` fails before it can refresh the cache, the right repair path is usually:
 
 1. fix `main`
 2. refresh the shared akmods cache on `main`
 3. rerun branch or pull request validation
 
-That is intentional. Branch and pull request validation should not rewrite the shared image tags used by `main`.
+That is intentional for pull requests. Branch builds are allowed to seed the shared branch-target cache when required, but pull requests still do not rewrite shared image tags.

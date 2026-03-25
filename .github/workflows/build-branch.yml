@@ -59,19 +59,21 @@ jobs:
         name: Prepare registry context
         uses: ./.github/actions/prepare-registry-context
 
-      # This mirrors the main workflow's front-end checks, but stops before any
-      # publication step. It resolves inputs and confirms that the shared module
-      # cache matches the primary kernel expected for this branch build.
-      - name: Resolve inputs and verify shared akmods cache
+      # Branch builds need to be able to seed a new shared cache when they move
+      # to a base image whose primary kernel is not yet covered. That lets a
+      # human-owned branch validate a new stream, such as Aurora, end to end.
+      - name: Resolve inputs, verify cache state, and refresh shared akmods when required
         id: prepare
-        shell: bash
-        env:
-          USE_INPUT_LOCK: false
-          LOCK_FILE: ci/inputs.lock.json
-          BUILD_CONTAINER_REF: ${{ steps.defaults.outputs.default_build_container_image }}
-          AKMODS_REPO: ${{ steps.defaults.outputs.akmods_repo }}
-        run: |
-          python3 -m ci_tools.cli prepare-validation-build
+        uses: ./.github/actions/prepare-main-akmods
+        with:
+          use_input_lock: "false"
+          lock_file: ci/inputs.lock.json
+          build_container_ref: ${{ steps.defaults.outputs.default_build_container_image }}
+          akmods_repo: ${{ steps.defaults.outputs.akmods_repo }}
+          akmods_upstream_repo: ${{ steps.defaults.outputs.akmods_upstream_repo }}
+          rebuild_akmods: "false"
+          registry_actor: ${{ github.actor }}
+          registry_token: ${{ github.token }}
 
       # Add the resolved Fedora version to the branch tag so readers can tell
       # which base-image release the branch build targeted.

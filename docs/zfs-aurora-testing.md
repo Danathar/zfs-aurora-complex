@@ -20,7 +20,7 @@ The objective is to validate that we can safely:
 2. ZFS compatibility can lag new Fedora kernels.
 3. Branch testing must not overwrite `latest`.
 4. pull request (PR) validation should exercise the real build logic but should not push anything.
-5. The shared akmods cache should be rebuilt only by `main`, not by branch or PR validation.
+5. pull request validation stays read-only, but human-owned branch builds may seed or refresh the shared akmods cache when a new target kernel requires it.
 
 ## Artifact Strategy
 
@@ -35,7 +35,7 @@ The objective is to validate that we can safely:
 
 1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
 2. bot-authored branch runs stop after local validation and do not push any public tag
-3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags
+3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags, but they may refresh that shared source when it does not yet cover the current primary kernel
 
 ## End-To-End Build Flow
 
@@ -74,7 +74,7 @@ That check exists because:
 
 1. an out-of-date shared cache can hide a broken pin for a while
 2. branch and pull request validation should still prove that the configured akmods commit SHA is
-   fetchable, even when they intentionally do not rebuild the cache
+   fetchable, even when they do not end up rebuilding the cache
 
 What "pinned" means here:
 
@@ -91,6 +91,11 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 2. points its target output to `zfs-aurora-containerfile-akmods`
 3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
+
+Branch note:
+
+- human-owned branch builds can run this same refresh path when they move to a base image whose primary kernel is not yet covered by the shared cache
+- pull request validation remains read-only and still fails fast instead of publishing cache changes
 
 ### 4. Build Candidate Or Branch Image
 

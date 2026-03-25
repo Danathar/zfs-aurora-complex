@@ -159,7 +159,7 @@ docs/                                 teaching-style documentation
   - candidate-first build and promotion
 - `.github/workflows/build-branch.yml`
   - branch-tagged test builds
-  - read-only reuse of the shared akmods cache
+  - reuse or rebuild the shared akmods cache when the branch targets a new primary kernel
 - `.github/workflows/build-pr.yml`
   - pull request (PR) validation build
   - no push and no signing

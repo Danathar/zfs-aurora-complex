@@ -21,7 +21,7 @@ If a term is unfamiliar, check the shared glossary first:
 2. [`ci_tools/write_build_inputs_manifest.py`](../ci_tools/write_build_inputs_manifest.py)
 3. [`ci_tools/check_akmods_cache.py`](../ci_tools/check_akmods_cache.py)
 4. [`ci_tools/prepare_validation_build.py`](../ci_tools/prepare_validation_build.py)
-   - read-only cache validation plus pinned-akmods-ref fetch validation
+   - pull-request cache validation plus pinned-akmods-ref fetch validation
 5. [`ci_tools/tagging_context.py`](../ci_tools/tagging_context.py)
    - normalizes registry paths and detects automation accounts
 
