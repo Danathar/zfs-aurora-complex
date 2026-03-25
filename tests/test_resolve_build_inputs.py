@@ -40,7 +40,27 @@ class ChooseBaseImageTagTests(unittest.TestCase):
             digest_lookup=lambda t: digests.get(t, ""),
         )
         self.assertEqual(tag, "latest-20260227.1")
-        self.assertEqual(checked, ["latest-20260227.1", "latest-20260227.1", "43-20260227.1"])
+        self.assertEqual(checked, ["latest-20260227.1", "43-20260227.1"])
+
+    def test_derives_tag_from_prefixed_version_label_and_digest_match(self) -> None:
+        digests = {
+            "latest-43.20260324.1": "sha256:match",
+            "latest-20260324.1": "sha256:other",
+            "43-20260324.1": "sha256:other",
+        }
+
+        tag, checked = choose_base_image_tag(
+            source_tag="latest",
+            version_label="latest-43.20260324.1",
+            fedora_version="43",
+            expected_digest="sha256:match",
+            digest_lookup=lambda t: digests.get(t, ""),
+        )
+        self.assertEqual(tag, "latest-43.20260324.1")
+        self.assertEqual(
+            checked,
+            ["latest-43.20260324.1", "latest-20260324.1", "43-20260324.1"],
+        )
 
     def test_rejects_unexpected_version_label(self) -> None:
         with self.assertRaises(CiToolError):

@@ -29,7 +29,10 @@ from ci_tools.common import (
 
 TAG_FROM_REF_RE = re.compile(r"^[^@]+:([^/@]+)$")
 DATE_STAMPED_TAG_RE = re.compile(r"-[0-9]{8}(\.[0-9]+)?$")
-VERSION_LABEL_RE = re.compile(r"^[0-9]+\.[0-9]{8}(\.[0-9]+)?$")
+PLAIN_VERSION_LABEL_RE = re.compile(r"^(?P<fedora>[0-9]+)\.(?P<stamp>[0-9]{8}(?:\.[0-9]+)?)$")
+PREFIXED_VERSION_LABEL_RE = re.compile(
+    r"^(?P<prefix>[^-]+)-(?P<fedora>[0-9]+)\.(?P<stamp>[0-9]{8}(?:\.[0-9]+)?)$"
+)
 
 
 @dataclass(frozen=True)
@@ -104,19 +107,33 @@ def choose_base_image_tag(
     if source_tag and DATE_STAMPED_TAG_RE.search(source_tag):
         return source_tag, [source_tag]
 
-    if not VERSION_LABEL_RE.match(version_label):
+    candidate_tags: list[str] = []
+
+    def append_candidate(tag: str) -> None:
+        if tag and tag not in candidate_tags:
+            candidate_tags.append(tag)
+
+    prefixed_match = PREFIXED_VERSION_LABEL_RE.match(version_label)
+    plain_match = PLAIN_VERSION_LABEL_RE.match(version_label)
+
+    if prefixed_match:
+        version_suffix = prefixed_match.group("stamp")
+        label_prefix = prefixed_match.group("prefix")
+        append_candidate(version_label)
+        append_candidate(f"{source_tag or label_prefix}-{version_suffix}")
+        append_candidate(f"{fedora_version}-{version_suffix}")
+    elif plain_match:
+        # Example label: 43.20260227.1
+        # We only need the suffix part (20260227.1) to build candidate tags.
+        version_suffix = plain_match.group("stamp")
+        append_candidate(f"{source_tag}-{version_suffix}" if source_tag else "")
+        append_candidate(f"latest-{version_suffix}")
+        append_candidate(f"{fedora_version}-{version_suffix}")
+    else:
         raise CiToolError(
             "Failed to derive immutable base tag from "
             f"org.opencontainers.image.version={version_label}"
         )
-
-    # Example label: 43.20260227.1
-    # We only need the suffix part (20260227.1) to build candidate tags.
-    version_suffix = version_label.split(".", 1)[1]
-    candidate_tags: list[str] = []
-    if source_tag:
-        candidate_tags.append(f"{source_tag}-{version_suffix}")
-    candidate_tags.extend([f"latest-{version_suffix}", f"{fedora_version}-{version_suffix}"])
 
     # Try each candidate tag and keep the first one that resolves to the same digest.
     # Digest match is the key safety check: tag text can move, digest does not.
