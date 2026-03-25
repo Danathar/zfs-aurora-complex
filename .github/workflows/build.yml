@@ -212,9 +212,11 @@ jobs:
         run: |
           python3 -m ci_tools.cli promote-stable
 
-      # Sign the stable digest after promotion so consumers of `latest` can
-      # verify the exact image that was promoted.
+      # Sign the stable digest after promotion when a private key is available.
+      # A freshly split repo may not have its signing secret configured yet, so
+      # publication should still succeed and leave the image unsigned for now.
       - name: Sign promoted stable image digest
+        if: secrets.SIGNING_SECRET != ''
         shell: bash
         env:
           IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
@@ -225,3 +227,9 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           python3 -m ci_tools.cli sign-image
+
+      - name: Explain skipped stable signing without secret
+        if: secrets.SIGNING_SECRET == ''
+        shell: bash
+        run: |
+          echo "SIGNING_SECRET is not configured for this repository, so the promoted stable image was published without a cosign signature."
