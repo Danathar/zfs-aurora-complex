@@ -3,15 +3,11 @@
 GitHub Actions workflow: `build.yml`
 
 > [!NOTE]
-> This repository was developed almost entirely with AI assistance. I was more a conductor than a player on this thing. I think anyone using open-source tools on GitHub should have that context before relying on them.
+> This repository was developed with significant AI assistance and serves as a **reference implementation** demonstrating production-grade CI/CD patterns for building bootable container images with ZFS support. It covers candidate-first promotion, input pinning, digest resolution, shared akmods caching, image signing, and comprehensive unit testing.
 >
-> This was as much about having fun on a Friday afternoon with AI as it was about seeing whether this idea could be done. Treat it as such. Please do not use this in production for **ANYTHING**.
+> For a simpler, more direct approach to the same problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple). That repo is the lightweight daily driver; this one exists to show what a fuller safety and automation pipeline looks like.
 >
-> This repo is **THE** definition of *brittle*! Honestly, it's probably FAR easier to do what groups like Universal Blue do and manually track and hold back releases until the correct ZFS release is available than to maintain this insane bit of code the AI has tried to make while covering all possibilities.
->
-> It is probably WAY more complicated than it needs to be. I'm still reading through the code it made. That said, it does work, seemingly. ;)
->
-> The goal here is not feature maximalism. The goal is a simpler build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
+> The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
 This repository builds a signed Aurora image with:
 
@@ -163,6 +159,9 @@ docs/                                 teaching-style documentation
 - `.github/workflows/build-pr.yml`
   - pull request (PR) validation build
   - no push and no signing
+- `.github/workflows/test.yml`
+  - Python unit tests for all CI tool modules
+  - runs on pull requests and pushes to main
 
 Docs-only changes do not trigger image builds.
 
@@ -262,6 +261,6 @@ If you want the full technical design and workflow details, read:
 
 ## References
 
+- `Danathar/aurora-zfs-simple`: https://github.com/Danathar/aurora-zfs-simple (simpler daily-driver approach)
 - `ublue-os/brew`: https://github.com/ublue-os/brew
-- `ublue-os/image-template`: https://github.com/ublue-os/image-template
 - OpenZFS releases: https://github.com/openzfs/zfs/releases

@@ -59,3 +59,20 @@ If a term is unfamiliar, check the shared glossary first:
 5. [`tests/test_promote_stable.py`](../tests/test_promote_stable.py)
 6. [`tests/test_sign_image.py`](../tests/test_sign_image.py)
 7. [`tests/test_install_zfs_from_akmods_cache.py`](../tests/test_install_zfs_from_akmods_cache.py)
+
+#### Running Tests
+
+```bash
+pip install pytest
+python3 -m pytest tests/ -v
+```
+
+Tests use `unittest.TestCase` with `unittest.mock.patch` and have no external
+dependencies beyond `pytest` as the test runner. Every CI tool module in
+`ci_tools/` has a corresponding `tests/test_<module_name>.py` file. All external
+calls (subprocess, registry, filesystem) are mocked so tests run without network
+access or container tooling.
+
+Tests run automatically in CI via
+[`.github/workflows/test.yml`](../.github/workflows/test.yml) on every pull
+request and push to `main`.

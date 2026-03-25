@@ -62,6 +62,11 @@ install -D -m 0644 \
 # 3. Some builders leave resolver files bind-mounted under `/run/systemd`.
 #    Those specific paths can be busy, so cleanup here must be best-effort
 #    instead of failing the entire image build on a harmless leftover mount.
+# The `|| true` guards below are intentional:
+# - `/run/systemd/resolve` may be an active bind mount that cannot be unmounted
+#   during this build step, so the umount attempt is best-effort.
+# - `2>/dev/null` on the find commands suppresses errors when a directory has
+#   already been removed by an earlier `-exec` in the same invocation.
 mountpoint -q /run/systemd/resolve && umount /run/systemd/resolve || true
 find /run/systemd -mindepth 1 \
   ! -path '/run/systemd/resolve' \

@@ -46,4 +46,9 @@ runs:
           AKMODS_IMAGE=${{ inputs.akmods_image }}
           IMAGE_REPO=${{ inputs.image_repo }}
           SIGNING_KEY_FILENAME=${{ inputs.signing_key_filename }}
+        # Use Docker v2s2 manifest format instead of OCI image manifests.
+        # `ostree container commit` and `rpm-ostree` work more reliably with the
+        # Docker format. The "OCI" terminology elsewhere in this project refers to
+        # OCI standards for registry interaction and layer handling, not the
+        # specific container image manifest format produced by buildah.
         oci: false

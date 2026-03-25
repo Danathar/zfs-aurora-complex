@@ -13,6 +13,12 @@ on:
       - docs/**
       - "**/*.md"
   workflow_dispatch:
+    inputs:
+      build_container_image:
+        description: Build container image override for the akmods job (leave empty for default)
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   # Only keep the newest run for a branch. If several commits land quickly, the
@@ -64,7 +70,7 @@ jobs:
       # Reuse the same privileged akmods-build environment as the main
       # workflow. The upstream akmods tooling depends on `just`, container
       # storage access, and the build packages included in this image.
-      image: ghcr.io/ublue-os/devcontainer:latest
+      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

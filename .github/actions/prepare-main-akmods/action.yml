@@ -125,7 +125,7 @@ runs:
     # Upload the manifest as an artifact so a later investigation can answer
     # "what exactly did this successful or failed run try to build?"
     - name: Upload build inputs manifest
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
       with:
         name: build-inputs-${{ github.run_id }}
         path: artifacts/build-inputs.json

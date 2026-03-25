@@ -17,6 +17,9 @@ runs:
         sudo apt-get install -y skopeo
     # `cosign` is the signing tool used to produce and verify image signatures.
     # Installing it here keeps the later signing steps short and readable.
+    # Note: dependabot updates the action SHA automatically, but the
+    # `cosign-release` input must be updated manually when a new cosign
+    # version is needed.
     - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
       with:
-        cosign-release: v2.6.1
+        cosign-release: v3.0.5

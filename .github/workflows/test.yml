@@ -1,0 +1,31 @@
+name: Run Python Tests
+
+# The Python CI tool modules in `ci_tools/` are the decision-making backbone of
+# every workflow. Running their unit tests on every pull request and push to main
+# catches regressions before they reach a production build.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python Unit Tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install test runner
+        shell: bash
+        run: pip install --quiet pytest
+
+      - name: Run tests
+        shell: bash
+        run: python3 -m pytest tests/ -v

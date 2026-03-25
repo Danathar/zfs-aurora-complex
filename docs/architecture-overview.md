@@ -146,6 +146,12 @@ It does four important things:
 3. runs [`build_files/build-image.sh`](../build_files/build-image.sh)
 4. runs `bootc container lint`
 
+The buildah invocation uses Docker v2s2 manifest format (`oci: false`) rather than
+OCI image manifests because `ostree container commit` and `rpm-ostree` work more
+reliably with the Docker format. The "OCI" terminology elsewhere in this project
+refers to OCI standards for registry interaction and layer handling, not the
+specific container image manifest format produced by buildah.
+
 `build-image.sh` then:
 
 1. enables brew setup/update services via `systemctl preset`
@@ -268,6 +274,9 @@ Because candidate and stable tags are in the same repository, the trust model is
 One unavoidable exception exists:
 
 - GitHub resolves `jobs.<job>.container.image` before any step can run
-- because of that, the akmods job in `build.yml` still carries one literal
-  fallback build-container ref next to the checked-in defaults file
+- because of that, the akmods jobs in both `build.yml` and `build-branch.yml`
+  still carry one literal fallback build-container ref next to the checked-in
+  defaults file
+- both workflows accept a `workflow_dispatch` input to override this fallback
+  when the default image breaks
 - every later step reads the checked-in defaults instead of repeating them
