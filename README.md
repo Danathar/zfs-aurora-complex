@@ -1,6 +1,6 @@
-# zfs-kinoite-containerfile
+# zfs-aurora-containerfile
 
-[![Build Main Image](https://github.com/Danathar/zfs-kinoite-containerfile/actions/workflows/build.yml/badge.svg)](https://github.com/Danathar/zfs-kinoite-containerfile/actions/workflows/build.yml)
+GitHub Actions workflow: `build.yml`
 
 > [!NOTE]
 > This repository was developed almost entirely with AI assistance. I was more a conductor than a player on this thing. I think anyone using open-source tools on GitHub should have that context before relying on them.
@@ -13,7 +13,7 @@
 >
 > The goal here is not feature maximalism. The goal is a simpler build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
-This repository builds a signed Kinoite image with:
+This repository builds a signed Aurora image with:
 
 - ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
 - `distrobox`
@@ -29,14 +29,14 @@ The problem has not changed:
 1. Fedora-family images move kernels quickly.
 2. ZFS is an out-of-tree kernel module.
 3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
-4. If you do not gate builds carefully, you can publish a Kinoite image whose kernel and ZFS modules do not match.
+4. If you do not gate builds carefully, you can publish an Aurora image whose kernel and ZFS modules do not match.
 
 This repository intentionally uses:
 
 1. a standard `Containerfile`
 2. direct `buildah`/Open Container Initiative (OCI) build arguments
-3. one image repository (`ghcr.io/danathar/zfs-kinoite-containerfile`)
-4. one shared akmods cache repository (`ghcr.io/danathar/zfs-kinoite-containerfile-akmods`)
+3. one image repository (`ghcr.io/danathar/zfs-aurora-containerfile`)
+4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-containerfile-akmods`)
 
 ## Safety Model
 
@@ -83,16 +83,16 @@ All of these tags are stored in GitHub Container Registry (GHCR), which is the c
 
 OS image tags in one repository:
 
-- candidate image: `ghcr.io/danathar/zfs-kinoite-containerfile:candidate-<sha>-<fedora>`
-- stable image: `ghcr.io/danathar/zfs-kinoite-containerfile:latest`
-- stable audit tag: `ghcr.io/danathar/zfs-kinoite-containerfile:stable-<run>-<sha>`
-- branch test image: `ghcr.io/danathar/zfs-kinoite-containerfile:br-<branch>-<fedora>`
+- candidate image: `ghcr.io/danathar/zfs-aurora-containerfile:candidate-<sha>-<fedora>`
+- stable image: `ghcr.io/danathar/zfs-aurora-containerfile:latest`
+- stable audit tag: `ghcr.io/danathar/zfs-aurora-containerfile:stable-<run>-<sha>`
+- branch test image: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
   - bot-authored branch runs validate locally but intentionally do not push this tag
 
 Shared akmods cache image:
 
-- `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
-- architecture-specific inspection tag: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-x86_64`
+- `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>`
+- architecture-specific inspection tag: `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>-x86_64`
 
 The important simplification is this:
 
@@ -170,7 +170,7 @@ Docs-only changes do not trigger image builds.
 
 At a high level, the final image build now works like this:
 
-1. `Containerfile` starts from `ghcr.io/ublue-os/kinoite-main`
+1. `Containerfile` starts from `ghcr.io/ublue-os/aurora`
 2. `COPY --from=ghcr.io/ublue-os/brew:latest /system_files /` imports the official brew payload
 3. `build_files/build-image.sh` enables the brew services/timers, installs `distrobox`, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
 4. `bootc container lint` validates the final image
@@ -207,10 +207,10 @@ That logic lives in:
 > [!WARNING]
 > This is an experimental image stream.
 
-Fresh stock Kinoite:
+Fresh stock Aurora:
 
 ```bash
-sudo bootc switch ghcr.io/danathar/zfs-kinoite-containerfile:latest
+sudo bootc switch ghcr.io/danathar/zfs-aurora-containerfile:latest
 systemctl reboot
 ```
 
@@ -244,7 +244,7 @@ sudo zfs list
 ## Signature Verification
 
 ```bash
-cosign verify --key cosign.pub ghcr.io/danathar/zfs-kinoite-containerfile:latest
+cosign verify --key cosign.pub ghcr.io/danathar/zfs-aurora-containerfile:latest
 ```
 
 ## Reading Order
@@ -255,7 +255,7 @@ If you want the full technical design and workflow details, read:
 2. [`docs/documentation-guide.md`](./docs/documentation-guide.md)
 3. [`docs/architecture-overview.md`](./docs/architecture-overview.md)
 4. [`docs/code-reading-guide.md`](./docs/code-reading-guide.md)
-5. [`docs/zfs-kinoite-testing.md`](./docs/zfs-kinoite-testing.md)
+5. [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md)
 6. [`docs/upstream-change-response.md`](./docs/upstream-change-response.md)
 7. [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md)
 8. [`.github/scripts/README.md`](./.github/scripts/README.md)

@@ -1,16 +1,16 @@
-# zfs-kinoite-containerfile Architecture Overview
+# zfs-aurora-containerfile Architecture Overview
 
 If a term is unfamiliar, check the shared glossary first:
 [`docs/glossary.md`](./glossary.md)
 
 ## Purpose
 
-This project provides a controlled way to run ZFS on Kinoite with a native
+This project provides a controlled way to run ZFS on Aurora with a native
 `Containerfile` build.
 
 The technical target is still the same:
 
-1. track the moving Kinoite/Fedora kernel stream
+1. track the moving Aurora/Fedora kernel stream
 2. build matching ZFS akmods, meaning the ZFS kernel-module packages built for that exact kernel set
 3. install those RPMs (Red Hat Package Manager package files) into the final image
 4. publish stable tags only after candidate succeeds
@@ -39,17 +39,17 @@ One smaller cleanup also matters for readability:
 
 All operating-system image tags live in the same repository:
 
-- candidate tag: `ghcr.io/danathar/zfs-kinoite-containerfile:candidate-<sha>-<fedora>`
-- stable tag: `ghcr.io/danathar/zfs-kinoite-containerfile:latest`
-- stable audit tag: `ghcr.io/danathar/zfs-kinoite-containerfile:stable-<run>-<sha>`
-- branch tag: `ghcr.io/danathar/zfs-kinoite-containerfile:br-<branch>-<fedora>`
+- candidate tag: `ghcr.io/danathar/zfs-aurora-containerfile:candidate-<sha>-<fedora>`
+- stable tag: `ghcr.io/danathar/zfs-aurora-containerfile:latest`
+- stable audit tag: `ghcr.io/danathar/zfs-aurora-containerfile:stable-<run>-<sha>`
+- branch tag: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
 
 ### Shared Akmods Cache Repository
 
 The shared cache remains separate because it is a different kind of build output:
 
-- `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
-- `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>-x86_64`
+- `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>`
+- `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>-x86_64`
 
 Why keep a separate akmods cache repository:
 
@@ -118,7 +118,7 @@ If yes:
 If no:
 
 1. clone the pinned `Danathar/akmods` fork
-2. point its target output to `ghcr.io/<owner>/zfs-kinoite-containerfile-akmods`
+2. point its target output to `ghcr.io/<owner>/zfs-aurora-containerfile-akmods`
 3. build the shared cache image for the supported primary kernel
 
 Important design change:
@@ -151,7 +151,7 @@ It does four important things:
 1. enables brew setup/update services via `systemctl preset`
 2. installs `distrobox` via `rpm-ostree install`
 3. runs the ZFS install helper against the resolved akmods cache image reference
-4. writes repository-specific signing policy for `ghcr.io/danathar/zfs-kinoite-containerfile`
+4. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-containerfile`
 5. finalizes the image with `ostree container commit`
 
 The signing-policy step is now a pure Python helper:

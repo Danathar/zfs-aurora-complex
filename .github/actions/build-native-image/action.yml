@@ -1,6 +1,6 @@
 name: Build Native Image
 
-description: Build the native Kinoite image with the standard OCI build arguments used by this repository.
+description: Build the native Aurora image with the standard OCI build arguments used by this repository.
 
 inputs:
   image_name:

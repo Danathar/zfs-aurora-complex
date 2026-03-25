@@ -23,7 +23,7 @@ docs/
   code-reading-guide.md       <- step-by-step code reading order
   architecture-overview.md    <- high-level design and flow
   upstream-change-response.md <- incident triage and recovery actions
-  zfs-kinoite-testing.md      <- deep technical design + issue history
+  zfs-aurora-testing.md       <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how to maintain the pinned akmods fork
 .github/scripts/
   README.md                   <- workflow step -> command-line interface (CLI) command -> Python module map
@@ -41,12 +41,12 @@ docs/
 
 1. [`docs/code-reading-guide.md`](./code-reading-guide.md)
 2. [`.github/scripts/README.md`](../.github/scripts/README.md)
-3. [`docs/zfs-kinoite-testing.md`](./zfs-kinoite-testing.md)
+3. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
 
 ### Goal: A workflow run failed and I need recovery steps
 
 1. [`docs/upstream-change-response.md`](./upstream-change-response.md)
-2. [`docs/zfs-kinoite-testing.md`](./zfs-kinoite-testing.md)
+2. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
 
 ### Goal: I need to update the akmods source pin
 
@@ -59,5 +59,5 @@ docs/
 2. Put newcomer overview content in [`README.md`](../README.md).
 3. Put design reasoning in [`docs/architecture-overview.md`](./architecture-overview.md).
 4. Put runbook and incident-response steps in [`docs/upstream-change-response.md`](./upstream-change-response.md).
-5. Put deeper workflow history and validation notes in [`docs/zfs-kinoite-testing.md`](./zfs-kinoite-testing.md).
+5. Put deeper workflow history and validation notes in [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md).
 6. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).

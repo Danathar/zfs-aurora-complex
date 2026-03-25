@@ -11,7 +11,7 @@ The important rule is: determine which boundary moved.
 
 In this project the likely moving boundaries are:
 
-1. the Kinoite base image
+1. the Aurora base image
 2. the Fedora kernel set inside that base image
 3. the upstream akmods fork behavior
 4. the current OpenZFS release line

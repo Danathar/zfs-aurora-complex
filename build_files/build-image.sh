@@ -6,7 +6,7 @@
 #        writes the in-image signing policy, and commits the ostree container.
 # Why: A separate build script is easier to read than one large Containerfile
 #      shell block, and it keeps the teaching comments close to the steps.
-# Goal: Produce one bootable Kinoite image with ZFS, distrobox, brew, and
+# Goal: Produce one bootable Aurora image with ZFS, distrobox, brew, and
 #       repository trust configuration.
 #
 set -euo pipefail
@@ -51,8 +51,8 @@ python3 /files/scripts/configure_signing_policy.py
 # `pcp`, which creates `/var/lib/pcp/*` directories but does not ship tmpfiles
 # entries for this image build mode, so install a local declaration here.
 install -D -m 0644 \
-  /files/usr/lib/tmpfiles.d/zfs-kinoite-containerfile.conf \
-  /usr/lib/tmpfiles.d/zfs-kinoite-containerfile.conf
+  /files/usr/lib/tmpfiles.d/zfs-aurora-containerfile.conf \
+  /usr/lib/tmpfiles.d/zfs-aurora-containerfile.conf
 
 # Remove build-only runtime state before the final ostree commit.
 # Why these paths are safe to drop:

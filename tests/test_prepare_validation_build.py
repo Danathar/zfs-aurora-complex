@@ -29,10 +29,10 @@ def _resolved_inputs() -> BuildInputResolution:
                 "6.18.13-200.fc43.x86_64",
                 "6.18.16-200.fc43.x86_64",
             ),
-            base_image_ref="ghcr.io/ublue-os/kinoite-main:latest",
-            base_image_name="ghcr.io/ublue-os/kinoite-main",
+            base_image_ref="ghcr.io/ublue-os/aurora:latest",
+            base_image_name="ghcr.io/ublue-os/aurora",
             base_image_tag="latest-20260307.1",
-            base_image_pinned="ghcr.io/ublue-os/kinoite-main@sha256:base",
+            base_image_pinned="ghcr.io/ublue-os/aurora@sha256:base",
             base_image_digest="sha256:base",
             build_container_ref="ghcr.io/ublue-os/devcontainer:latest",
             build_container_pinned="ghcr.io/ublue-os/devcontainer@sha256:build",
@@ -58,7 +58,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 {
                     "GITHUB_OUTPUT": output_path,
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "AKMODS_REPO": "zfs-kinoite-containerfile-akmods",
+                    "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
                 },
                 clear=False,
             ):
@@ -70,7 +70,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                         with patch(
                             "ci_tools.prepare_validation_build.inspect_akmods_cache",
                             return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
+                                source_image="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
                                 image_exists=True,
                                 missing_release="",
                             ),
@@ -88,7 +88,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
 
             inspect_cache.assert_called_once_with(
                 image_org="danathar",
-                source_repo="zfs-kinoite-containerfile-akmods",
+                source_repo="zfs-aurora-containerfile-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
             )
@@ -104,7 +104,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 {
                     "GITHUB_OUTPUT": output_path,
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "AKMODS_REPO": "zfs-kinoite-containerfile-akmods",
+                    "AKMODS_REPO": "zfs-aurora-containerfile-akmods",
                 },
                 clear=False,
             ):
@@ -116,7 +116,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                         with patch(
                             "ci_tools.prepare_validation_build.inspect_akmods_cache",
                             return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
+                                source_image="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
                                 image_exists=True,
                                 missing_release="6.18.16-200.fc43.x86_64",
                             ),
@@ -125,7 +125,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                                 main()
 
             self.assertIn(
-                "ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43",
+                "ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43",
                 str(context.exception),
             )
             self.assertIn("rebuild_akmods=true", str(context.exception))

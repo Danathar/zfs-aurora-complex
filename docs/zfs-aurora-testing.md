@@ -1,22 +1,22 @@
-# ZFS On Kinoite Testing Design
+# ZFS On Aurora Testing Design
 
 If a term is unfamiliar, check the shared glossary first:
 [`docs/glossary.md`](./glossary.md)
 
 ## Purpose
 
-This repository is a controlled testbed for ZFS support on Kinoite using a native `Containerfile` build.
+This repository is a controlled testbed for ZFS support on Aurora using a native `Containerfile` build.
 
 The objective is to validate that we can safely:
 
-1. track the current Kinoite/Fedora kernel stream
+1. track the current Aurora/Fedora kernel stream
 2. build ZFS kernel modules against the primary kernel the image is expected to boot first
 3. install those modules into the final bootc image
 4. fail in the GitHub Actions workflow run before a broken image replaces `latest`
 
 ## Constraints And Context
 
-1. Kinoite is an ostree/bootc-style image, so ZFS integration must happen during image build.
+1. Aurora is an ostree/bootc-style image, so ZFS integration must happen during image build.
 2. ZFS compatibility can lag new Fedora kernels.
 3. Branch testing must not overwrite `latest`.
 4. pull request (PR) validation should exercise the real build logic but should not push anything.
@@ -26,14 +26,14 @@ The objective is to validate that we can safely:
 
 ### Main Artifacts
 
-1. candidate OS image: `ghcr.io/danathar/zfs-kinoite-containerfile:candidate-<sha>-<fedora>`
-2. stable OS image: `ghcr.io/danathar/zfs-kinoite-containerfile:latest`
-3. stable audit tag: `ghcr.io/danathar/zfs-kinoite-containerfile:stable-<run>-<sha>`
-4. shared akmods cache image: `ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-<fedora>`
+1. candidate OS image: `ghcr.io/danathar/zfs-aurora-containerfile:candidate-<sha>-<fedora>`
+2. stable OS image: `ghcr.io/danathar/zfs-aurora-containerfile:latest`
+3. stable audit tag: `ghcr.io/danathar/zfs-aurora-containerfile:stable-<run>-<sha>`
+4. shared akmods cache image: `ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-<fedora>`
 
 ### Branch Artifacts
 
-1. human-authored branch image: `ghcr.io/danathar/zfs-kinoite-containerfile:br-<branch>-<fedora>`
+1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-containerfile:br-<branch>-<fedora>`
 2. bot-authored branch runs stop after local validation and do not push any public tag
 3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags
 
@@ -88,7 +88,7 @@ What "pinned" means here:
 If the cache is missing, out of date, or a manual rebuild is requested, the workflow run:
 
 1. clones the pinned `Danathar/akmods` commit
-2. points its target output to `zfs-kinoite-containerfile-akmods`
+2. points its target output to `zfs-aurora-containerfile-akmods`
 3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
 

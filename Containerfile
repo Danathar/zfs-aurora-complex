@@ -1,9 +1,9 @@
-# Native container build for the Kinoite + ZFS image.
+# Native container build for the Aurora + ZFS image.
 #
 # This repository intentionally avoids BlueBuild. The build is expressed as a
 # standard bootc-style Containerfile so CI can control tags directly.
 
-ARG BASE_IMAGE="ghcr.io/ublue-os/kinoite-main:latest"
+ARG BASE_IMAGE="ghcr.io/ublue-os/aurora:latest"
 ARG BREW_IMAGE="ghcr.io/ublue-os/brew:latest"
 
 FROM scratch AS ctx
@@ -23,9 +23,9 @@ FROM ${BASE_IMAGE}
 # not pass an explicit akmods image reference, the helper can render this
 # template with the Fedora version detected from the chosen base image.
 ARG AKMODS_IMAGE=""
-ARG AKMODS_IMAGE_TEMPLATE="ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-{fedora}"
-ARG IMAGE_REPO="ghcr.io/danathar/zfs-kinoite-containerfile"
-ARG SIGNING_KEY_FILENAME="zfs-kinoite-containerfile.pub"
+ARG AKMODS_IMAGE_TEMPLATE="ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-{fedora}"
+ARG IMAGE_REPO="ghcr.io/danathar/zfs-aurora-containerfile"
+ARG SIGNING_KEY_FILENAME="zfs-aurora-containerfile.pub"
 
 # Convert the build arguments into environment variables once so the helper
 # script can read stable names while the Containerfile stays declarative.

@@ -42,21 +42,21 @@ helper = _load_helper_module()
 class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
     def test_resolve_akmods_image_prefers_explicit_override(self) -> None:
         image_ref = helper.resolve_akmods_image(
-            environ={"AKMODS_IMAGE": "ghcr.io/example/zfs-kinoite-containerfile-akmods:manual"},
+            environ={"AKMODS_IMAGE": "ghcr.io/example/zfs-aurora-containerfile-akmods:manual"},
             run_cmd=lambda _args: "43\n",
         )
 
-        self.assertEqual(image_ref, "ghcr.io/example/zfs-kinoite-containerfile-akmods:manual")
+        self.assertEqual(image_ref, "ghcr.io/example/zfs-aurora-containerfile-akmods:manual")
 
     def test_resolve_akmods_image_renders_template_with_detected_fedora(self) -> None:
         image_ref = helper.resolve_akmods_image(
             environ={
-                "AKMODS_IMAGE_TEMPLATE": "ghcr.io/example/zfs-kinoite-containerfile-akmods:main-{fedora}"
+                "AKMODS_IMAGE_TEMPLATE": "ghcr.io/example/zfs-aurora-containerfile-akmods:main-{fedora}"
             },
             run_cmd=lambda _args: "43\n",
         )
 
-        self.assertEqual(image_ref, "ghcr.io/example/zfs-kinoite-containerfile-akmods:main-43")
+        self.assertEqual(image_ref, "ghcr.io/example/zfs-aurora-containerfile-akmods:main-43")
 
     def test_resolve_akmods_image_uses_default_template_when_unset(self) -> None:
         image_ref = helper.resolve_akmods_image(
@@ -64,7 +64,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             run_cmd=lambda _args: "43\n",
         )
 
-        self.assertEqual(image_ref, "ghcr.io/danathar/zfs-kinoite-containerfile-akmods:main-43")
+        self.assertEqual(image_ref, "ghcr.io/danathar/zfs-aurora-containerfile-akmods:main-43")
 
     def test_load_layer_files_from_oci_layout_reads_manifest_layers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
