@@ -119,9 +119,18 @@ def choose_base_image_tag(
     if prefixed_match:
         version_suffix = prefixed_match.group("stamp")
         label_prefix = prefixed_match.group("prefix")
+        label_fedora_version = prefixed_match.group("fedora")
+        normalized_suffix = version_suffix.split(".", 1)[0]
         append_candidate(version_label)
         append_candidate(f"{source_tag or label_prefix}-{version_suffix}")
         append_candidate(f"{fedora_version}-{version_suffix}")
+        append_candidate(f"{fedora_version}-{label_fedora_version}.{version_suffix}")
+        if normalized_suffix != version_suffix:
+            append_candidate(f"{source_tag or label_prefix}-{label_fedora_version}.{normalized_suffix}")
+            append_candidate(f"{source_tag or label_prefix}-{normalized_suffix}")
+            append_candidate(f"{fedora_version}-{label_fedora_version}.{normalized_suffix}")
+            append_candidate(f"{fedora_version}-{normalized_suffix}")
+            append_candidate(f"{label_fedora_version}.{normalized_suffix}")
     elif plain_match:
         # Example label: 43.20260227.1
         # We only need the suffix part (20260227.1) to build candidate tags.
