@@ -37,9 +37,63 @@ jobs:
         run: |
           python3 -m ci_tools.cli compute-branch-metadata
 
+  build-branch-akmods:
+    name: Build Or Reuse Shared ZFS Akmods Cache
+    runs-on: ubuntu-24.04
+    outputs:
+      fedora_version: ${{ steps.prepare.outputs.version }}
+      kernel_release: ${{ steps.prepare.outputs.kernel_release }}
+      detected_kernel_releases: ${{ steps.prepare.outputs.detected_kernel_releases }}
+      base_image_ref: ${{ steps.prepare.outputs.base_image_ref }}
+      base_image_name: ${{ steps.prepare.outputs.base_image_name }}
+      base_image_tag: ${{ steps.prepare.outputs.base_image_tag }}
+      base_image_pinned: ${{ steps.prepare.outputs.base_image_pinned }}
+      base_image_digest: ${{ steps.prepare.outputs.base_image_digest }}
+      build_container_ref: ${{ steps.prepare.outputs.build_container_ref }}
+      build_container_pinned: ${{ steps.prepare.outputs.build_container_pinned }}
+      build_container_digest: ${{ steps.prepare.outputs.build_container_digest }}
+      zfs_minor_version: ${{ steps.prepare.outputs.zfs_minor_version }}
+      akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
+      use_input_lock: ${{ steps.prepare.outputs.use_input_lock }}
+      lock_file_path: ${{ steps.prepare.outputs.lock_file_path }}
+      akmods_cache_exists: ${{ steps.prepare.outputs.akmods_cache_exists }}
+    permissions:
+      contents: read
+      packages: write
+    container:
+      # Reuse the same privileged akmods-build environment as the main
+      # workflow. The upstream akmods tooling depends on `just`, container
+      # storage access, and the build packages included in this image.
+      image: ghcr.io/ublue-os/devcontainer:latest
+      options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - id: defaults
+        name: Load repository defaults
+        uses: ./.github/actions/load-ci-defaults
+
+      # Branch builds should reuse the shared Aurora cache when possible, but
+      # they also need to be able to seed that cache the first time a new base
+      # kernel stream appears on the branch.
+      - name: Resolve inputs, verify cache state, and refresh shared akmods when required
+        id: prepare
+        uses: ./.github/actions/prepare-main-akmods
+        with:
+          use_input_lock: "false"
+          lock_file: ci/inputs.lock.json
+          build_container_ref: ${{ steps.defaults.outputs.default_build_container_image }}
+          akmods_repo: ${{ steps.defaults.outputs.akmods_repo }}
+          akmods_upstream_repo: ${{ steps.defaults.outputs.akmods_upstream_repo }}
+          rebuild_akmods: "false"
+          registry_actor: ${{ github.actor }}
+          registry_token: ${{ github.token }}
+
   build-branch-image:
     name: Build Branch Image
-    needs: prepare-branch-metadata
+    needs:
+      - prepare-branch-metadata
+      - build-branch-akmods
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -59,22 +113,6 @@ jobs:
         name: Prepare registry context
         uses: ./.github/actions/prepare-registry-context
 
-      # Branch builds need to be able to seed a new shared cache when they move
-      # to a base image whose primary kernel is not yet covered. That lets a
-      # human-owned branch validate a new stream, such as Aurora, end to end.
-      - name: Resolve inputs, verify cache state, and refresh shared akmods when required
-        id: prepare
-        uses: ./.github/actions/prepare-main-akmods
-        with:
-          use_input_lock: "false"
-          lock_file: ci/inputs.lock.json
-          build_container_ref: ${{ steps.defaults.outputs.default_build_container_image }}
-          akmods_repo: ${{ steps.defaults.outputs.akmods_repo }}
-          akmods_upstream_repo: ${{ steps.defaults.outputs.akmods_upstream_repo }}
-          rebuild_akmods: "false"
-          registry_actor: ${{ github.actor }}
-          registry_token: ${{ github.token }}
-
       # Add the resolved Fedora version to the branch tag so readers can tell
       # which base-image release the branch build targeted.
       - name: Compose final branch tag
@@ -82,7 +120,7 @@ jobs:
         shell: bash
         env:
           BRANCH_TAG_PREFIX: ${{ needs.prepare-branch-metadata.outputs.branch_tag }}
-          FEDORA_VERSION: ${{ steps.prepare.outputs.version }}
+          FEDORA_VERSION: ${{ needs.build-branch-akmods.outputs.fedora_version }}
         run: |
           python3 -m ci_tools.cli compose-branch-image-tag
 
@@ -93,9 +131,9 @@ jobs:
         with:
           image_name: ${{ steps.defaults.outputs.image_name }}
           image_tag: ${{ steps.tags.outputs.branch_image_tag }}
-          base_image: ${{ steps.prepare.outputs.base_image_pinned }}
+          base_image: ${{ needs.build-branch-akmods.outputs.base_image_pinned }}
           brew_image: ${{ steps.defaults.outputs.default_brew_image }}
-          akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ steps.prepare.outputs.version }}
+          akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ needs.build-branch-akmods.outputs.fedora_version }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 
