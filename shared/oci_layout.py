@@ -30,16 +30,29 @@ def load_layer_files_from_oci_layout(layout_dir: Path) -> list[Path]:
     return layer_files
 
 
-def _is_safe_tar_member(name: str) -> bool:
+def _is_safe_tar_path(path_str: str) -> bool:
+    """Return True when a tar member path stays under the destination."""
+
+    path = PurePosixPath(path_str)
+    return not path.is_absolute() and ".." not in path.parts
+
+
+def _is_safe_tar_member(member: tarfile.TarInfo) -> bool:
     """
-    Reject absolute or parent-directory entries before extraction.
+    Reject members that could escape the extraction destination.
 
     Why: these helpers unpack under a temporary working directory, so archive
-    members should never escape that destination.
+    members should never escape it. An attacker-controlled layer could ship a
+    symlink or hardlink whose `name` is safe but whose `linkname` points out of
+    the destination, so the link target is validated too.
     """
 
-    path = PurePosixPath(name)
-    return not path.is_absolute() and ".." not in path.parts
+    if not _is_safe_tar_path(member.name):
+        return False
+    if member.islnk() or member.issym():
+        if not _is_safe_tar_path(member.linkname):
+            return False
+    return True
 
 
 def unpack_layer_tarballs(layer_files: list[Path], destination: Path) -> None:
@@ -48,8 +61,12 @@ def unpack_layer_tarballs(layer_files: list[Path], destination: Path) -> None:
     for layer_path in layer_files:
         with tarfile.open(layer_path, "r") as layer_tar:
             for member in layer_tar.getmembers():
-                if not _is_safe_tar_member(member.name):
+                if not _is_safe_tar_member(member):
                     raise RuntimeError(
                         f"Unsafe tar path found in layer {layer_path}: {member.name}"
                     )
-            layer_tar.extractall(destination)
+            # `filter='data'` activates tarfile's built-in safe filter (Python
+            # 3.12+), which rejects device files, setuid bits, and link targets
+            # that escape the destination. It's a second layer of defense on
+            # top of the explicit checks above.
+            layer_tar.extractall(destination, filter="data")

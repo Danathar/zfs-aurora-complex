@@ -107,6 +107,40 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Unsafe tar path"):
                 helper.unpack_layer_tarballs([bad_layer], destination)
 
+    def test_unpack_layer_tarballs_rejects_symlinks_pointing_outside_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            bad_layer = root / "layer.tar"
+            destination = root / "extract"
+            destination.mkdir()
+
+            with tarfile.open(bad_layer, "w") as tar_handle:
+                info = tarfile.TarInfo("safe_dir/link")
+                info.size = 0
+                info.type = tarfile.SYMTYPE
+                info.linkname = "../../../etc/passwd"
+                tar_handle.addfile(info)
+
+            with self.assertRaisesRegex(RuntimeError, "Unsafe tar path"):
+                helper.unpack_layer_tarballs([bad_layer], destination)
+
+    def test_unpack_layer_tarballs_rejects_hardlinks_pointing_outside_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            bad_layer = root / "layer.tar"
+            destination = root / "extract"
+            destination.mkdir()
+
+            with tarfile.open(bad_layer, "w") as tar_handle:
+                info = tarfile.TarInfo("safe_dir/link")
+                info.size = 0
+                info.type = tarfile.LNKTYPE
+                info.linkname = "../../../etc/passwd"
+                tar_handle.addfile(info)
+
+            with self.assertRaisesRegex(RuntimeError, "Unsafe tar path"):
+                helper.unpack_layer_tarballs([bad_layer], destination)
+
     def test_discover_zfs_rpms_filters_non_installable_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             rpm_root = Path(temp_dir)
