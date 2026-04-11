@@ -34,6 +34,12 @@ This repository intentionally uses:
 3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
 4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
 
+## Licensing Note
+
+ZFS is distributed under the Common Development and Distribution License (CDDL). The Linux kernel is distributed under version 2 of the GNU General Public License (GPLv2). The Software Freedom Law Center, the Free Software Foundation, and the OpenZFS project itself have long-standing disagreements about whether redistributing a binary kernel module built against a Linux kernel satisfies both licenses. This repository produces exactly such a binary: a `kmod-zfs` package compiled against a Fedora kernel, baked into a published container image.
+
+This is not a legal opinion and nothing in this repository is legal advice. Operators running this image, redistributing it, or using it as a basis for a downstream image should read the [OpenZFS FAQ on licensing](https://openzfs.github.io/openzfs-docs/Project%20and%20Community/FAQ.html#licensing) and decide for themselves whether their use falls inside what they are comfortable shipping.
+
 ## Safety Model
 
 Stable users should only see tested outputs.
@@ -200,6 +206,26 @@ If the base image carries older bundled kernels too, those older kernels are not
 That logic lives in:
 
 - [`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](./containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py)
+
+## Local Build
+
+CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-image/action.yml), which wraps `redhat-actions/buildah-build`. For local iteration you can invoke `podman build` directly against the repository root. `AKMODS_IMAGE` is the only build argument that is genuinely required outside CI, because the shared akmods cache image is the source of the `kmod-zfs` RPM for the primary kernel.
+
+```bash
+podman build \
+    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora:latest \
+    --build-arg AKMODS_IMAGE=ghcr.io/danathar/zfs-aurora-complex-akmods:main-43 \
+    -t zfs-aurora-complex:local \
+    .
+```
+
+Notes:
+
+1. the `AKMODS_IMAGE` tag must match the Fedora major version of the chosen base image; inspect the base image (`skopeo inspect docker://<base>`) to confirm which `main-<fedora>` tag to reference
+2. `AKMODS_IMAGE` can be omitted for offline experiments; the install helper falls back to `AKMODS_IMAGE_TEMPLATE` and auto-detects the Fedora version from the base image, but that fallback still requires network access to pull the cache image
+3. local builds do not go through the candidate-before-promote flow or signing; the resulting image tag is ephemeral and is not trusted by any `bootc` policy
+
+For reproducing a specific published image exactly, prefer the CI workflow with `use_input_lock=true` (see [`ci/inputs.lock.json`](./ci/inputs.lock.json)) rather than a local `podman build`. The lock-file path records the exact base image digest, akmods fork SHA, and kernel set of a prior run.
 
 ## Install And Rebase
 

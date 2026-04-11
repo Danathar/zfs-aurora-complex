@@ -17,6 +17,22 @@ In this project the likely moving boundaries are:
 4. the current OpenZFS release line
 5. GitHub runner/container tooling behavior
 
+## When Manual Intervention Is And Is Not Required
+
+Not every red `build.yml` run needs a human to change a pinned value. The daily cron re-runs the full input resolution and cache check from scratch, so a failure caused by a temporary upstream mismatch is expected to clear itself once upstream catches up. The recovery policy is the same one described in the README: stable stays on the last known-good image while this is happening, and rollback is the supported recovery path.
+
+Use this table before editing any pin:
+
+| Symptom | Does it need a human? |
+|---|---|
+| One red run, next scheduled run goes green without changes | No — transient upstream state; the cron healed it |
+| Red runs in a streak, but OpenZFS has not yet released support for the current Fedora kernel | No — wait for upstream. Stable is still on the last good image |
+| Red runs in a streak, and a newer akmods fork commit known to support the current kernel exists upstream | Yes — bump `AKMODS_UPSTREAM_REF` in `ci/defaults.json` per [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md) |
+| Red run with a Python traceback or shell error unrelated to `just build` or `kmod-zfs` | Yes — this is a repo bug, not an upstream mismatch. Treat as a normal code fix |
+| Promotion job skipped because candidate failed | No action on the promotion side — fix the candidate failure by whichever branch above applies |
+
+The important idea: a red build is informative, not an emergency. The stable image tag does not move while builds are red, so users are not exposed to a broken image. Manual intervention is only correct when waiting will not fix the problem.
+
 ## First Triage Pass
 
 When `build.yml` fails, identify which job failed first:
