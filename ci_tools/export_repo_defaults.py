@@ -23,22 +23,22 @@ OUTPUT_NAME_MAP = {
     "DEFAULT_ZFS_MINOR_VERSION": "default_zfs_minor_version",
 }
 
-# Keys that are allowed to be absent or empty in ci/defaults.json. The floating
-# tracking-ref model leaves AKMODS_UPSTREAM_REF empty by design, and
-# AKMODS_UPSTREAM_TRACK is only meaningful when the caller wants floating
-# resolution, so neither is strictly required at defaults-load time.
 OPTIONAL_KEYS = {"AKMODS_UPSTREAM_REF", "AKMODS_UPSTREAM_TRACK"}
 
 
 def main() -> None:
     defaults = load_repo_defaults()
 
-    # Export the original env-style names so later shell steps can read them
-    # directly without each workflow having to restate the same constants.
-    write_github_env({key: defaults.get(key, "") for key in OUTPUT_NAME_MAP})
+    missing_required = {
+        key for key in OUTPUT_NAME_MAP
+        if key not in OPTIONAL_KEYS and not defaults.get(key)
+    }
+    if missing_required:
+        raise RuntimeError(
+            f"ci/defaults.json is missing required keys: {', '.join(sorted(missing_required))}"
+        )
 
-    # GitHub step outputs are easier to reference from `with:` and `if:` blocks
-    # than runtime environment variables, so we expose a lowercase map as well.
+    write_github_env({key: defaults.get(key, "") for key in OUTPUT_NAME_MAP})
     write_github_outputs({output_name: defaults.get(key, "") for key, output_name in OUTPUT_NAME_MAP.items()})
 
     print(f"Loaded repository defaults from ci/defaults.json ({len(OUTPUT_NAME_MAP)} values).")

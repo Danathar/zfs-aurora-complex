@@ -75,6 +75,28 @@ jobs:
             const keyMarker = `<!-- akmods-failure-key: ${payload.key} -->`;
             const body = `${keyMarker}\n\n${payload.body}`;
 
+            // Ensure the sticky label exists before trying to use it.
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: stickyLabel,
+              });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: stickyLabel,
+                  color: 'd93f0b',
+                  description: 'Sticky issue tracking a persistent akmods build failure',
+                });
+                core.info(`Created label "${stickyLabel}"`);
+              } else {
+                throw e;
+              }
+            }
+
             // Look for an existing open issue with the same sticky key marker.
             const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
