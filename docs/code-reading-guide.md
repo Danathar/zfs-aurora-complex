@@ -50,15 +50,31 @@ If a term is unfamiliar, check the shared glossary first:
 4. [`.github/actions/`](../.github/actions)
    - local composite actions used to keep the workflow files readable
 
-### 7. Tests
+### 7. Failure triage
 
-1. [`tests/test_resolve_build_inputs.py`](../tests/test_resolve_build_inputs.py)
-2. [`tests/test_check_akmods_cache.py`](../tests/test_check_akmods_cache.py)
-3. [`tests/test_tagging_context.py`](../tests/test_tagging_context.py)
-4. [`tests/test_configure_signing_policy.py`](../tests/test_configure_signing_policy.py)
-5. [`tests/test_promote_stable.py`](../tests/test_promote_stable.py)
-6. [`tests/test_sign_image.py`](../tests/test_sign_image.py)
-7. [`tests/test_install_zfs_from_akmods_cache.py`](../tests/test_install_zfs_from_akmods_cache.py)
+1. [`.github/workflows/akmods-failure-triage.yml`](../.github/workflows/akmods-failure-triage.yml)
+   - opens or updates sticky GitHub issues for classified akmods build failures
+2. [`ci_tools/classify_akmods_failure.py`](../ci_tools/classify_akmods_failure.py)
+   - turns akmods build logs into a small issue payload for the triage workflow
+
+### 8. Tests
+
+1. [`tests/test_akmods_build_and_publish.py`](../tests/test_akmods_build_and_publish.py)
+2. [`tests/test_akmods_clone_pinned.py`](../tests/test_akmods_clone_pinned.py)
+3. [`tests/test_akmods_configure_zfs_target.py`](../tests/test_akmods_configure_zfs_target.py)
+4. [`tests/test_check_akmods_cache.py`](../tests/test_check_akmods_cache.py)
+5. [`tests/test_classify_akmods_failure.py`](../tests/test_classify_akmods_failure.py)
+6. [`tests/test_cli.py`](../tests/test_cli.py)
+7. [`tests/test_common.py`](../tests/test_common.py)
+8. [`tests/test_configure_signing_policy.py`](../tests/test_configure_signing_policy.py)
+9. [`tests/test_export_repo_defaults.py`](../tests/test_export_repo_defaults.py)
+10. [`tests/test_install_zfs_from_akmods_cache.py`](../tests/test_install_zfs_from_akmods_cache.py)
+11. [`tests/test_prepare_validation_build.py`](../tests/test_prepare_validation_build.py)
+12. [`tests/test_promote_stable.py`](../tests/test_promote_stable.py)
+13. [`tests/test_resolve_build_inputs.py`](../tests/test_resolve_build_inputs.py)
+14. [`tests/test_sign_image.py`](../tests/test_sign_image.py)
+15. [`tests/test_tagging_context.py`](../tests/test_tagging_context.py)
+16. [`tests/test_write_build_inputs_manifest.py`](../tests/test_write_build_inputs_manifest.py)
 
 #### Running Tests
 

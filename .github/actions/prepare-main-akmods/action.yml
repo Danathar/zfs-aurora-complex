@@ -130,6 +130,7 @@ runs:
         name: build-inputs-${{ github.run_id }}
         path: artifacts/build-inputs.json
         if-no-files-found: error
+        retention-days: 30
 
     # Reuse the shared akmods cache only when it already contains a matching
     # module build for the primary kernel this image is expected to boot with.
@@ -218,3 +219,4 @@ runs:
         name: akmods-failure-${{ github.run_id }}
         path: artifacts/akmods-failure.json
         if-no-files-found: warn
+        retention-days: 30

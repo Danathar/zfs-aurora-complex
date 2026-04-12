@@ -269,6 +269,8 @@ Because candidate and stable tags are in the same repository, the trust model is
    - human-authored branch runs push/sign normally
    - the final branch image tag is now composed by a small Python helper
 3. `build-pr.yml`: read-only validation inputs plus no-push build
+4. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers
+5. `akmods-failure-triage.yml`: `workflow_run` visibility workflow that opens, updates, and closes sticky akmods failure issues
 
 ## Design Principles
 

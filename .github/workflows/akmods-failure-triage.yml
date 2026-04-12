@@ -18,6 +18,10 @@ permissions:
   issues: write
   actions: read
 
+concurrency:
+  group: akmods-failure-triage
+  cancel-in-progress: true
+
 jobs:
   triage:
     name: Manage sticky akmods failure issue
