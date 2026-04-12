@@ -101,15 +101,23 @@ That check now does one direct inspection path:
 2. unpack its filesystem layers
 3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel
 
-Even when the shared cache is reusable, the workflows still clone the pinned
+Even when the shared cache is reusable, the workflows still clone the resolved
 `Danathar/akmods` commit once per run.
 
 Why:
 
-1. a bad akmods pin can hide for a while if the workflow keeps reusing an older shared cache
-2. cloning the pinned ref is the cheapest way to prove that the configured commit SHA
+1. a stale akmods ref can hide for a while if the workflow keeps reusing an older shared cache
+2. cloning the resolved ref is the cheapest way to prove that the configured commit SHA
    still exists in the configured fork
 3. this keeps branch, pull request, push, and schedule paths honest with each other
+
+The akmods source commit is chosen by a cascade (see [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md)):
+
+1. explicit env override (`AKMODS_UPSTREAM_REF`)
+2. non-empty pin in `ci/defaults.json`
+3. floating `AKMODS_UPSTREAM_TRACK` ref resolved via `git ls-remote` on every run
+
+The default is (3), so the build self-heals once upstream catches up after a transient incompatibility.
 
 If yes:
 
@@ -117,14 +125,14 @@ If yes:
 
 If no:
 
-1. clone the pinned `Danathar/akmods` fork
+1. clone the resolved `Danathar/akmods` fork commit
 2. point its target output to `ghcr.io/<owner>/zfs-aurora-complex-akmods`
 3. build the shared cache image for the supported primary kernel
 
 Important design change:
 
 - this repo no longer patches the cloned akmods `Justfile` at runtime
-- the repo-specific publish-name logic now lives in the pinned `Danathar/akmods`
+- the repo-specific publish-name logic now lives in the `Danathar/akmods`
   fork commit itself
 - that keeps the runtime clone step boring: clone, check out the exact commit, verify the commit SHA, stop
 

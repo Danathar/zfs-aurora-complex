@@ -29,6 +29,7 @@ Note: branch workflows skip this step when `SIGNING_SECRET` is unavailable, whic
 | Clone pinned upstream akmods tooling and verify the exact commit SHA | `akmods-clone-pinned` | `ci_tools.akmods_clone_pinned` |
 | Configure target image path for the akmods build wrapper | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
 | Build and publish shared self-hosted ZFS akmods image | `akmods-build-and-publish` | `ci_tools.akmods_build_and_publish` |
+| Classify an akmods build failure for sticky-issue triage | `classify-akmods-failure` | `ci_tools.classify_akmods_failure` |
 
 ## Workflow Map
 
@@ -39,6 +40,10 @@ Note: branch workflows skip this step when `SIGNING_SECRET` is unavailable, whic
   - bot-authored runs stop after local validation and do not push/sign public branch tags
 - [`build-pr.yml`](../workflows/build-pr.yml)
   - no-push validation build
+- [`akmods-failure-triage.yml`](../workflows/akmods-failure-triage.yml)
+  - runs after `build.yml` completes via `workflow_run` trigger
+  - opens or updates a sticky GitHub issue on classified akmods failures
+  - auto-closes sticky issues when the next build succeeds
 
 ## Local Workflow Actions
 
