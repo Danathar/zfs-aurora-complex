@@ -21,6 +21,7 @@ class ExportRepoDefaultsTests(unittest.TestCase):
     def test_main_writes_outputs_and_env(self) -> None:
         defaults = {
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
+            "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REF": "abcdef123456",
             "IMAGE_NAME": "zfs-aurora-complex",
             "AKMODS_REPO": "zfs-aurora-complex-akmods",

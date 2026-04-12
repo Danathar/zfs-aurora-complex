@@ -1,5 +1,7 @@
 # zfs-aurora-complex
 
+[![build](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml)
+
 GitHub Actions workflow: `build.yml`
 
 > [!NOTE]

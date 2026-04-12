@@ -17,6 +17,8 @@ from typing import Callable
 from ci_tools.common import (
     CiToolError,
     extract_fedora_version,
+    git_ls_remote_resolve,
+    load_repo_defaults,
     optional_env,
     require_env,
     require_env_or_default,
@@ -222,6 +224,43 @@ def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
     )
 
 
+def _resolve_default_akmods_ref() -> str:
+    """
+    Pick the akmods source commit using a cascade that prefers explicit overrides.
+
+    Order:
+    1. `DEFAULT_AKMODS_REF` env (workflow input override)
+    2. `AKMODS_UPSTREAM_REF` env (explicit pin from caller)
+    3. `AKMODS_UPSTREAM_REF` in `ci/defaults.json` (non-empty → explicit pin)
+    4. `AKMODS_UPSTREAM_TRACK` (env or defaults) resolved via `git ls-remote` against `AKMODS_UPSTREAM_REPO`
+
+    The point of (4) is self-healing: when no explicit pin is set, the build floats
+    to whatever commit the tracking ref currently points at, so a red build caused
+    by a transient upstream mismatch clears itself once upstream catches up.
+    """
+    explicit = optional_env("DEFAULT_AKMODS_REF") or optional_env("AKMODS_UPSTREAM_REF")
+    if explicit:
+        return explicit
+
+    defaults = load_repo_defaults()
+    pinned = defaults.get("AKMODS_UPSTREAM_REF", "").strip()
+    if pinned:
+        return pinned
+
+    track = optional_env("AKMODS_UPSTREAM_TRACK") or defaults.get("AKMODS_UPSTREAM_TRACK", "").strip()
+    if not track:
+        raise CiToolError(
+            "No akmods source commit is configured. Set AKMODS_UPSTREAM_REF (env or "
+            "ci/defaults.json) or AKMODS_UPSTREAM_TRACK for floating resolution."
+        )
+
+    repo_url = optional_env("AKMODS_UPSTREAM_REPO") or defaults.get("AKMODS_UPSTREAM_REPO", "").strip()
+    if not repo_url:
+        raise CiToolError("AKMODS_UPSTREAM_REPO is required to resolve AKMODS_UPSTREAM_TRACK")
+
+    return git_ls_remote_resolve(repo_url, track)
+
+
 def resolve_configured_inputs() -> tuple[bool, str, str, str, str, str]:
     """
     Resolve top-level workflow inputs before any registry lookups happen.
@@ -238,9 +277,7 @@ def resolve_configured_inputs() -> tuple[bool, str, str, str, str, str]:
     use_input_lock = optional_env("USE_INPUT_LOCK", "false").lower() == "true"
     lock_file_path = require_env("LOCK_FILE")
     build_container_ref = require_env("BUILD_CONTAINER_REF")
-    default_akmods_ref = optional_env("DEFAULT_AKMODS_REF") or require_env_or_default(
-        "AKMODS_UPSTREAM_REF"
-    )
+    default_akmods_ref = _resolve_default_akmods_ref()
 
     if use_input_lock:
         lock_data = _load_lock_file(lock_file_path)

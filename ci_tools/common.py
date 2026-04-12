@@ -120,6 +120,39 @@ def run_cmd(
     return result.stdout
 
 
+def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
+    """
+    Resolve a git ref (branch, tag, or SHA) on a remote repository to a concrete commit SHA.
+
+    Used by the input resolver to float the akmods tracking ref to a pinned SHA
+    before the clone step runs. Keeping the resolution here (not in the clone
+    helper) preserves the `rev-parse HEAD` SHA-verification invariant in
+    `akmods_clone_pinned`, which assumes its input is already a concrete SHA.
+    """
+    if not repo_url:
+        raise CiToolError("git_ls_remote_resolve requires a non-empty repo_url")
+    if not ref:
+        raise CiToolError("git_ls_remote_resolve requires a non-empty ref")
+
+    output = run_cmd(["git", "ls-remote", "--exit-code", repo_url, ref])
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        sha, _tab, name = line.partition("\t")
+        sha = sha.strip()
+        name = name.strip()
+        if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha):
+            if name == f"refs/heads/{ref}" or name == f"refs/tags/{ref}" or name == ref or name == "HEAD":
+                return sha
+    # Fall back to the first line's SHA if the name didn't match a known form.
+    first = output.strip().splitlines()[0] if output.strip() else ""
+    sha = first.split("\t", 1)[0].strip() if first else ""
+    if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha):
+        return sha
+    raise CiToolError(f"git ls-remote did not return a resolvable commit SHA for {ref} at {repo_url}")
+
+
 def run_json_cmd(args: Sequence[str]) -> dict:
     """Run a command that returns JSON and parse it."""
     output = run_cmd(args)

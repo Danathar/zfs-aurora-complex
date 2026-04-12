@@ -12,29 +12,53 @@ Current control points:
 - checked-in defaults file [`ci/defaults.json`](../ci/defaults.json)
 - workflow/manual env overrides when you need one-off validation
 
-## Why The Pin Exists
+## How The Akmods Ref Is Chosen
 
-This repo does not build against the moving `main` branch of the configured fork.
+The repo supports three resolution modes, checked in order:
 
-Instead, it records one exact akmods commit in:
+1. **Explicit environment override.** If `AKMODS_UPSTREAM_REF` is set in the environment (or `DEFAULT_AKMODS_REF` via workflow input), that value wins. This is the escape hatch for debugging a specific upstream commit.
+2. **Explicit pin in `ci/defaults.json`.** If the `AKMODS_UPSTREAM_REF` field in [`ci/defaults.json`](../ci/defaults.json) is non-empty, that commit is used. This is how you freeze the repo to a known-good SHA during an outage.
+3. **Floating tracking ref.** Otherwise, `AKMODS_UPSTREAM_TRACK` (default `"main"`) is resolved via `git ls-remote` against `AKMODS_UPSTREAM_REPO` at the start of every run, and the resulting SHA is pinned for the rest of the run.
 
-- [`ci/defaults.json`](../ci/defaults.json)
+The floating mode is the self-healing default. A transient upstream mismatch stays red until upstream lands a compatible commit, at which point the next cron run picks it up without any human edit.
 
-That exact commit is the akmods source used by the GitHub Actions workflow runs.
+Every build records the resolved commit SHA in two places:
 
-Why:
+1. the workflow `build-inputs` manifest artifact, so you can trace any run to the SHA it used
+2. an OCI image label `org.zfs-aurora-complex.akmods-ref`, so any published candidate or stable image can be traced back to the exact upstream commit it was built from — even after the tracking ref has moved
 
-1. reproducibility
-2. safer debugging when upstream changes behavior
-3. easier rollback when a new akmods change breaks the shared cache build
+## Why A Pin Still Exists At All
+
+- **Reproducibility of a specific run.** Use `ci/inputs.lock.json` replay mode to rebuild an exact prior input set, or set `AKMODS_UPSTREAM_REF` explicitly to replay a specific upstream commit.
+- **Debugging.** Pinning short-term isolates the akmods side while you chase a build failure.
+- **Emergency freeze.** If upstream lands a change you actively do not trust, setting the `ci/defaults.json` pin freezes the repo to the last known-good SHA until you choose to unfreeze it.
+
+## When You Should (And Should Not) Bump The Pin
+
+You usually should **not** bump this pin on a cadence.
+
+The daily `build.yml` cron re-resolves base image, kernel set, and akmods cache on every run. A red build caused by a temporary upstream mismatch (new Fedora kernel, no matching OpenZFS release yet) is expected and self-heals once upstream catches up — the stable tag does not move while the candidate is red, so users see the last known-good image. See [`docs/upstream-change-response.md`](./upstream-change-response.md) for the full decision table.
+
+Manually bumping `AKMODS_UPSTREAM_REF` is the right move only when:
+
+1. a newer akmods fork commit exists upstream that is known to support the current Fedora kernel, and waiting for the existing pin to catch up will not help
+2. you need to reproduce or debug a specific failing build against an exact upstream SHA
+3. the fork made a breaking change (cache layout, publish naming, dependency set) that the current pin cannot absorb
+
+Otherwise: leave it alone and let the cron retry.
 
 ## Update Process
 
+Under the floating-ref default, there is no routine update process — the cron resolves `AKMODS_UPSTREAM_TRACK` every run.
+
+If you do need to pin (to debug, to freeze during an upstream outage, or to reproduce a specific past build):
+
 1. inspect the current state of `Danathar/akmods`
 2. choose the exact commit you want to test
-3. update `AKMODS_UPSTREAM_REF` in [`ci/defaults.json`](../ci/defaults.json)
+3. set `AKMODS_UPSTREAM_REF` in [`ci/defaults.json`](../ci/defaults.json) to that SHA
 4. run branch or manual validation first if the change is risky
 5. merge only after `main` builds and signs successfully
+6. when the outage clears, set `AKMODS_UPSTREAM_REF` back to `""` so the floating ref resumes
 
 ## What Usually Forces An Update
 
@@ -66,7 +90,8 @@ How they relate:
 
 Most important consequence:
 
-- pushing a new commit to `Danathar/akmods` does **not** change this repo's builds until you update the pinned SHA here
+- when the floating `AKMODS_UPSTREAM_TRACK` ref is active (default), pushing a new commit to `Danathar/akmods` on that ref becomes the source for the next build
+- when `AKMODS_UPSTREAM_REF` is set in `ci/defaults.json` or the environment, pushing new upstream commits does **not** change this repo's builds until that pin is cleared or moved
 
 ## Failure Discipline
 
