@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from ci_tools.common import CiToolError, optional_env, write_github_outputs
+from ci_tools.common import optional_env, write_github_outputs
 
 
 FAILURE_KIND_UPSTREAM_COMPAT = "upstream-compat"
