@@ -110,35 +110,48 @@ This repository uses the configured akmods fork:
 
 - `https://github.com/Danathar/akmods.git`
 
-But it does **not** build from the moving `main` branch tip.
+By default it follows the configured tracking ref, but each workflow run resolves
+that ref to one exact commit SHA before building anything.
 
-Instead, it builds from one exact commit recorded in:
+The selection order is:
 
-- [`ci/defaults.json`](./ci/defaults.json)
+1. an explicit `AKMODS_UPSTREAM_REF` or `DEFAULT_AKMODS_REF` environment
+   override, if one is set
+2. the `AKMODS_UPSTREAM_REF` pin in [`ci/defaults.json`](./ci/defaults.json),
+   if that field is non-empty
+3. otherwise, `AKMODS_UPSTREAM_TRACK` from [`ci/defaults.json`](./ci/defaults.json),
+   currently `main`, resolved with `git ls-remote`
 
-Right now that file contains:
-
-1. the fork URL
-2. one exact Git commit identifier (usually shortened to commit SHA)
+Right now [`ci/defaults.json`](./ci/defaults.json) contains the fork URL, the
+tracking ref, an empty pin field, image names, image defaults, and the OpenZFS
+minor line. Because `AKMODS_UPSTREAM_REF` is empty, floating tracking is the
+active default.
 
 What that means in practice:
 
-1. the GitHub Actions workflow run (usually shortened to CI, for continuous integration) makes a temporary clone of that fork into `/tmp/akmods`
-2. it fetches only that one pinned commit
-3. it verifies that Git actually checked out that exact commit
+1. a GitHub Actions workflow run (usually shortened to CI, for continuous
+   integration) resolves `Danathar/akmods@main` to one commit SHA at the start
+   of the run
+2. it makes a temporary clone of that fork into `/tmp/akmods`
+3. it verifies that Git checked out the resolved commit
 4. it uses that temporary checkout for the rest of the akmods build
 
 What it does **not** mean:
 
-1. the workflow run is not creating a new long-lived clone anywhere in the GitHub account that owns the fork
+1. the workflow run is not creating a new long-lived clone anywhere in the GitHub
+   account that owns the fork
 2. the workflow run is not ignoring the configured fork
-3. the workflow run is not automatically picking up whatever new commits later appear on that fork's `main` branch
+3. the workflow run is not following a moving branch while the build is already
+   in progress
 
 If the fork is updated after upstream changes:
 
-1. that fork stays the source repository
-2. this repo will still keep using the currently pinned commit
-3. the new fork commit only starts being used after the pin in `ci/defaults.json` is updated
+1. under the floating default, the next run resolves the tracking ref again and
+   can pick up the new commit automatically
+2. when you need to freeze or debug a specific commit, set `AKMODS_UPSTREAM_REF`
+   in [`ci/defaults.json`](./ci/defaults.json)
+3. clear `AKMODS_UPSTREAM_REF` back to `""` when the temporary pin is no longer
+   needed so floating tracking resumes
 
 ## Repository Layout
 
@@ -184,7 +197,7 @@ At a high level, the final image build now works like this:
 
 Three workflow-side simplifications now support that image build:
 
-1. `ci/defaults.json` is the one checked-in source of truth for default image refs, image names, and the pinned akmods fork commit
+1. `ci/defaults.json` is the one checked-in source of truth for default image refs, image names, and akmods source-selection settings
 2. cache checks now inspect the shared akmods cache image directly, which removes the extra sidecar image and keeps the reuse rule easier to follow
 3. small repo-owned Python helpers now handle registry-context export, candidate-tag generation, branch-tag composition, and signing-policy file generation instead of leaving that logic inline in workflow or shell snippets
 

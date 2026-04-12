@@ -1,9 +1,9 @@
 """
 Script: tests/test_akmods_clone_pinned.py
-What: Tests for cloning the pinned akmods fork checkout.
+What: Tests for cloning the resolved akmods fork checkout.
 Doing: Verifies the helper reads repo defaults, fetches one commit, and fails if Git resolves the wrong SHA.
 Why: The native repo now relies on the fork itself carrying the publish-name logic instead of patching the clone at runtime.
-Goal: Keep the clone step deterministic and fail closed on pin drift.
+Goal: Keep the clone step deterministic and fail closed on ref drift.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from ci_tools import akmods_clone_pinned as script
 
 
 class AkmodsClonePinnedTests(unittest.TestCase):
-    def test_main_clones_exact_pinned_ref(self) -> None:
+    def test_main_clones_exact_resolved_ref(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             worktree = Path(temp_dir) / "akmods"
 
@@ -50,7 +50,7 @@ class AkmodsClonePinnedTests(unittest.TestCase):
                     side_effect=["https://github.com/Danathar/akmods.git", "abcdef123456"],
                 ):
                     with patch("ci_tools.akmods_clone_pinned.run_cmd", side_effect=["", "", "", "", "deadbeef\n"]):
-                        with self.assertRaisesRegex(RuntimeError, "Pinned ref mismatch"):
+                        with self.assertRaisesRegex(RuntimeError, "Akmods ref mismatch"):
                             script.main()
 
 

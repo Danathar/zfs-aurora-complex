@@ -98,7 +98,7 @@ def build_sticky_issue_payload(
         f"**Matched patterns:**\n{matched_list}\n\n"
         f"**Failing run:** [{run_id}]({run_url})\n\n"
         "This issue was opened automatically by the visibility workflow. "
-        "It will auto-close on the next green `build.yml` run against the same primary kernel."
+        "It will auto-close on the next green `build.yml` run."
     )
 
     return {

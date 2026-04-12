@@ -229,7 +229,7 @@ def _resolve_default_akmods_ref() -> str:
     Pick the akmods source commit using a cascade that prefers explicit overrides.
 
     Order:
-    1. `DEFAULT_AKMODS_REF` env (workflow input override)
+    1. `DEFAULT_AKMODS_REF` env (process-level override)
     2. `AKMODS_UPSTREAM_REF` env (explicit pin from caller)
     3. `AKMODS_UPSTREAM_REF` in `ci/defaults.json` (non-empty → explicit pin)
     4. `AKMODS_UPSTREAM_TRACK` (env or defaults) resolved via `git ls-remote` against `AKMODS_UPSTREAM_REPO`

@@ -105,11 +105,13 @@ The workflow passes build arguments directly into [`Containerfile`](../Container
 
 1. `BASE_IMAGE`
 2. `BREW_IMAGE`
-3. `AKMODS_IMAGE` or `AKMODS_IMAGE_TEMPLATE`
+3. `AKMODS_IMAGE`
 4. `IMAGE_REPO`
 5. `SIGNING_KEY_FILENAME`
 
 That means there is no generated workspace and no per-run file mutation layer.
+`AKMODS_IMAGE_TEMPLATE` is still available as a `Containerfile` fallback for
+local builds that do not pass an exact cache image ref.
 
 ### 5. Sign Published Tags
 

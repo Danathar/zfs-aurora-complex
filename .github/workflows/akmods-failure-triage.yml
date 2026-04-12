@@ -4,8 +4,8 @@ name: Akmods Failure Triage
 # small number of sticky GitHub issues that reflect persistent upstream
 # incompatibilities. The build workflow itself still fails loudly — this
 # workflow only adds visibility on top of red builds. On a green build it
-# auto-closes any previously opened sticky issue keyed by the same primary
-# kernel so transient failures do not stay pinned.
+# auto-closes all open akmods-failure sticky issues so transient failures do not
+# stay pinned.
 
 on:
   workflow_run:

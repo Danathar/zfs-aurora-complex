@@ -28,7 +28,7 @@ If a term is unfamiliar, check the shared glossary first:
 ### 4. Akmods build control
 
 1. [`ci_tools/akmods_clone_pinned.py`](../ci_tools/akmods_clone_pinned.py)
-   - clones the pinned upstream fork and verifies the exact commit SHA
+   - clones the resolved upstream akmods commit and verifies the exact SHA
 2. [`ci_tools/akmods_configure_zfs_target.py`](../ci_tools/akmods_configure_zfs_target.py)
 3. [`ci_tools/akmods_build_and_publish.py`](../ci_tools/akmods_build_and_publish.py)
 

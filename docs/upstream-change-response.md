@@ -27,7 +27,7 @@ Use this table before editing any pin:
 |---|---|
 | One red run, next scheduled run goes green without changes | No — transient upstream state; the cron healed it |
 | Red runs in a streak, but OpenZFS has not yet released support for the current Fedora kernel | No — wait for upstream. Stable is still on the last good image |
-| Red runs in a streak, and a newer akmods fork commit known to support the current kernel exists upstream | Yes — bump `AKMODS_UPSTREAM_REF` in `ci/defaults.json` per [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md) |
+| Red runs in a streak, and the floating akmods tracking ref has already landed support for the current kernel | Usually no edit - rerun or wait for the next cron. Set `AKMODS_UPSTREAM_REF` only for one-off validation or a temporary freeze |
 | Red run with a Python traceback or shell error unrelated to `just build` or `kmod-zfs` | Yes — this is a repo bug, not an upstream mismatch. Treat as a normal code fix |
 | Promotion job skipped because candidate failed | No action on the promotion side — fix the candidate failure by whichever branch above applies |
 
@@ -54,22 +54,23 @@ Symptoms:
 Likely causes:
 
 1. Fedora shipped a new kernel that current OpenZFS does not support yet
-2. the pinned akmods fork needs an update
+2. the resolved akmods source ref does not contain the needed support yet
 3. upstream akmods changed assumptions around cache layout
 
 What to inspect:
 
 1. the resolved base image digest, detected kernel list, and primary kernel in the saved `build-inputs` file
 2. the failing akmods logs around `just build`
-3. the pinned `AKMODS_UPSTREAM_REF`
+3. the resolved akmods source ref and whether `AKMODS_UPSTREAM_REF` is pinned or floating is active
 4. the configured `ZFS_MINOR_VERSION`
 
 Repair path:
 
 1. decide whether OpenZFS support exists for the new kernel
-2. if support exists, update the pinned akmods fork or other build logic as needed
-3. rerun `build.yml` with `rebuild_akmods=true`
-4. if support does not exist yet, let stable remain on the last good build
+2. if support exists on the floating tracking ref, rerun or wait for the next cron
+3. if support exists only at a specific SHA, temporarily pin `AKMODS_UPSTREAM_REF`
+4. rerun `build.yml` with `rebuild_akmods=true`
+5. if support does not exist yet, let stable remain on the last good build
 
 ## Failure: Candidate Image Build
 

@@ -67,7 +67,7 @@ The main workflow resolves and pins:
 2. build container ref and digest for the akmods job
 3. Fedora major version
 4. every installed kernel found in `/lib/modules`
-5. pinned akmods fork commit
+5. resolved akmods source commit SHA
 6. ZFS minor version line
 
 Those values are written to a saved workflow output file named `build-inputs-<run_id>` so the same input set can be replayed later.
@@ -162,11 +162,14 @@ specific container image manifest format produced by buildah.
 
 `build-image.sh` then:
 
-1. enables brew setup/update services via `systemctl preset`
-2. installs `distrobox` via `rpm-ostree install`
-3. runs the ZFS install helper against the resolved akmods cache image reference
-4. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
-5. finalizes the image with `ostree container commit`
+1. installs the committed `cosign.pub` public key into the image trust-material path
+2. enables brew setup/update services via `systemctl preset`
+3. installs `distrobox` via `rpm-ostree install`
+4. runs the ZFS install helper against the resolved akmods cache image reference
+5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
+6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
+7. removes build-only runtime/container state
+8. finalizes the image with `ostree container commit`
 
 The signing-policy step is now a pure Python helper:
 

@@ -16,7 +16,7 @@ inputs:
     description: Shared akmods cache repository name.
     required: true
   akmods_upstream_repo:
-    description: Pinned akmods source repository URL.
+    description: Configured akmods source repository URL.
     required: true
   rebuild_akmods:
     description: Whether this run should rebuild the shared akmods cache even if a reusable cache already exists.
@@ -66,7 +66,7 @@ outputs:
     description: OpenZFS minor line used for this run.
     value: ${{ steps.resolve.outputs.zfs_minor_version }}
   akmods_upstream_ref:
-    description: Pinned akmods source commit used for this run.
+    description: Resolved akmods source commit used for this run.
     value: ${{ steps.resolve.outputs.akmods_upstream_ref }}
   use_input_lock:
     description: Whether lock replay mode was active.
@@ -144,10 +144,10 @@ runs:
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 
-    # Always verify that the pinned akmods source commit is fetchable. This
-    # avoids a later surprise where the cache looked reusable, but the source
-    # pin itself was wrong or no longer available.
-    - name: Clone pinned upstream akmods tooling
+    # Always verify that the resolved akmods source commit is fetchable. This
+    # avoids a later surprise where the cache looked reusable, but the resolved
+    # source ref itself was wrong or no longer available.
+    - name: Clone resolved upstream akmods tooling
       shell: bash
       env:
         AKMODS_UPSTREAM_REPO: ${{ inputs.akmods_upstream_repo }}

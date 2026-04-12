@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      # Load the repository's pinned defaults, including the akmods fork commit
+      # Load the repository defaults, including akmods source-selection settings
       # and the default floating base-image reference.
       - id: defaults
         name: Load repository defaults

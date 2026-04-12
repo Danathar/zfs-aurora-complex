@@ -73,7 +73,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `AKMODS_UPSTREAM_REPO`: Git URL for the akmods fork this repo builds from.
 - `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
 - `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
-- `DEFAULT_AKMODS_REF`: workflow-dispatch override that can force one akmods source ref for a run.
+- `DEFAULT_AKMODS_REF`: process-level environment override that can force one akmods source ref for a run; it is not wired as a formal workflow-dispatch input.
 - `ZFS_MINOR_VERSION`: OpenZFS minor line passed into the akmods build.
 - `AKMODS_KERNEL`: kernel flavor value passed to upstream akmods tooling; this repo uses `main`.
 - `AKMODS_TARGET`: akmods target name; this repo uses `zfs`.

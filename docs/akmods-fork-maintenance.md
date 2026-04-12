@@ -5,18 +5,19 @@ If a term is unfamiliar, check the shared glossary first:
 
 ## Purpose
 
-This page explains how to maintain the pinned upstream akmods fork reference used by this repository.
+This page explains how this repository chooses an upstream akmods source ref,
+when to use a temporary pin, and when to let floating tracking heal itself.
 
 Current control points:
 
 - checked-in defaults file [`ci/defaults.json`](../ci/defaults.json)
-- workflow/manual env overrides when you need one-off validation
+- manual environment overrides when you need one-off validation
 
 ## How The Akmods Ref Is Chosen
 
 The repo supports three resolution modes, checked in order:
 
-1. **Explicit environment override.** If `AKMODS_UPSTREAM_REF` is set in the environment (or `DEFAULT_AKMODS_REF` via workflow input), that value wins. This is the escape hatch for debugging a specific upstream commit.
+1. **Explicit environment override.** If `AKMODS_UPSTREAM_REF` or `DEFAULT_AKMODS_REF` is set in the process environment, that value wins. This is the escape hatch for debugging a specific upstream commit.
 2. **Explicit pin in `ci/defaults.json`.** If the `AKMODS_UPSTREAM_REF` field in [`ci/defaults.json`](../ci/defaults.json) is non-empty, that commit is used. This is how you freeze the repo to a known-good SHA during an outage.
 3. **Floating tracking ref.** Otherwise, `AKMODS_UPSTREAM_TRACK` (default `"main"`) is resolved via `git ls-remote` against `AKMODS_UPSTREAM_REPO` at the start of every run, and the resulting SHA is pinned for the rest of the run.
 
@@ -39,11 +40,11 @@ You usually should **not** bump this pin on a cadence.
 
 The daily `build.yml` cron re-resolves base image, kernel set, and akmods cache on every run. A red build caused by a temporary upstream mismatch (new Fedora kernel, no matching OpenZFS release yet) is expected and self-heals once upstream catches up — the stable tag does not move while the candidate is red, so users see the last known-good image. See [`docs/upstream-change-response.md`](./upstream-change-response.md) for the full decision table.
 
-Manually bumping `AKMODS_UPSTREAM_REF` is the right move only when:
+Setting or moving an explicit `AKMODS_UPSTREAM_REF` is the right move only when:
 
-1. a newer akmods fork commit exists upstream that is known to support the current Fedora kernel, and waiting for the existing pin to catch up will not help
+1. a newer akmods fork commit is known to support the current Fedora kernel, and waiting for the floating tracking ref will not pick it up
 2. you need to reproduce or debug a specific failing build against an exact upstream SHA
-3. the fork made a breaking change (cache layout, publish naming, dependency set) that the current pin cannot absorb
+3. the fork made a breaking change (cache layout, publish naming, dependency set) that requires freezing the build to a known-good SHA while you adapt
 
 Otherwise: leave it alone and let the cron retry.
 
@@ -60,13 +61,13 @@ If you do need to pin (to debug, to freeze during an upstream outage, or to repr
 5. merge only after `main` builds and signs successfully
 6. when the outage clears, set `AKMODS_UPSTREAM_REF` back to `""` so the floating ref resumes
 
-## What Usually Forces An Update
+## What Usually Forces A Temporary Pin
 
-1. new Fedora kernel behavior that the current pin does not handle
-2. upstream fixes around cache layout, dependency lists, or image publishing
+1. new Fedora kernel behavior where the tracking ref is not yet usable but a known-good commit is available
+2. upstream changes around cache layout, dependency lists, or image publishing that need isolated validation
 3. changes required for future Fedora majors
 
-## What To Validate After Changing The Pin
+## What To Validate After Changing A Pin
 
 1. `Build Shared ZFS Akmods Cache` still succeeds
 2. shared cache image contains the `kmod-zfs` RPM needed for the supported primary kernel
@@ -78,15 +79,17 @@ If you do need to pin (to debug, to freeze during an upstream outage, or to repr
 The moving pieces are:
 
 1. the configured fork repository: `Danathar/akmods`
-2. the pinned commit SHA, meaning the exact Git commit ID stored in this repo
-3. the temporary clone the workflow run creates in `/tmp/akmods`
+2. the tracking ref or explicit pin configured in [`ci/defaults.json`](../ci/defaults.json)
+3. the resolved commit SHA, meaning the exact Git commit ID used for one run
+4. the temporary clone the workflow run creates in `/tmp/akmods`
 
 How they relate:
 
 1. the workflow run still uses the configured fork as the source repository
-2. the workflow run clones only the pinned commit, not the whole moving branch
-3. that clone in `/tmp/akmods` exists only for the current run
-4. when the run ends, that temporary checkout is discarded
+2. the workflow run resolves the selected ref to one exact commit SHA before cloning
+3. the workflow run uses that resolved commit, not a branch that can move mid-build
+4. that clone in `/tmp/akmods` exists only for the current run
+5. when the run ends, that temporary checkout is discarded
 
 Most important consequence:
 
