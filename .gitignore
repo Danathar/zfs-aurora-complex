@@ -4,3 +4,4 @@ __pycache__/
 artifacts/
 cosign.key
 .DS_Store
+.claude/*.lock
