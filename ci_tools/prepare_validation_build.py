@@ -8,6 +8,8 @@ Goal: Keep one shared preparation command for non-main workflows instead of dupl
 
 from __future__ import annotations
 
+import os
+
 from ci_tools.akmods_clone_pinned import main as clone_pinned_akmods
 from ci_tools.check_akmods_cache import inspect_akmods_cache
 from ci_tools.common import CiToolError, normalize_owner, require_env
@@ -26,6 +28,10 @@ def main() -> None:
     # explicit clone they would never prove that the resolved akmods source
     # commit is still fetchable. Running the same clone/verify step here keeps
     # branch and pull request paths honest with the main schedule/rebuild path.
+    # clone_pinned_akmods re-reads AKMODS_UPSTREAM_REF from env, so export the
+    # already-resolved SHA here — matches the contract the main workflow's
+    # shell step uses via `env:` on the clone step.
+    os.environ["AKMODS_UPSTREAM_REF"] = inputs.akmods_upstream_ref
     clone_pinned_akmods()
 
     status = inspect_akmods_cache(

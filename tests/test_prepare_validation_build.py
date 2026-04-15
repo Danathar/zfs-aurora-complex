@@ -66,7 +66,15 @@ class PrepareValidationBuildTests(unittest.TestCase):
                     "ci_tools.prepare_validation_build.resolve_build_inputs",
                     return_value=resolution,
                 ):
-                    with patch("ci_tools.prepare_validation_build.clone_pinned_akmods") as clone_pinned:
+                    captured_ref: dict[str, str] = {}
+
+                    def capture_env() -> None:
+                        captured_ref["value"] = os.environ.get("AKMODS_UPSTREAM_REF", "")
+
+                    with patch(
+                        "ci_tools.prepare_validation_build.clone_pinned_akmods",
+                        side_effect=capture_env,
+                    ) as clone_pinned:
                         with patch(
                             "ci_tools.prepare_validation_build.inspect_akmods_cache",
                             return_value=AkmodsCacheStatus(
@@ -76,6 +84,8 @@ class PrepareValidationBuildTests(unittest.TestCase):
                             ),
                         ) as inspect_cache:
                             main()
+
+            self.assertEqual(captured_ref["value"], "abcdef123456")
 
             outputs = Path(output_path).read_text(encoding="utf-8")
             self.assertIn("version=43", outputs)
