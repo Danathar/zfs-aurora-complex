@@ -14,23 +14,6 @@ from ci_tools.common import CiToolError, normalize_owner, require_env
 from ci_tools.resolve_build_inputs import resolve_build_inputs, write_resolved_build_outputs
 
 
-def _shared_cache_failure_message(*, source_image: str, missing_release: str) -> str:
-    """
-    Build one readable failure message for read-only validation workflows.
-
-    The branch and pull request paths intentionally do not rebuild the shared
-    `zfs-aurora-complex-akmods:main-<fedora>` tag. If that shared source
-    is missing or no longer matches the required primary kernel, the correct repair
-    action is to refresh it from the main workflow.
-    """
-
-    return (
-        f"Shared akmods source tag {source_image} is missing or does not cover the supported primary kernel {missing_release}. "
-        "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
-        "then rerun this workflow."
-    )
-
-
 def main() -> None:
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
     source_repo = require_env("AKMODS_REPO")
@@ -52,11 +35,13 @@ def main() -> None:
         kernel_release=inputs.kernel_release,
     )
     if not status.reusable:
+        # Branch/PR paths intentionally do not rebuild the shared akmods tag;
+        # the repair action is a main-workflow rebuild_akmods run.
         raise CiToolError(
-            _shared_cache_failure_message(
-                source_image=status.source_image,
-                missing_release=status.missing_release,
-            )
+            f"Shared akmods source tag {status.source_image} is missing or does not "
+            f"cover the supported primary kernel {status.missing_release}. "
+            "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
+            "then rerun this workflow."
         )
 
     print(

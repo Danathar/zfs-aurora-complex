@@ -26,6 +26,16 @@ class ChooseBaseImageTagTests(unittest.TestCase):
         self.assertEqual(tag, "latest-20260227")
         self.assertEqual(checked, ["latest-20260227"])
 
+    def test_rejects_date_stamped_source_tag_when_digest_moved(self) -> None:
+        with self.assertRaises(CiToolError):
+            choose_base_image_tag(
+                source_tag="latest-20260227",
+                version_label="43.20260227.1",
+                fedora_version="43",
+                expected_digest="sha256:abc",
+                digest_lookup=lambda _tag: "sha256:moved",
+            )
+
     def test_derives_tag_from_version_label_and_digest_match(self) -> None:
         digests = {
             "latest-20260227.1": "sha256:match",

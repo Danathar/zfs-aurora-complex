@@ -67,6 +67,18 @@ class ResolvedBuildInputs:
 
 
 @dataclass(frozen=True)
+class ConfiguredBuildInputs:
+    """Top-level workflow inputs resolved before any registry lookups."""
+
+    use_input_lock: bool
+    lock_file_path: str
+    build_container_ref: str
+    base_image_ref: str
+    zfs_minor_version: str
+    akmods_upstream_ref: str
+
+
+@dataclass(frozen=True)
 class BuildInputResolution:
     """
     Full resolution result, including debug-only metadata used in logs.
@@ -103,8 +115,15 @@ def choose_base_image_tag(
     - Otherwise derive candidate tags from version label and choose the one
       that resolves to the expected digest.
     """
-    # If we already got a date-stamped tag, treat it as stable for this run.
+    # If we already got a date-stamped tag, treat it as stable for this run,
+    # but still confirm it resolves to the expected digest so a moved tag
+    # cannot slip through the early-return.
     if source_tag and DATE_STAMPED_TAG_RE.search(source_tag):
+        if digest_lookup(source_tag) != expected_digest:
+            raise CiToolError(
+                f"Date-stamped source tag {source_tag} no longer resolves to digest "
+                f"{expected_digest}"
+            )
         return source_tag, [source_tag]
 
     candidate_tags: list[str] = []
@@ -222,18 +241,8 @@ def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
     )
 
 
-def resolve_configured_inputs() -> tuple[bool, str, str, str, str, str]:
-    """
-    Resolve top-level workflow inputs before any registry lookups happen.
-
-    Return values are:
-    1. lock replay mode flag
-    2. lock file path
-    3. build container ref
-    4. base image ref
-    5. ZFS minor version
-    6. pinned akmods source ref
-    """
+def resolve_configured_inputs() -> ConfiguredBuildInputs:
+    """Resolve top-level workflow inputs before any registry lookups happen."""
 
     use_input_lock = optional_env("USE_INPUT_LOCK", "false").lower() == "true"
     lock_file_path = require_env("LOCK_FILE")
@@ -272,13 +281,13 @@ def resolve_configured_inputs() -> tuple[bool, str, str, str, str, str]:
         zfs_minor_version = require_env_or_default("DEFAULT_ZFS_MINOR_VERSION")
         akmods_upstream_ref = default_akmods_ref
 
-    return (
-        use_input_lock,
-        lock_file_path,
-        build_container_ref,
-        base_image_ref,
-        zfs_minor_version,
-        akmods_upstream_ref,
+    return ConfiguredBuildInputs(
+        use_input_lock=use_input_lock,
+        lock_file_path=lock_file_path,
+        build_container_ref=build_container_ref,
+        base_image_ref=base_image_ref,
+        zfs_minor_version=zfs_minor_version,
+        akmods_upstream_ref=akmods_upstream_ref,
     )
 
 
@@ -291,14 +300,13 @@ def resolve_build_inputs() -> BuildInputResolution:
     container, Fedora version, and supported primary kernel.
     """
 
-    (
-        use_input_lock,
-        lock_file_path,
-        build_container_ref,
-        base_image_ref,
-        zfs_minor_version,
-        akmods_upstream_ref,
-    ) = resolve_configured_inputs()
+    configured = resolve_configured_inputs()
+    use_input_lock = configured.use_input_lock
+    lock_file_path = configured.lock_file_path
+    build_container_ref = configured.build_container_ref
+    base_image_ref = configured.base_image_ref
+    zfs_minor_version = configured.zfs_minor_version
+    akmods_upstream_ref = configured.akmods_upstream_ref
 
     # Read base image metadata from registry.
     # Labels carry kernel information and stream version information.
@@ -337,13 +345,6 @@ def resolve_build_inputs() -> BuildInputResolution:
         expected_digest=base_image_digest,
         digest_lookup=lookup_digest,
     )
-
-    # Final safety check: chosen tag must still match the expected digest.
-    selected_tag_digest = lookup_digest(base_image_tag)
-    if selected_tag_digest != base_image_digest:
-        raise CiToolError(
-            f"Resolved tag {base_image_name}:{base_image_tag} does not match digest {base_image_digest}"
-        )
 
     build_container_inspect = skopeo_inspect_json(f"docker://{build_container_ref}")
     build_container_name = str(build_container_inspect.get("Name") or "")
