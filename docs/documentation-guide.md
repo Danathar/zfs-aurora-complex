@@ -24,7 +24,7 @@ docs/
   architecture-overview.md    <- high-level design and flow
   upstream-change-response.md <- incident triage and recovery actions
   zfs-aurora-testing.md       <- deep technical design + issue history
-  akmods-fork-maintenance.md  <- how to maintain the pinned akmods fork
+  akmods-fork-maintenance.md  <- how akmods source refs are selected and pinned
 .github/scripts/
   README.md                   <- workflow step -> command-line interface (CLI) command -> Python module map
 ```

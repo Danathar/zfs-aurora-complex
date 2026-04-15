@@ -13,6 +13,7 @@ from ci_tools.common import load_repo_defaults, write_github_env, write_github_o
 
 OUTPUT_NAME_MAP = {
     "AKMODS_UPSTREAM_REPO": "akmods_upstream_repo",
+    "AKMODS_UPSTREAM_TRACK": "akmods_upstream_track",
     "AKMODS_UPSTREAM_REF": "akmods_upstream_ref",
     "IMAGE_NAME": "image_name",
     "AKMODS_REPO": "akmods_repo",
@@ -22,17 +23,23 @@ OUTPUT_NAME_MAP = {
     "DEFAULT_ZFS_MINOR_VERSION": "default_zfs_minor_version",
 }
 
+OPTIONAL_KEYS = {"AKMODS_UPSTREAM_REF", "AKMODS_UPSTREAM_TRACK"}
+
 
 def main() -> None:
     defaults = load_repo_defaults()
 
-    # Export the original env-style names so later shell steps can read them
-    # directly without each workflow having to restate the same constants.
-    write_github_env({key: defaults[key] for key in OUTPUT_NAME_MAP})
+    missing_required = {
+        key for key in OUTPUT_NAME_MAP
+        if key not in OPTIONAL_KEYS and not defaults.get(key)
+    }
+    if missing_required:
+        raise RuntimeError(
+            f"ci/defaults.json is missing required keys: {', '.join(sorted(missing_required))}"
+        )
 
-    # GitHub step outputs are easier to reference from `with:` and `if:` blocks
-    # than runtime environment variables, so we expose a lowercase map as well.
-    write_github_outputs({output_name: defaults[key] for key, output_name in OUTPUT_NAME_MAP.items()})
+    write_github_env({key: defaults.get(key, "") for key in OUTPUT_NAME_MAP})
+    write_github_outputs({output_name: defaults.get(key, "") for key, output_name in OUTPUT_NAME_MAP.items()})
 
     print(f"Loaded repository defaults from ci/defaults.json ({len(OUTPUT_NAME_MAP)} values).")
 

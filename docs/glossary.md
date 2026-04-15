@@ -62,3 +62,63 @@ This page defines terms used across this repository's docs and workflow comments
 - `systemctl preset`: applies vendor-supplied preset rules to enable or disable systemd units according to policy files shipped in the image. Used to activate brew services at build time.
 - `tmpfiles.d`: systemd's mechanism for declaratively creating, deleting, or cleaning up files and directories at boot or on demand. This repo ships a `tmpfiles.d` entry for `pcp` state directories that ZFS dependencies pull in.
 - `yq`: YAML processor used to update the upstream akmods target file.
+
+## Configuration And Environment Variables
+
+### Akmods Inputs
+
+- `AKMODS_IMAGE`: exact shared akmods cache image ref used by the final image build to install ZFS RPMs.
+- `AKMODS_IMAGE_TEMPLATE`: fallback cache-image template containing `{fedora}` for local builds that do not pass `AKMODS_IMAGE`.
+- `AKMODS_REPO`: GHCR repository name for the shared akmods cache image.
+- `AKMODS_UPSTREAM_REPO`: Git URL for the akmods fork this repo builds from.
+- `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
+- `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
+- `DEFAULT_AKMODS_REF`: process-level environment override that can force one akmods source ref for a run; it is not wired as a formal workflow-dispatch input.
+- `ZFS_MINOR_VERSION`: OpenZFS minor line passed into the akmods build.
+- `AKMODS_KERNEL`: kernel flavor value passed to upstream akmods tooling; this repo uses `main`.
+- `AKMODS_TARGET`: akmods target name; this repo uses `zfs`.
+- `AKMODS_VERSION`: Fedora major version value passed to upstream akmods tooling.
+- `AKMODS_DESCRIPTION`: human-readable description written into the akmods publish target config.
+
+### Image Build Inputs
+
+- `BASE_IMAGE`: base Aurora image ref passed to the root `Containerfile`.
+- `BREW_IMAGE`: Homebrew OCI image ref copied into the final image.
+- `IMAGE_REPO`: final OS image repository path used when writing signing policy.
+- `SIGNING_KEY_FILENAME`: public-key filename installed into the image for future signature verification.
+
+### Resolved Run Inputs
+
+- `FEDORA_VERSION`: Fedora major version resolved from the selected base image.
+- `KERNEL_RELEASE`: newest detected kernel release, treated as the supported primary kernel.
+- `DETECTED_KERNEL_RELEASES`: space-separated list of every kernel release found in the base image.
+- `BASE_IMAGE_REF`: base image ref before digest pinning.
+- `BASE_IMAGE_NAME`: base image repository name without the selected tag.
+- `BASE_IMAGE_TAG`: tag selected from the base image stream for this run.
+- `BASE_IMAGE_PINNED`: digest-pinned base image ref used for the build.
+- `BASE_IMAGE_DIGEST`: digest portion of the selected base image.
+- `BUILD_CONTAINER_REF`: build-container image ref before digest pinning.
+- `BUILD_CONTAINER_PINNED`: digest-pinned build-container ref used by the akmods job.
+- `BUILD_CONTAINER_DIGEST`: digest portion of the selected build-container image.
+
+### Signing And Registry
+
+- `SIGNING_SECRET`: repository secret containing the cosign private key.
+- `COSIGN_PRIVATE_KEY`: environment variable used by the signing helper to pass the private key to cosign.
+- `REGISTRY_ACTOR`: GitHub actor used as the registry username.
+- `REGISTRY_TOKEN`: token used for GHCR authentication in helper commands.
+- `REGISTRY_USER`: workflow-local registry username used by the Docker login step.
+- `REGISTRY_PASSWORD`: workflow-local registry password or token used by the Docker login step.
+- `IMAGE_ORG`: normalized image-owner portion used in GHCR paths.
+- `IMAGE_NAME`: final OS image repository name.
+- `IMAGE_TAG`: image tag being pushed, signed, or promoted.
+- `HAS_SIGNING_SECRET`: workflow-local boolean that records whether `SIGNING_SECRET` is configured.
+
+### Workflow Control And Audit
+
+- `USE_INPUT_LOCK`: whether input-lock replay mode is enabled.
+- `LOCK_FILE`: input-lock path passed into the resolver.
+- `LOCK_FILE_PATH`: input-lock path recorded in the build-inputs manifest.
+- `BRANCH_TAG_PREFIX`: branch-safe tag prefix used by branch builds.
+- `AKMODS_FAILURE_LOG`: path to the captured akmods build log used for failure classification.
+- `AKMODS_FAILURE_PAYLOAD_PATH`: path where the failure classifier writes the sticky-issue payload.

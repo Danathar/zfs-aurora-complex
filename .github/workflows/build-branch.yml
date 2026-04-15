@@ -140,6 +140,7 @@ jobs:
           base_image: ${{ needs.build-branch-akmods.outputs.base_image_pinned }}
           brew_image: ${{ steps.defaults.outputs.default_brew_image }}
           akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ needs.build-branch-akmods.outputs.fedora_version }}
+          akmods_upstream_ref: ${{ needs.build-branch-akmods.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

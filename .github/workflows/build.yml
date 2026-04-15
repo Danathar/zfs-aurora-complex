@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      # Load the repository's pinned defaults, including the akmods fork commit
+      # Load the repository defaults, including akmods source-selection settings
       # and the default floating base-image reference.
       - id: defaults
         name: Load repository defaults
@@ -152,6 +152,7 @@ jobs:
           base_image: ${{ needs.build-zfs-akmods.outputs.base_image_pinned }}
           brew_image: ${{ steps.defaults.outputs.default_brew_image }}
           akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          akmods_upstream_ref: ${{ needs.build-zfs-akmods.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

@@ -1,0 +1,158 @@
+name: Akmods Failure Triage
+
+# This workflow runs AFTER the main build workflow completes and manages a
+# small number of sticky GitHub issues that reflect persistent upstream
+# incompatibilities. The build workflow itself still fails loudly — this
+# workflow only adds visibility on top of red builds. On a green build it
+# auto-closes all open akmods-failure sticky issues so transient failures do not
+# stay pinned.
+
+on:
+  workflow_run:
+    workflows: ["Build And Promote Main Image"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: akmods-failure-triage
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Manage sticky akmods failure issue
+    runs-on: ubuntu-24.04
+    if: github.event.workflow_run.event != 'pull_request'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # Pull down the failure payload artifact (if the build job uploaded one)
+      # without using the moving `actions/download-artifact` default branch.
+      - name: Download failure payload if present
+        id: download
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+            const artifactsResp = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            const prefix = 'akmods-failure-';
+            const artifact = artifactsResp.data.artifacts.find(a => a.name.startsWith(prefix));
+            if (!artifact) {
+              core.setOutput('has_payload', 'false');
+              return;
+            }
+            const zip = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: artifact.id,
+              archive_format: 'zip',
+            });
+            fs.mkdirSync('artifacts', { recursive: true });
+            fs.writeFileSync('artifacts/akmods-failure.zip', Buffer.from(zip.data));
+            core.setOutput('has_payload', 'true');
+
+      - name: Unzip payload
+        if: steps.download.outputs.has_payload == 'true'
+        shell: bash
+        run: |
+          cd artifacts
+          unzip -o akmods-failure.zip
+          ls -la
+
+      - name: Open or update sticky issue on failed run
+        if: github.event.workflow_run.conclusion == 'failure' && steps.download.outputs.has_payload == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+            const payload = JSON.parse(fs.readFileSync('artifacts/akmods-failure.json', 'utf8'));
+            const stickyLabel = 'akmods-failure';
+            const keyMarker = `<!-- akmods-failure-key: ${payload.key} -->`;
+            const body = `${keyMarker}\n\n${payload.body}`;
+
+            // Ensure the sticky label exists before trying to use it.
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: stickyLabel,
+              });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: stickyLabel,
+                  color: 'd93f0b',
+                  description: 'Sticky issue tracking a persistent akmods build failure',
+                });
+                core.info(`Created label "${stickyLabel}"`);
+              } else {
+                throw e;
+              }
+            }
+
+            // Look for an existing open issue with the same sticky key marker.
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: stickyLabel,
+              per_page: 100,
+            });
+            const match = existing.find(i => (i.body || '').includes(keyMarker));
+            if (match) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                body: body,
+              });
+              core.info(`Updated sticky issue #${match.number} for key ${payload.key}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: payload.title,
+                body: body,
+                labels: [stickyLabel],
+              });
+              core.info(`Opened sticky issue #${created.data.number} for key ${payload.key}`);
+            }
+
+      - name: Close stale sticky issues on successful run
+        if: github.event.workflow_run.conclusion == 'success'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const stickyLabel = 'akmods-failure';
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: stickyLabel,
+              per_page: 100,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Build workflow succeeded on ${context.payload.workflow_run.head_sha}. Auto-closing sticky issue.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+              core.info(`Closed sticky issue #${issue.number}`);
+            }

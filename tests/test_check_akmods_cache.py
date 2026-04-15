@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 from ci_tools.check_akmods_cache import _has_kernel_matching_rpm, inspect_akmods_cache
+from ci_tools.common import CiToolError
 
 
 class CheckAkmodsCacheTests(unittest.TestCase):
@@ -74,6 +75,23 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         self.assertTrue(status.reusable)
         self.assertEqual(status.inspection_method, "unpacked-image")
         skopeo_copy.assert_called_once()
+
+    def test_inspect_akmods_cache_raises_ci_error_when_layer_unpacking_fails(self) -> None:
+        with patch("ci_tools.check_akmods_cache.skopeo_exists", return_value=True):
+            with patch("ci_tools.check_akmods_cache.skopeo_copy"):
+                with patch(
+                    "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
+                    side_effect=RuntimeError("No layers found in OCI layout"),
+                ):
+                    with self.assertRaises(CiToolError) as context:
+                        inspect_akmods_cache(
+                            image_org="danathar",
+                            source_repo="zfs-aurora-complex-akmods",
+                            fedora_version="43",
+                            kernel_release="6.18.16-200.fc43.x86_64",
+                        )
+
+        self.assertIn("No layers found in OCI layout", str(context.exception))
 
 
 if __name__ == "__main__":

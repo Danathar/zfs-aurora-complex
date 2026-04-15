@@ -4,11 +4,14 @@ description: Load checked-in workflow defaults from ci/defaults.json.
 
 outputs:
   akmods_upstream_repo:
-    description: Pinned akmods fork repository URL.
+    description: Configured akmods fork repository URL.
     value: ${{ steps.defaults.outputs.akmods_upstream_repo }}
   akmods_upstream_ref:
-    description: Pinned akmods fork commit.
+    description: Explicit akmods fork commit pin from defaults; empty when floating resolution is in use.
     value: ${{ steps.defaults.outputs.akmods_upstream_ref }}
+  akmods_upstream_track:
+    description: Floating akmods fork tracking ref resolved via git ls-remote when no explicit pin is set.
+    value: ${{ steps.defaults.outputs.akmods_upstream_track }}
   image_name:
     description: Final image repository name.
     value: ${{ steps.defaults.outputs.image_name }}

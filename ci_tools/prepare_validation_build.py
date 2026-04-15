@@ -23,9 +23,9 @@ def main() -> None:
     write_resolved_build_outputs(inputs)
 
     # Validation builds usually reuse the shared akmods cache, so without this
-    # explicit clone they would never prove that the pinned akmods fork commit is
-    # still fetchable. Running the same clone/verify step here keeps branch and
-    # pull request paths honest with the main schedule/rebuild path.
+    # explicit clone they would never prove that the resolved akmods source
+    # commit is still fetchable. Running the same clone/verify step here keeps
+    # branch and pull request paths honest with the main schedule/rebuild path.
     clone_pinned_akmods()
 
     status = inspect_akmods_cache(

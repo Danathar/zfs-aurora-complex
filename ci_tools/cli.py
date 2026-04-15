@@ -26,6 +26,7 @@ def command_map() -> dict[str, Callable[[], None]]:
     from ci_tools.akmods_clone_pinned import main as akmods_clone_pinned
     from ci_tools.akmods_configure_zfs_target import main as akmods_configure_zfs_target
     from ci_tools.check_akmods_cache import main as check_akmods_cache
+    from ci_tools.classify_akmods_failure import main as classify_akmods_failure
     from ci_tools.export_repo_defaults import main as export_repo_defaults
     from ci_tools.prepare_validation_build import main as prepare_validation_build
     from ci_tools.promote_stable import main as promote_stable
@@ -54,6 +55,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         "akmods-clone-pinned": akmods_clone_pinned,
         "akmods-configure-zfs-target": akmods_configure_zfs_target,
         "akmods-build-and-publish": akmods_build_and_publish,
+        "classify-akmods-failure": classify_akmods_failure,
     }
 
 

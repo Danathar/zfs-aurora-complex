@@ -67,7 +67,7 @@ The main workflow resolves and pins:
 2. build container ref and digest for the akmods job
 3. Fedora major version
 4. every installed kernel found in `/lib/modules`
-5. pinned akmods fork commit
+5. resolved akmods source commit SHA
 6. ZFS minor version line
 
 Those values are written to a saved workflow output file named `build-inputs-<run_id>` so the same input set can be replayed later.
@@ -101,15 +101,23 @@ That check now does one direct inspection path:
 2. unpack its filesystem layers
 3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel
 
-Even when the shared cache is reusable, the workflows still clone the pinned
+Even when the shared cache is reusable, the workflows still clone the resolved
 `Danathar/akmods` commit once per run.
 
 Why:
 
-1. a bad akmods pin can hide for a while if the workflow keeps reusing an older shared cache
-2. cloning the pinned ref is the cheapest way to prove that the configured commit SHA
+1. a stale akmods ref can hide for a while if the workflow keeps reusing an older shared cache
+2. cloning the resolved ref is the cheapest way to prove that the configured commit SHA
    still exists in the configured fork
 3. this keeps branch, pull request, push, and schedule paths honest with each other
+
+The akmods source commit is chosen by a cascade (see [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md)):
+
+1. explicit env override (`AKMODS_UPSTREAM_REF`)
+2. non-empty pin in `ci/defaults.json`
+3. floating `AKMODS_UPSTREAM_TRACK` ref resolved via `git ls-remote` on every run
+
+The default is (3), so the build self-heals once upstream catches up after a transient incompatibility.
 
 If yes:
 
@@ -117,14 +125,14 @@ If yes:
 
 If no:
 
-1. clone the pinned `Danathar/akmods` fork
+1. clone the resolved `Danathar/akmods` fork commit
 2. point its target output to `ghcr.io/<owner>/zfs-aurora-complex-akmods`
 3. build the shared cache image for the supported primary kernel
 
 Important design change:
 
 - this repo no longer patches the cloned akmods `Justfile` at runtime
-- the repo-specific publish-name logic now lives in the pinned `Danathar/akmods`
+- the repo-specific publish-name logic now lives in the `Danathar/akmods`
   fork commit itself
 - that keeps the runtime clone step boring: clone, check out the exact commit, verify the commit SHA, stop
 
@@ -154,11 +162,14 @@ specific container image manifest format produced by buildah.
 
 `build-image.sh` then:
 
-1. enables brew setup/update services via `systemctl preset`
-2. installs `distrobox` via `rpm-ostree install`
-3. runs the ZFS install helper against the resolved akmods cache image reference
-4. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
-5. finalizes the image with `ostree container commit`
+1. installs the committed `cosign.pub` public key into the image trust-material path
+2. enables brew setup/update services via `systemctl preset`
+3. installs `distrobox` via `rpm-ostree install`
+4. runs the ZFS install helper against the resolved akmods cache image reference
+5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
+6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
+7. removes build-only runtime/container state
+8. finalizes the image with `ostree container commit`
 
 The signing-policy step is now a pure Python helper:
 
@@ -261,6 +272,8 @@ Because candidate and stable tags are in the same repository, the trust model is
    - human-authored branch runs push/sign normally
    - the final branch image tag is now composed by a small Python helper
 3. `build-pr.yml`: read-only validation inputs plus no-push build
+4. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers
+5. `akmods-failure-triage.yml`: `workflow_run` visibility workflow that opens, updates, and closes sticky akmods failure issues
 
 ## Design Principles
 

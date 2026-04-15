@@ -16,7 +16,7 @@ inputs:
     description: Shared akmods cache repository name.
     required: true
   akmods_upstream_repo:
-    description: Pinned akmods source repository URL.
+    description: Configured akmods source repository URL.
     required: true
   rebuild_akmods:
     description: Whether this run should rebuild the shared akmods cache even if a reusable cache already exists.
@@ -66,7 +66,7 @@ outputs:
     description: OpenZFS minor line used for this run.
     value: ${{ steps.resolve.outputs.zfs_minor_version }}
   akmods_upstream_ref:
-    description: Pinned akmods source commit used for this run.
+    description: Resolved akmods source commit used for this run.
     value: ${{ steps.resolve.outputs.akmods_upstream_ref }}
   use_input_lock:
     description: Whether lock replay mode was active.
@@ -130,6 +130,7 @@ runs:
         name: build-inputs-${{ github.run_id }}
         path: artifacts/build-inputs.json
         if-no-files-found: error
+        retention-days: 30
 
     # Reuse the shared akmods cache only when it already contains a matching
     # module build for the primary kernel this image is expected to boot with.
@@ -143,10 +144,10 @@ runs:
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 
-    # Always verify that the pinned akmods source commit is fetchable. This
-    # avoids a later surprise where the cache looked reusable, but the source
-    # pin itself was wrong or no longer available.
-    - name: Clone pinned upstream akmods tooling
+    # Always verify that the resolved akmods source commit is fetchable. This
+    # avoids a later surprise where the cache looked reusable, but the resolved
+    # source ref itself was wrong or no longer available.
+    - name: Clone resolved upstream akmods tooling
       shell: bash
       env:
         AKMODS_UPSTREAM_REPO: ${{ inputs.akmods_upstream_repo }}
@@ -170,7 +171,11 @@ runs:
     # This is the expensive step. It builds the precompiled ZFS kernel module
     # cache only when the caller explicitly requested a rebuild or when the
     # existing cache does not match the current primary kernel.
-    - name: Build and publish shared self-hosted ZFS akmods image
+    #
+    # We capture stdout and stderr to a log file so the next step can classify a
+    # failure into `upstream-compat` vs `unknown` without re-running the build.
+    - id: akmods_build
+      name: Build and publish shared self-hosted ZFS akmods image
       if: inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
       shell: bash
       env:
@@ -184,4 +189,34 @@ runs:
         REGISTRY_ACTOR: ${{ inputs.registry_actor }}
         REGISTRY_TOKEN: ${{ inputs.registry_token }}
       run: |
-        python3 -m ci_tools.cli akmods-build-and-publish
+        mkdir -p artifacts
+        set -o pipefail
+        python3 -m ci_tools.cli akmods-build-and-publish 2>&1 | tee artifacts/akmods-build.log
+
+    # Run only when the akmods build step above failed. Classifies the failure
+    # and writes a sticky-issue payload the downstream visibility workflow
+    # consumes. The exit status here is always success — this step only
+    # generates metadata. The earlier job failure still propagates normally.
+    - id: classify_akmods_failure
+      name: Classify akmods build failure
+      if: failure() && steps.akmods_build.outcome == 'failure'
+      shell: bash
+      env:
+        AKMODS_FAILURE_LOG: artifacts/akmods-build.log
+        KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+        AKMODS_UPSTREAM_REF: ${{ steps.resolve.outputs.akmods_upstream_ref }}
+        FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+        AKMODS_FAILURE_PAYLOAD_PATH: artifacts/akmods-failure.json
+      run: |
+        python3 -m ci_tools.cli classify-akmods-failure
+
+    # Upload the classification payload so the workflow_run-triggered
+    # visibility workflow can read it without needing access to job state.
+    - name: Upload akmods failure payload
+      if: failure() && steps.akmods_build.outcome == 'failure'
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      with:
+        name: akmods-failure-${{ github.run_id }}
+        path: artifacts/akmods-failure.json
+        if-no-files-found: warn
+        retention-days: 30
