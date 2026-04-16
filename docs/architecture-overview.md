@@ -199,7 +199,7 @@ Instead, the helper does this:
 3. require one matching `kmod-zfs` RPM for that kernel
 4. install ZFS userspace RPMs and that one primary `kmod-zfs` through `rpm-ostree`
 5. run `depmod -a <kernel>` for the supported primary kernel
-6. fail the build if that supported kernel does not end up with `zfs.ko`
+6. fail the build if that supported kernel does not end up with a `zfs.ko` module (the check accepts uncompressed `zfs.ko` as well as Fedora's compressed forms `zfs.ko.xz` and `zfs.ko.zst`)
 
 Why this is the chosen tradeoff:
 
