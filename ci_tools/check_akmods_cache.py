@@ -14,14 +14,13 @@ from pathlib import Path
 
 from ci_tools.common import (
     CiToolError,
-    load_layer_files_from_oci_layout,
     normalize_owner,
     require_env,
     skopeo_copy,
     skopeo_exists,
-    unpack_layer_tarballs,
     write_github_outputs,
 )
+from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
 
 @dataclass(frozen=True)

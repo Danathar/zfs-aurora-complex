@@ -232,6 +232,56 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
 
         self.assertEqual(depmod_calls, [["depmod", "-a", "6.18.16-200.fc43.x86_64"]])
 
+    def test_validate_installed_modules_accepts_compressed_module(self) -> None:
+        for suffix in ("zfs.ko.xz", "zfs.ko.zst"):
+            with self.subTest(module=suffix):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    modules_root = Path(temp_dir)
+                    module_dir = modules_root / "6.18.16-200.fc43.x86_64" / "extra" / "zfs"
+                    module_dir.mkdir(parents=True, exist_ok=True)
+                    (module_dir / suffix).touch()
+
+                    depmod_calls: list[list[str]] = []
+
+                    helper.validate_installed_modules(
+                        "6.18.16-200.fc43.x86_64",
+                        modules_root=modules_root,
+                        run_cmd=lambda args, **_kwargs: depmod_calls.append(args) or "",
+                    )
+
+                    self.assertEqual(
+                        depmod_calls, [["depmod", "-a", "6.18.16-200.fc43.x86_64"]]
+                    )
+
+    def test_validate_installed_modules_rejects_when_no_module_present(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            modules_root = Path(temp_dir)
+            module_dir = modules_root / "6.18.16-200.fc43.x86_64" / "extra" / "zfs"
+            module_dir.mkdir(parents=True, exist_ok=True)
+
+            with self.assertRaisesRegex(RuntimeError, "do not cover the supported kernel"):
+                helper.validate_installed_modules(
+                    "6.18.16-200.fc43.x86_64",
+                    modules_root=modules_root,
+                    run_cmd=lambda _args, **_kwargs: "",
+                )
+
+    def test_kmod_kernel_release_accepts_compressed_payload(self) -> None:
+        for payload_name in ("zfs.ko", "zfs.ko.xz", "zfs.ko.zst"):
+            with self.subTest(payload=payload_name):
+                payload = (
+                    "/usr/share/doc/kmod-zfs-README\n"
+                    f"/lib/modules/6.18.16-200.fc43.x86_64/extra/zfs/{payload_name}\n"
+                )
+                original_run_cmd = helper._run_cmd
+                helper._run_cmd = lambda _args, **_kwargs: payload
+                try:
+                    kernel_release = helper.kmod_kernel_release(Path("/tmp/kmod-zfs.rpm"))
+                finally:
+                    helper._run_cmd = original_run_cmd
+
+                self.assertEqual(kernel_release, "6.18.16-200.fc43.x86_64")
+
 
 if __name__ == "__main__":
     unittest.main()

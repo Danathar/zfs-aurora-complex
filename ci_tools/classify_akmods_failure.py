@@ -49,7 +49,9 @@ def classify_log_text(log_text: str) -> tuple[str, list[str]]:
 
     Returns:
     - failure_kind: one of the FAILURE_KIND_* constants
-    - matched_patterns: list of pattern source strings that matched (first-match-wins subset)
+    - matched_patterns: every upstream-compat pattern whose regex found at least
+      one match in the log body, preserving the declaration order of
+      `UPSTREAM_COMPAT_PATTERNS`
     """
     if not log_text:
         return FAILURE_KIND_UNKNOWN, []

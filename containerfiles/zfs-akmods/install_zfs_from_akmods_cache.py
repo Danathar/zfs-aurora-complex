@@ -34,6 +34,11 @@ EXTRACT_ROOT = Path("/tmp")
 RPM_SEARCH_ROOT = EXTRACT_ROOT / "rpms" / "kmods" / "zfs"
 MODULES_ROOT = Path("/lib/modules")
 DEFAULT_AKMODS_IMAGE_TEMPLATE = "ghcr.io/danathar/zfs-aurora-complex-akmods:main-{fedora}"
+# Fedora has shipped kmod payloads uncompressed (`zfs.ko`) and compressed
+# (`zfs.ko.xz`, `zfs.ko.zst`) at different times. Accept any of those so a
+# kernel packaging change upstream doesn't silently break this install path.
+ZFS_KO_PAYLOAD_RE = re.compile(r"^/lib/modules/([^/]+)/extra/zfs/zfs\.ko(?:\.[a-z]+)?$")
+ZFS_KO_DISK_GLOB = "zfs.ko*"
 
 
 @dataclass(frozen=True)
@@ -189,7 +194,7 @@ def kmod_kernel_release(rpm_path: Path) -> str:
 
     payload_listing = _run_cmd(["rpm", "-qpl", str(rpm_path)])
     for line in payload_listing.splitlines():
-        match = re.match(r"^/lib/modules/([^/]+)/extra/zfs/zfs\.ko$", line)
+        match = ZFS_KO_PAYLOAD_RE.match(line)
         if match:
             return match.group(1)
     raise RuntimeError(f"Could not determine kernel release for {rpm_path}")
@@ -293,8 +298,13 @@ def validate_installed_modules(
     target image kernel, so we must run `depmod` manually for that release.
     """
 
-    module_path = modules_root / kernel_release / "extra" / "zfs" / "zfs.ko"
-    if not module_path.is_file():
+    module_dir = modules_root / kernel_release / "extra" / "zfs"
+    installed_modules = [
+        candidate
+        for candidate in module_dir.glob(ZFS_KO_DISK_GLOB)
+        if candidate.is_file()
+    ]
+    if not installed_modules:
         raise RuntimeError(
             "No ZFS module for supported primary kernel "
             f"{kernel_release}. Cached akmods do not cover the supported kernel; rebuild akmods."

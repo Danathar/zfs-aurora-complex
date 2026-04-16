@@ -45,6 +45,11 @@ def _is_safe_tar_member(member: tarfile.TarInfo) -> bool:
     members should never escape it. An attacker-controlled layer could ship a
     symlink or hardlink whose `name` is safe but whose `linkname` points out of
     the destination, so the link target is validated too.
+
+    Note: `extractall(..., filter='data')` below is the load-bearing security
+    check (Python 3.12+ rejects the same unsafe cases and more). This explicit
+    pre-scan exists to produce a clearer error message with the offending
+    member name before the extractor runs.
     """
 
     if not _is_safe_tar_path(member.name):
