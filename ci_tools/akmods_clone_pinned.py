@@ -17,12 +17,18 @@ from ci_tools.common import CiToolError, require_env_or_default, run_cmd
 AKMODS_WORKTREE = Path("/tmp/akmods")
 
 
-def main() -> None:
-    # The repo and SHA live in checked-in defaults, but workflow env can still
-    # override them for one-off testing. That keeps the normal path reviewable
-    # while preserving an escape hatch for manual validation.
-    upstream_repo = require_env_or_default("AKMODS_UPSTREAM_REPO")
-    upstream_ref = require_env_or_default("AKMODS_UPSTREAM_REF")
+def clone_pinned(upstream_repo: str, upstream_ref: str) -> None:
+    """
+    Clone exactly `upstream_ref` from `upstream_repo` into AKMODS_WORKTREE.
+
+    Callers pass the already-resolved repo URL and commit SHA so this step
+    never re-reads env and cannot silently pick up a different value.
+    """
+
+    if not upstream_repo:
+        raise CiToolError("clone_pinned requires a non-empty upstream_repo")
+    if not upstream_ref:
+        raise CiToolError("clone_pinned requires a non-empty upstream_ref")
 
     # Start from a clean checkout each run so there is no leftover state from an
     # earlier build. The later configure/build helpers expect `/tmp/akmods` to
@@ -44,6 +50,15 @@ def main() -> None:
         raise CiToolError(f"Akmods ref mismatch: expected {upstream_ref}, got {resolved_ref}")
 
     print(f"Using resolved akmods ref: {resolved_ref}")
+
+
+def main() -> None:
+    # The repo and SHA live in checked-in defaults, but workflow env can still
+    # override them for one-off testing. That keeps the normal path reviewable
+    # while preserving an escape hatch for manual validation.
+    upstream_repo = require_env_or_default("AKMODS_UPSTREAM_REPO")
+    upstream_ref = require_env_or_default("AKMODS_UPSTREAM_REF")
+    clone_pinned(upstream_repo, upstream_ref)
 
 
 if __name__ == "__main__":

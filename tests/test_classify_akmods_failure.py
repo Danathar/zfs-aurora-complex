@@ -50,6 +50,27 @@ class ClassifyLogTextTests(unittest.TestCase):
         self.assertEqual(kind, FAILURE_KIND_UNKNOWN)
         self.assertEqual(matched, [])
 
+    def test_multi_pattern_log_returns_all_matches_in_declaration_order(self) -> None:
+        # A realistic kernel-API-drift failure hits several patterns at once.
+        # The classifier returns every match in declaration order so future
+        # readers can see which surfaces of the failure tripped the allowlist.
+        log = (
+            "module.c:123: error: implicit declaration of function 'folio_wait_writeback'\n"
+            "module.c:456: error: 'struct bio' has no member named 'bi_disk'\n"
+            "module.c:789: error: conflicting types for 'zfs_setattr'\n"
+        )
+        kind, matched = classify_log_text(log)
+
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertEqual(
+            matched,
+            [
+                "implicit declaration of function",
+                "has no member named",
+                "conflicting types for",
+            ],
+        )
+
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):
     def test_payload_key_is_stable_per_kernel_and_ref(self) -> None:

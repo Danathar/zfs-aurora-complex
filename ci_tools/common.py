@@ -16,8 +16,6 @@ import subprocess
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
-
 
 class CiToolError(RuntimeError):
     """Raised when a workflow helper script hits a known error condition."""
