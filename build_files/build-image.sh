@@ -2,12 +2,12 @@
 #
 # Script: build_files/build-image.sh
 # What: Applies all image customizations in one place during the native build.
-# Doing: Enables brew services, installs distrobox, installs cached ZFS RPMs,
-#        writes the in-image signing policy, and commits the ostree container.
+# Doing: Enables brew services, installs cached ZFS RPMs, writes the in-image
+#        signing policy, and commits the ostree container.
 # Why: A separate build script is easier to read than one large Containerfile
 #      shell block, and it keeps the teaching comments close to the steps.
-# Goal: Produce one bootable Aurora image with ZFS, distrobox, brew, and
-#       repository trust configuration.
+# Goal: Produce one bootable Aurora image with ZFS, upstream Aurora defaults,
+#       brew, and repository trust configuration.
 #
 set -euo pipefail
 
@@ -32,9 +32,9 @@ install -m 0644 /cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 /usr/bin/systemctl preset brew-update.timer
 /usr/bin/systemctl preset brew-upgrade.timer
 
-# `rpm-ostree install` is the supported way to add distrobox into an ostree
-# image during container composition.
-rpm-ostree install distrobox
+# Distrobox is already included by upstream Aurora. If this image needs to add
+# Fedora RPM packages during the container build, prefer `dnf5 -y install ...`.
+# `rpm-ostree install distrobox`
 
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
 python3 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py

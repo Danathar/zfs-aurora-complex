@@ -14,7 +14,7 @@ GitHub Actions workflow: `build.yml`
 This repository builds a signed Aurora image with:
 
 - ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
-- `distrobox`
+- Distrobox inherited from the upstream Aurora image
 - Homebrew from the official `ghcr.io/ublue-os/brew:latest` OCI image
 - a single-repository signing policy for future signed `bootc upgrade` flows
 
@@ -192,7 +192,7 @@ At a high level, the final image build now works like this:
 
 1. `Containerfile` starts from `ghcr.io/ublue-os/aurora`
 2. `COPY --from=ghcr.io/ublue-os/brew:latest /system_files /` imports the official brew payload
-3. `build_files/build-image.sh` enables the brew services/timers, installs `distrobox`, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
+3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
 4. `bootc container lint` validates the final image
 
 Three workflow-side simplifications now support that image build:

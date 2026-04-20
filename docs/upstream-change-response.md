@@ -77,7 +77,7 @@ Repair path:
 Symptoms:
 
 - `buildah-build` fails during `Containerfile` execution
-- `rpm-ostree install distrobox` fails
+- a build-time `dnf5 install` package addition fails
 - `install_zfs_from_akmods_cache.py` fails
 - `bootc container lint` fails
 
@@ -92,7 +92,7 @@ Common cases:
 1. the base image no longer includes a command the helper expected
 2. the shared akmods cache contains out-of-date or malformed RPMs
 3. brew OCI payload layout changed upstream
-4. `rpm-ostree` behavior changed in the builder environment
+4. `dnf5` or `rpm-ostree` behavior changed in the builder environment
 
 Repair path:
 

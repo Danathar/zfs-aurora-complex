@@ -164,12 +164,16 @@ specific container image manifest format produced by buildah.
 
 1. installs the committed `cosign.pub` public key into the image trust-material path
 2. enables brew setup/update services via `systemctl preset`
-3. installs `distrobox` via `rpm-ostree install`
+3. keeps Distrobox from the upstream Aurora image
 4. runs the ZFS install helper against the resolved akmods cache image reference
 5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
 6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
 7. removes build-only runtime/container state
 8. finalizes the image with `ostree container commit`
+
+For future Fedora package additions during image composition, use
+`dnf5 -y install ...` in the container build. Distrobox does not need a local
+install step here because Aurora already includes it.
 
 The signing-policy step is now a pure Python helper:
 
