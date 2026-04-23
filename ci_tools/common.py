@@ -16,13 +16,14 @@ import subprocess
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from shared.kernel_release import kernel_release_sort_key
+
 
 class CiToolError(RuntimeError):
     """Raised when a workflow helper script hits a known error condition."""
 
 
 FEDORA_FROM_KERNEL_RE = re.compile(r".*fc([0-9]+).*")
-NATURAL_SORT_SPLIT_RE = re.compile(r"([0-9]+)")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPO_DEFAULTS_FILE = REPO_ROOT / "ci" / "defaults.json"
 
@@ -249,20 +250,9 @@ def skopeo_copy(
     run_cmd(command, capture_output=False)
 
 
-def natural_sort_key(value: str) -> list[int | str]:
-    """
-    Return a natural-sort key so kernel strings order numerically where needed.
-
-    Example:
-    - `6.18.9-200.fc43.x86_64` sorts before `6.18.10-200.fc43.x86_64`
-    """
-    parts = NATURAL_SORT_SPLIT_RE.split(value)
-    return [int(part) if part.isdigit() else part for part in parts]
-
-
 def sort_kernel_releases(kernel_releases: Sequence[str]) -> list[str]:
     """Return unique kernel release strings in stable natural-sort order."""
-    return sorted(dict.fromkeys(kernel_releases), key=natural_sort_key)
+    return sorted(dict.fromkeys(kernel_releases), key=kernel_release_sort_key)
 
 
 def extract_fedora_version(kernel_release: str) -> str:

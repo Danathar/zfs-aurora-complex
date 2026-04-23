@@ -26,6 +26,7 @@ IMAGE_ROOT = Path(__file__).resolve().parents[2]
 if str(IMAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(IMAGE_ROOT))
 
+from shared.kernel_release import kernel_release_sort_key
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
 
@@ -200,21 +201,6 @@ def kmod_kernel_release(rpm_path: Path) -> str:
     raise RuntimeError(f"Could not determine kernel release for {rpm_path}")
 
 
-def version_sort_key(value: str) -> list[tuple[int, object]]:
-    """
-    Natural-sort key for kernel release strings.
-
-    Kernel releases mix digits and text. Splitting them keeps the "newest"
-    primary-kernel choice stable without shelling out to `sort -V`.
-    """
-
-    parts = re.findall(r"\d+|[^\d]+", value)
-    return [
-        (0, int(part)) if part.isdigit() else (1, part)
-        for part in parts
-    ]
-
-
 def build_install_plan(
     image_kernels: list[str],
     zfs_rpms: list[Path],
@@ -255,7 +241,7 @@ def build_install_plan(
             )
         kmod_rpm_by_kernel[kernel_release] = rpm_path
 
-    supported_kernel_release = sorted(image_kernels, key=version_sort_key)[-1]
+    supported_kernel_release = sorted(image_kernels, key=kernel_release_sort_key)[-1]
     supported_kmod_rpm = kmod_rpm_by_kernel.get(supported_kernel_release)
     if supported_kmod_rpm is None:
         raise RuntimeError(
@@ -328,7 +314,7 @@ def main() -> None:
             "Detected multiple kernels in the base image: "
             + " ".join(image_kernels)
             + ". This repo intentionally supports only the primary kernel "
-            f"{sorted(image_kernels, key=version_sort_key)[-1]}; recovery from a bad image should use image rollback."
+            f"{sorted(image_kernels, key=kernel_release_sort_key)[-1]}; recovery from a bad image should use image rollback."
         )
     copy_oci_layout_from_registry(image_ref)
     layer_files = load_layer_files_from_oci_layout(LAYOUT_DIR)
