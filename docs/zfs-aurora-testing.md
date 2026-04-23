@@ -55,6 +55,14 @@ The repo then makes one explicit policy choice:
 3. require ZFS support only for that supported kernel
 4. use image rollback, not an older bundled kernel inside the same image, as the recovery path
 
+Maintenance note:
+
+1. as of April 23, 2026, kernel-release ordering is implemented in one shared helper at
+   [`shared/kernel_release.py`](../shared/kernel_release.py)
+2. both CI input resolution and the in-image ZFS install helper use that same helper now
+3. this was a refactor to remove drift between two equivalent implementations, not a change to the
+   primary-kernel policy described above
+
 ### 2. Validate Existing Shared Akmods Cache
 
 Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image already contains a matching `kmod-zfs-<kernel_release>` RPM for the supported primary kernel.
