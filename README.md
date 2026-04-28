@@ -265,6 +265,7 @@ Why this image flow stays easier to reason about:
 ```bash
 rpm -q kmod-zfs
 modinfo zfs | head
+lsmod | grep '^zfs'
 zpool --version
 zfs --version
 distrobox --version

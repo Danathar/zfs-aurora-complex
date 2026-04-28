@@ -39,6 +39,12 @@ install -m 0644 /cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
 python3 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 
+# Load the ZFS kernel module at boot so the installed userspace tools can report
+# both userspace and kernel-module versions without requiring a manual modprobe.
+install -D -m 0644 \
+  /files/usr/lib/modules-load.d/zfs.conf \
+  /usr/lib/modules-load.d/zfs.conf
+
 # Write repository-specific trust policy into the final image so future signed
 # updates from the same GitHub Container Registry (GHCR) path work without extra
 # host-side repair steps.

@@ -121,6 +121,11 @@ That means there is no generated workspace and no per-run file mutation layer.
 `AKMODS_IMAGE_TEMPLATE` is still available as a `Containerfile` fallback for
 local builds that do not pass an exact cache image ref.
 
+The image also installs [`files/usr/lib/modules-load.d/zfs.conf`](../files/usr/lib/modules-load.d/zfs.conf)
+so `systemd-modules-load` loads the ZFS kernel module during boot. That makes
+post-boot validation report both the userspace and kernel-module versions
+without requiring a manual `modprobe zfs`.
+
 ### 5. Sign Published Tags
 
 Tags published outside pull request validation are signed after push by resolving the pushed tag to a digest and then signing that digest.
