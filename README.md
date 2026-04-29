@@ -4,6 +4,24 @@
 
 GitHub Actions workflow: `build.yml`
 
+> [!IMPORTANT]
+> **First switch command for this image:**
+>
+> ```bash
+> sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
+> sudo systemctl reboot
+> ```
+>
+> Do not use plain `bootc switch` for the first move from stock Aurora into this
+> image. This image installs a repository-specific signing policy for
+> `ghcr.io/danathar/zfs-aurora-complex`, so the first switch should record the
+> deployment as policy-verified. After rebooting into this image family, future
+> updates should be normal:
+>
+> ```bash
+> sudo bootc upgrade
+> ```
+
 > [!NOTE]
 > This repository was developed with significant AI assistance and serves as a **reference implementation** demonstrating production-grade CI/CD patterns for building bootable container images with ZFS support. It covers candidate-first promotion, input pinning, digest resolution, shared akmods caching, image signing, and comprehensive unit testing.
 >
@@ -53,7 +71,7 @@ So the `main` GitHub Actions workflow does this:
 3. build a candidate image tag in the same repository
 4. sign that candidate digest
 5. promote the tested candidate digest to `latest` and to an immutable audit tag
-6. sign the promoted `latest` digest
+6. rely on the candidate digest signature after promotion, because `latest` resolves to the same digest
 
 If candidate fails, `latest` does not move.
 
@@ -275,9 +293,16 @@ Fresh stock Aurora can switch to the published image after the GitHub workflow
 has produced a signed `latest` tag:
 
 ```bash
-sudo bootc switch ghcr.io/danathar/zfs-aurora-complex:latest
-systemctl reboot
+sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
+sudo systemctl reboot
 ```
+
+That `--enforce-container-sigpolicy` flag is intentional. It makes the first
+custom-image deployment use the in-image container signature policy instead of
+recording the origin as an unverified registry image.
+
+If a test VM was already switched with plain `bootc switch`, switch it again
+with the command above and reboot before relying on `bootc upgrade`.
 
 Why this image flow stays easier to reason about:
 
