@@ -40,6 +40,13 @@ DEFAULT_AKMODS_IMAGE_TEMPLATE = "ghcr.io/danathar/zfs-aurora-complex-akmods:main
 # kernel packaging change upstream doesn't silently break this install path.
 ZFS_KO_PAYLOAD_RE = re.compile(r"^/lib/modules/([^/]+)/extra/zfs/zfs\.ko(?:\.[a-z]+)?$")
 ZFS_KO_DISK_GLOB = "zfs.ko*"
+SECRET_ARG_FLAGS = {
+    "--creds",
+    "--src-creds",
+    "--dest-creds",
+    "--registry-username",
+    "--registry-password",
+}
 
 
 @dataclass(frozen=True)
@@ -83,17 +90,41 @@ def _run_cmd(
         stderr = result.stderr.strip() if result.stderr else ""
         stdout = result.stdout.strip() if result.stdout else ""
         detail = stderr or stdout or f"exit {result.returncode}"
-        raise RuntimeError(f"Command failed: {' '.join(args)}: {detail}")
+        command = " ".join(_redact_command_args(args))
+        raise RuntimeError(f"Command failed: {command}: {detail}")
     return result.stdout if capture_output else ""
+
+
+def _redact_command_args(args: list[str]) -> list[str]:
+    redacted: list[str] = []
+    redact_next = False
+    for arg in args:
+        if redact_next:
+            redacted.append("***REDACTED***")
+            redact_next = False
+            continue
+        flag, separator, _value = arg.partition("=")
+        if flag in SECRET_ARG_FLAGS:
+            if separator:
+                redacted.append(f"{flag}=***REDACTED***")
+            else:
+                redacted.append(arg)
+                redact_next = True
+            continue
+        redacted.append(arg)
+    return redacted
 
 
 def image_kernels_from_modules_root(modules_root: Path = MODULES_ROOT) -> list[str]:
     """Return the kernel release directories already present in the base image."""
 
     kernels = sorted(
-        entry.name
-        for entry in modules_root.iterdir()
-        if entry.is_dir()
+        (
+            entry.name
+            for entry in modules_root.iterdir()
+            if entry.is_dir()
+        ),
+        key=kernel_release_sort_key,
     )
     if not kernels:
         raise RuntimeError(f"No kernel directories found in {modules_root}")

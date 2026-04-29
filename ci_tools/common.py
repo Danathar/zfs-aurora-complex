@@ -8,11 +8,11 @@ Goal: Keep behavior consistent across all helper modules.
 
 from __future__ import annotations
 
-from functools import lru_cache
 import json
 import os
 import re
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -26,6 +26,13 @@ class CiToolError(RuntimeError):
 FEDORA_FROM_KERNEL_RE = re.compile(r".*fc([0-9]+).*")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPO_DEFAULTS_FILE = REPO_ROOT / "ci" / "defaults.json"
+SECRET_ARG_FLAGS = {
+    "--creds",
+    "--src-creds",
+    "--dest-creds",
+    "--registry-username",
+    "--registry-password",
+}
 
 
 def require_env(name: str) -> str:
@@ -41,7 +48,6 @@ def optional_env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-@lru_cache(maxsize=1)
 def load_repo_defaults() -> dict[str, str]:
     """
     Load checked-in repository defaults from `ci/defaults.json`.
@@ -61,6 +67,27 @@ def load_repo_defaults() -> dict[str, str]:
     for key, value in data.items():
         defaults[str(key)] = str(value)
     return defaults
+
+
+def redact_command_args(args: Sequence[str]) -> list[str]:
+    """Return command args with known secret values replaced for error messages."""
+    redacted: list[str] = []
+    redact_next = False
+    for arg in args:
+        if redact_next:
+            redacted.append("***REDACTED***")
+            redact_next = False
+            continue
+        flag, separator, _value = arg.partition("=")
+        if flag in SECRET_ARG_FLAGS:
+            if separator:
+                redacted.append(f"{flag}=***REDACTED***")
+            else:
+                redacted.append(arg)
+                redact_next = True
+            continue
+        redacted.append(arg)
+    return redacted
 
 
 def require_env_or_default(name: str) -> str:
@@ -112,7 +139,8 @@ def run_cmd(
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
         details = stderr or stdout or str(exc)
-        raise CiToolError(f"Command failed: {' '.join(args)}\n{details}") from exc
+        command = " ".join(redact_command_args(args))
+        raise CiToolError(f"Command failed: {command}\n{details}") from exc
 
     if not capture_output:
         return ""
@@ -158,7 +186,8 @@ def run_json_cmd(args: Sequence[str]) -> dict:
     try:
         return json.loads(output)
     except json.JSONDecodeError as exc:
-        raise CiToolError(f"Expected JSON from command: {' '.join(args)}") from exc
+        command = " ".join(redact_command_args(args))
+        raise CiToolError(f"Expected JSON from command: {command}") from exc
 
 
 def write_github_outputs(values: Mapping[str, str]) -> None:
@@ -171,7 +200,7 @@ def write_github_outputs(values: Mapping[str, str]) -> None:
     output_file = require_env("GITHUB_OUTPUT")
     with open(output_file, "a", encoding="utf-8") as handle:
         for key, value in values.items():
-            handle.write(f"{key}={value}\n")
+            _write_github_file_value(handle, key, value)
 
 
 def write_github_env(values: Mapping[str, str]) -> None:
@@ -185,7 +214,14 @@ def write_github_env(values: Mapping[str, str]) -> None:
     env_file = require_env("GITHUB_ENV")
     with open(env_file, "a", encoding="utf-8") as handle:
         for key, value in values.items():
-            handle.write(f"{key}={value}\n")
+            _write_github_file_value(handle, key, value)
+
+
+def _write_github_file_value(handle, key: str, value: str) -> None:
+    delimiter = f"EOF_{uuid.uuid4().hex}"
+    while delimiter in value:
+        delimiter = f"EOF_{uuid.uuid4().hex}"
+    handle.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def normalize_owner(owner: str) -> str:

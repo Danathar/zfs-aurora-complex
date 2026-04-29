@@ -46,7 +46,7 @@ If a term is unfamiliar, check the shared glossary first:
    - builds candidate tags, branch tags, branch-safe prefixes, and registry context values
 2. [`ci_tools/promote_stable.py`](../ci_tools/promote_stable.py)
 3. [`ci_tools/sign_image.py`](../ci_tools/sign_image.py)
-   - used by branch/main publish flows when the signing secret is present
+   - used by branch/main publish flows; publication requires `SIGNING_SECRET`
 4. [`.github/actions/`](../.github/actions)
    - local composite actions used to keep the workflow files readable
 

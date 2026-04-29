@@ -25,7 +25,6 @@ If a term is unfamiliar, check the shared glossary first:
 | Compute candidate image tag | `compute-candidate-tag` | `ci_tools.tagging_context` |
 | Promote candidate digest to latest and audit tags | `promote-stable` | `ci_tools.promote_stable` |
 | Sign one published image tag by digest | `sign-image` | `ci_tools.sign_image` |
-Note: branch workflows skip this step when `SIGNING_SECRET` is unavailable, which is expected for some automation actors such as Dependabot.
 | Clone resolved upstream akmods tooling and verify the exact commit SHA | `akmods-clone-pinned` | `ci_tools.akmods_clone_pinned` |
 | Configure target image path for the akmods build wrapper | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
 | Build and publish shared self-hosted ZFS akmods image | `akmods-build-and-publish` | `ci_tools.akmods_build_and_publish` |
@@ -60,4 +59,4 @@ These composite actions keep the workflow files focused on job order and data fl
 - [`install-signing-tools`](../actions/install-signing-tools/action.yml)
   - installs `skopeo` and `cosign`
 - [`publish-native-image`](../actions/publish-native-image/action.yml)
-  - logs in to GHCR, pushes one tag, and signs it when a private key is available
+  - requires `SIGNING_SECRET`, logs in to GHCR, pushes one tag, and signs the pushed digest

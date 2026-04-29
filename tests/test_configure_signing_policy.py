@@ -65,10 +65,39 @@ class ConfigureSigningPolicyTests(unittest.TestCase):
                 str(key_path),
             )
 
-            registry_file = registries_dir / "zfs-aurora-complex.yaml"
+            registry_file = registries_dir / "ghcr.io-example-zfs-aurora-complex.yaml"
             registry_text = registry_file.read_text(encoding="utf-8")
             self.assertIn("ghcr.io/example/zfs-aurora-complex", registry_text)
             self.assertIn("use-sigstore-attachments: true", registry_text)
+
+    def test_registry_file_path_uses_full_repo_path(self) -> None:
+        module = load_module()
+        registries_dir = Path("/tmp/registries.d")
+
+        first = module.registry_file_path(
+            image_repo="ghcr.io/danathar/zfs-aurora-complex",
+            registries_dir=registries_dir,
+        )
+        second = module.registry_file_path(
+            image_repo="ghcr.io/other/zfs-aurora-complex",
+            registries_dir=registries_dir,
+        )
+
+        self.assertEqual(first.name, "ghcr.io-danathar-zfs-aurora-complex.yaml")
+        self.assertEqual(second.name, "ghcr.io-other-zfs-aurora-complex.yaml")
+        self.assertNotEqual(first, second)
+
+    def test_registry_file_path_preserves_dots_and_hyphens(self) -> None:
+        module = load_module()
+        registry_file = module.registry_file_path(
+            image_repo="registry.example.io/org-name/zfs.aurora-complex",
+            registries_dir=Path("/tmp/registries.d"),
+        )
+
+        self.assertEqual(
+            registry_file.name,
+            "registry.example.io-org-name-zfs.aurora-complex.yaml",
+        )
 
 
 if __name__ == "__main__":

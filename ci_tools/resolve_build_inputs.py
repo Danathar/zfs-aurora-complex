@@ -29,7 +29,8 @@ from ci_tools.common import (
     write_github_outputs,
 )
 
-TAG_FROM_REF_RE = re.compile(r"^[^@]+:([^/@]+)$")
+TAG_FROM_REF_RE = re.compile(r"^[^@]+:([^/:@]+)$")
+GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DATE_STAMPED_TAG_RE = re.compile(r"-[0-9]{8}(\.[0-9]+)?$")
 PLAIN_VERSION_LABEL_RE = re.compile(r"^(?P<fedora>[0-9]+)\.(?P<stamp>[0-9]{8}(?:\.[0-9]+)?)$")
 PREFIXED_VERSION_LABEL_RE = re.compile(
@@ -99,6 +100,14 @@ def extract_source_tag(image_ref: str) -> str:
     """Return the tag from an image ref like `name:tag`, or empty string."""
     match = TAG_FROM_REF_RE.match(image_ref)
     return match.group(1) if match else ""
+
+
+def _resolve_akmods_ref_value(value: str, repo_url: str) -> str:
+    if GIT_SHA_RE.match(value):
+        return value
+    if not repo_url:
+        raise CiToolError("AKMODS_UPSTREAM_REPO is required to resolve non-SHA AKMODS_UPSTREAM_REF")
+    return git_ls_remote_resolve(repo_url, value)
 
 
 def choose_base_image_tag(
@@ -257,14 +266,15 @@ def _resolve_default_akmods_ref() -> str:
     to whatever commit the tracking ref currently points at, so a red build caused
     by a transient upstream mismatch clears itself once upstream catches up.
     """
+    defaults = load_repo_defaults()
+    repo_url = optional_env("AKMODS_UPSTREAM_REPO") or defaults.get("AKMODS_UPSTREAM_REPO", "").strip()
     explicit = optional_env("DEFAULT_AKMODS_REF") or optional_env("AKMODS_UPSTREAM_REF")
     if explicit:
-        return explicit
+        return _resolve_akmods_ref_value(explicit, repo_url)
 
-    defaults = load_repo_defaults()
     pinned = defaults.get("AKMODS_UPSTREAM_REF", "").strip()
     if pinned:
-        return pinned
+        return _resolve_akmods_ref_value(pinned, repo_url)
 
     track = optional_env("AKMODS_UPSTREAM_TRACK") or defaults.get("AKMODS_UPSTREAM_TRACK", "").strip()
     if not track:
@@ -273,7 +283,6 @@ def _resolve_default_akmods_ref() -> str:
             "ci/defaults.json) or AKMODS_UPSTREAM_TRACK for floating resolution."
         )
 
-    repo_url = optional_env("AKMODS_UPSTREAM_REPO") or defaults.get("AKMODS_UPSTREAM_REPO", "").strip()
     if not repo_url:
         raise CiToolError("AKMODS_UPSTREAM_REPO is required to resolve AKMODS_UPSTREAM_TRACK")
 

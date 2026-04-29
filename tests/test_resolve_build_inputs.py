@@ -19,6 +19,7 @@ from ci_tools.common import CiToolError, sort_kernel_releases
 from ci_tools.resolve_build_inputs import (
     _resolve_default_akmods_ref,
     choose_base_image_tag,
+    extract_source_tag,
     resolve_configured_inputs,
 )
 
@@ -127,6 +128,23 @@ class SortKernelReleasesTests(unittest.TestCase):
         )
 
 
+class ExtractSourceTagTests(unittest.TestCase):
+    def test_extract_source_tag_from_standard_tagged_ref(self) -> None:
+        self.assertEqual(extract_source_tag("ghcr.io/x/y:latest"), "latest")
+
+    def test_extract_source_tag_returns_empty_for_untagged_ref(self) -> None:
+        self.assertEqual(extract_source_tag("ghcr.io/x/y"), "")
+
+    def test_extract_source_tag_rejects_host_port_only_ref(self) -> None:
+        self.assertEqual(extract_source_tag("localhost:5000/x/y"), "")
+
+    def test_extract_source_tag_accepts_tag_after_host_port(self) -> None:
+        self.assertEqual(extract_source_tag("localhost:5000/x/y:latest"), "latest")
+
+    def test_extract_source_tag_rejects_digest_ref(self) -> None:
+        self.assertEqual(extract_source_tag("ghcr.io/x/y@sha256:abc"), "")
+
+
 class ResolveDefaultAkmodsRefTests(unittest.TestCase):
     """Cascade: explicit env > defaults-file pin > git ls-remote against tracking ref."""
 
@@ -140,7 +158,7 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
         wipe.update(overrides)
         return wipe
 
-    def test_env_ref_wins_over_everything(self) -> None:
+    def test_env_sha_ref_wins_over_everything(self) -> None:
         defaults = {
             "AKMODS_UPSTREAM_REF": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             "AKMODS_UPSTREAM_TRACK": "main",
@@ -153,7 +171,39 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
         self.assertEqual(resolved, "cafef00d" * 5)
         ls_remote.assert_not_called()
 
-    def test_defaults_file_pin_used_when_env_empty(self) -> None:
+    def test_env_branch_ref_resolves_with_ls_remote(self) -> None:
+        defaults = {
+            "AKMODS_UPSTREAM_REF": "",
+            "AKMODS_UPSTREAM_TRACK": "main",
+            "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
+        }
+        with patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="main"), clear=False):
+            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
+                with patch(
+                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                    return_value="b" * 40,
+                ) as ls_remote:
+                    resolved = _resolve_default_akmods_ref()
+        self.assertEqual(resolved, "b" * 40)
+        ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "main")
+
+    def test_env_tag_ref_resolves_with_ls_remote(self) -> None:
+        defaults = {
+            "AKMODS_UPSTREAM_REF": "",
+            "AKMODS_UPSTREAM_TRACK": "main",
+            "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
+        }
+        with patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="v2.4.0"), clear=False):
+            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
+                with patch(
+                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                    return_value="c" * 40,
+                ) as ls_remote:
+                    resolved = _resolve_default_akmods_ref()
+        self.assertEqual(resolved, "c" * 40)
+        ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "v2.4.0")
+
+    def test_defaults_file_sha_pin_used_when_env_empty(self) -> None:
         defaults = {
             "AKMODS_UPSTREAM_REF": "0e06cd70879aa5063c4193710d8c7e37bbc2ab57",
             "AKMODS_UPSTREAM_TRACK": "main",
@@ -165,6 +215,22 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
                     resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "0e06cd70879aa5063c4193710d8c7e37bbc2ab57")
         ls_remote.assert_not_called()
+
+    def test_defaults_file_branch_pin_resolves_with_ls_remote(self) -> None:
+        defaults = {
+            "AKMODS_UPSTREAM_REF": "main",
+            "AKMODS_UPSTREAM_TRACK": "stable",
+            "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
+        }
+        with patch.dict(os.environ, self._env(), clear=False):
+            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
+                with patch(
+                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                    return_value="d" * 40,
+                ) as ls_remote:
+                    resolved = _resolve_default_akmods_ref()
+        self.assertEqual(resolved, "d" * 40)
+        ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "main")
 
     def test_floats_to_tracking_ref_when_nothing_pinned(self) -> None:
         defaults = {
@@ -221,7 +287,7 @@ class LockFileAkmodsRefInvariantTests(unittest.TestCase):
                 "USE_INPUT_LOCK": "true",
                 "LOCK_FILE": str(lock_path),
                 "BUILD_CONTAINER_REF": "ghcr.io/example/build@sha256:cafef00d",
-                "DEFAULT_AKMODS_REF": "abcdef1234567890",
+                "DEFAULT_AKMODS_REF": "a" * 40,
             }
             with patch.dict(os.environ, env, clear=False):
                 configured = resolve_configured_inputs()
@@ -229,7 +295,7 @@ class LockFileAkmodsRefInvariantTests(unittest.TestCase):
         self.assertTrue(configured.use_input_lock)
         self.assertEqual(configured.base_image_ref, "ghcr.io/example/base@sha256:deadbeef")
         self.assertEqual(configured.zfs_minor_version, "2.4")
-        self.assertEqual(configured.akmods_upstream_ref, "abcdef1234567890")
+        self.assertEqual(configured.akmods_upstream_ref, "a" * 40)
 
 
 if __name__ == "__main__":

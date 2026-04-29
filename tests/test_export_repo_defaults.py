@@ -40,10 +40,12 @@ class ExportRepoDefaultsTests(unittest.TestCase):
 
             output_text = output_path.read_text(encoding="utf-8")
             env_text = env_path.read_text(encoding="utf-8")
-            self.assertIn("image_name=zfs-aurora-complex", output_text)
-            self.assertIn("default_brew_image=ghcr.io/example/brew:latest", output_text)
-            self.assertIn("IMAGE_NAME=zfs-aurora-complex", env_text)
-            self.assertIn("DEFAULT_ZFS_MINOR_VERSION=2.4", env_text)
+            self.assertIn("image_name<<", output_text)
+            self.assertIn("zfs-aurora-complex", output_text)
+            self.assertIn("default_brew_image<<", output_text)
+            self.assertIn("ghcr.io/example/brew:latest", output_text)
+            self.assertIn("IMAGE_NAME<<", env_text)
+            self.assertIn("DEFAULT_ZFS_MINOR_VERSION<<", env_text)
 
 
 if __name__ == "__main__":

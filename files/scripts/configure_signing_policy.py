@@ -14,11 +14,13 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 
 
 DEFAULT_POLICY_FILE = Path("/etc/containers/policy.json")
 DEFAULT_REGISTRIES_DIR = Path("/etc/containers/registries.d")
 DEFAULT_KEYS_DIR = Path("/etc/pki/containers")
+REGISTRY_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def required_env(name: str) -> str:
@@ -61,7 +63,8 @@ def registries_dir_from_env() -> Path:
 def registry_file_path(*, image_repo: str, registries_dir: Path) -> Path:
     """Return the discovery-file path for one image repository."""
 
-    return registries_dir / f"{Path(image_repo).name}.yaml"
+    filename = REGISTRY_FILENAME_SAFE_RE.sub("-", image_repo).strip("-")
+    return registries_dir / f"{filename}.yaml"
 
 
 def load_policy(policy_path: Path) -> dict[str, object]:

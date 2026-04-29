@@ -90,10 +90,15 @@ class TaggingContextTests(unittest.TestCase):
             ):
                 main_export_registry_context()
 
-            self.assertIn("image_org=danathar", output_path.read_text(encoding="utf-8"))
-            self.assertIn("actor_is_bot=true", output_path.read_text(encoding="utf-8"))
-            self.assertIn("IMAGE_REGISTRY=ghcr.io/danathar", env_path.read_text(encoding="utf-8"))
-            self.assertIn("ACTOR_IS_BOT=true", env_path.read_text(encoding="utf-8"))
+            output_text = output_path.read_text(encoding="utf-8")
+            env_text = env_path.read_text(encoding="utf-8")
+            self.assertIn("image_org<<", output_text)
+            self.assertIn("danathar", output_text)
+            self.assertIn("actor_is_bot<<", output_text)
+            self.assertIn("true", output_text)
+            self.assertIn("IMAGE_REGISTRY<<", env_text)
+            self.assertIn("ghcr.io/danathar", env_text)
+            self.assertIn("ACTOR_IS_BOT<<", env_text)
 
 
 if __name__ == "__main__":

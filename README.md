@@ -57,6 +57,30 @@ So the `main` GitHub Actions workflow does this:
 
 If candidate fails, `latest` does not move.
 
+Published images must be signed, matching the Universal Blue image-template
+model. The repository commits only `cosign.pub`; the matching private key must
+be stored as the GitHub Actions secret `SIGNING_SECRET`. The publish action
+refuses to push an image when that secret is missing, because booted systems
+use the committed public key to verify future updates.
+
+Initial signing setup:
+
+```bash
+COSIGN_PASSWORD="" cosign generate-key-pair
+gh secret set SIGNING_SECRET < cosign.key
+git add cosign.pub
+git commit -m "Configure image signing key"
+git push
+```
+
+Never commit `cosign.key`. If the keypair is rotated after a machine has already
+booted this image, install the new public key on that machine before expecting it
+to verify newly signed updates:
+
+```bash
+sudo install -m 0644 cosign.pub /etc/pki/containers/zfs-aurora-complex.pub
+```
+
 ## Assumptions And Recovery Policy
 
 This repo intentionally follows a simpler support contract:
@@ -247,7 +271,8 @@ For reproducing a specific published image exactly, prefer the CI workflow with 
 > [!WARNING]
 > This is an experimental image stream.
 
-Fresh stock Aurora:
+Fresh stock Aurora can switch to the published image after the GitHub workflow
+has produced a signed `latest` tag:
 
 ```bash
 sudo bootc switch ghcr.io/danathar/zfs-aurora-complex:latest
@@ -287,6 +312,12 @@ sudo zfs list
 ```bash
 cosign verify --key cosign.pub ghcr.io/danathar/zfs-aurora-complex:latest
 ```
+
+The verification key is also installed into the image at
+`/etc/pki/containers/zfs-aurora-complex.pub`, and the image writes a container
+signature policy for `ghcr.io/danathar/zfs-aurora-complex`. After booting this
+image family, `bootc upgrade` expects future `latest` digests to carry a matching
+cosign signature.
 
 ## Reading Order
 

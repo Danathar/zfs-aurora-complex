@@ -8,10 +8,43 @@ Goal: Keep low-level image helper failure behavior clear.
 
 from __future__ import annotations
 
+import os
+import subprocess
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from ci_tools.common import CiToolError, skopeo_exists, skopeo_inspect_digest
+from ci_tools.common import (
+    CiToolError,
+    run_cmd,
+    run_json_cmd,
+    skopeo_exists,
+    skopeo_inspect_digest,
+    write_github_env,
+    write_github_outputs,
+)
+
+
+def parse_github_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if "<<" in line:
+            key, delimiter = line.split("<<", 1)
+            index += 1
+            value_lines: list[str] = []
+            while index < len(lines) and lines[index] != delimiter:
+                value_lines.append(lines[index])
+                index += 1
+            values[key] = "\n".join(value_lines)
+        else:
+            key, value = line.split("=", 1)
+            values[key] = value
+        index += 1
+    return values
 
 
 class CommonTests(unittest.TestCase):
@@ -44,6 +77,90 @@ class CommonTests(unittest.TestCase):
     def test_skopeo_exists_returns_false_when_inspect_fails(self) -> None:
         with patch("ci_tools.common.run_cmd", side_effect=CiToolError("missing image")):
             self.assertFalse(skopeo_exists("docker://ghcr.io/example/image:tag"))
+
+    def test_run_cmd_redacts_secret_args_in_failure_message(self) -> None:
+        args = [
+            "skopeo",
+            "copy",
+            "--src-creds",
+            "actor:src-secret",
+            "--dest-creds=actor:dest-secret",
+            "--registry-username",
+            "secret-user",
+            "--registry-password=secret-password",
+        ]
+        error = subprocess.CalledProcessError(
+            1,
+            args,
+            output="",
+            stderr="failed",
+        )
+        with patch("ci_tools.common.subprocess.run", side_effect=error):
+            with self.assertRaises(CiToolError) as context:
+                run_cmd(args)
+
+        message = str(context.exception)
+        self.assertNotIn("src-secret", message)
+        self.assertNotIn("dest-secret", message)
+        self.assertNotIn("secret-user", message)
+        self.assertNotIn("secret-password", message)
+        self.assertIn("--src-creds ***REDACTED***", message)
+        self.assertIn("--dest-creds=***REDACTED***", message)
+
+    def test_run_json_cmd_redacts_secret_args_in_failure_message(self) -> None:
+        with patch("ci_tools.common.run_cmd", return_value="not-json"):
+            with self.assertRaises(CiToolError) as context:
+                run_json_cmd(["skopeo", "inspect", "--creds", "actor:json-secret"])
+
+        message = str(context.exception)
+        self.assertNotIn("json-secret", message)
+        self.assertIn("--creds ***REDACTED***", message)
+
+    def test_write_github_outputs_uses_safe_heredoc_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = Path(temp_dir) / "output"
+            with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_file)}, clear=False):
+                write_github_outputs(
+                    {
+                        "single": "value",
+                        "newline": "first\nsecond",
+                        "equals": "a=b",
+                        "literal_eof": "contains EOF text",
+                    }
+                )
+
+            self.assertEqual(
+                parse_github_file(output_file),
+                {
+                    "single": "value",
+                    "newline": "first\nsecond",
+                    "equals": "a=b",
+                    "literal_eof": "contains EOF text",
+                },
+            )
+
+    def test_write_github_env_uses_safe_heredoc_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_file = Path(temp_dir) / "env"
+            with patch.dict(os.environ, {"GITHUB_ENV": str(env_file)}, clear=False):
+                write_github_env(
+                    {
+                        "SINGLE": "value",
+                        "NEWLINE": "first\nsecond",
+                        "EQUALS": "a=b",
+                        "LITERAL_EOF": "contains EOF text",
+                    }
+                )
+
+            self.assertEqual(
+                parse_github_file(env_file),
+                {
+                    "SINGLE": "value",
+                    "NEWLINE": "first\nsecond",
+                    "EQUALS": "a=b",
+                    "LITERAL_EOF": "contains EOF text",
+                },
+            )
 
 
 if __name__ == "__main__":

@@ -84,13 +84,16 @@ class PrepareValidationBuildTests(unittest.TestCase):
                             main()
 
             outputs = Path(output_path).read_text(encoding="utf-8")
-            self.assertIn("version=43", outputs)
-            self.assertIn("kernel_release=6.18.16-200.fc43.x86_64", outputs)
+            self.assertIn("version<<", outputs)
+            self.assertIn("43", outputs)
+            self.assertIn("kernel_release<<", outputs)
+            self.assertIn("6.18.16-200.fc43.x86_64", outputs)
             self.assertIn(
-                "detected_kernel_releases=6.18.13-200.fc43.x86_64 6.18.16-200.fc43.x86_64",
+                "6.18.13-200.fc43.x86_64 6.18.16-200.fc43.x86_64",
                 outputs,
             )
-            self.assertIn("base_image_tag=latest-20260307.1", outputs)
+            self.assertIn("base_image_tag<<", outputs)
+            self.assertIn("latest-20260307.1", outputs)
 
             inspect_cache.assert_called_once_with(
                 image_org="danathar",

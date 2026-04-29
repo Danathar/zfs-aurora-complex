@@ -83,6 +83,26 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
                     )
                     self.assertFalse("KCPATH" in script.os.environ)
 
+    def test_write_kernel_cache_file_preserves_preexisting_kcpath_without_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
+                with patch.dict(
+                    script.os.environ,
+                    {
+                        "AKMODS_KERNEL": "main",
+                        "AKMODS_VERSION": "43",
+                        "KCPATH": "/preexisting",
+                    },
+                    clear=True,
+                ):
+                    with patch.object(Path, "mkdir"):
+                        with patch.object(Path, "write_text"):
+                            script.write_kernel_cache_file(
+                                kernel_release="6.18.16-200.fc43.x86_64",
+                            )
+
+                    self.assertEqual(script.os.environ["KCPATH"], "/preexisting")
+
     def test_main_primary_kernel_runs_upstream_manifest_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):

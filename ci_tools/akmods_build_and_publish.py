@@ -107,8 +107,6 @@ def write_kernel_cache_file(*, kernel_release: str) -> None:
     os.environ["AKMODS_BUILDDIR"] = str(upstream_build_root)
     if kcpath_override:
         os.environ["KCPATH"] = kcpath_override
-    else:
-        os.environ.pop("KCPATH", None)
 
     cache_json_path.parent.mkdir(parents=True, exist_ok=True)
     cache_json_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

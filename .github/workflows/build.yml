@@ -115,6 +115,8 @@ jobs:
     name: Build Candidate Image
     needs: build-zfs-akmods
     runs-on: ubuntu-24.04
+    env:
+      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
     permissions:
       contents: read
       packages: write
@@ -131,6 +133,13 @@ jobs:
       - id: registry
         name: Prepare registry context
         uses: ./.github/actions/prepare-registry-context
+
+      - name: Require signing secret for production image publication
+        if: env.HAS_SIGNING_SECRET != 'true'
+        shell: bash
+        run: |
+          echo "SIGNING_SECRET is not configured. Refusing to publish an unsigned production image because booted systems enforce cosign signature verification for this repository." >&2
+          exit 1
 
       # The candidate tag is the image that gets tested first. Promotion happens
       # later by copying this already-built image to `latest` only after success.
@@ -179,8 +188,6 @@ jobs:
     # the candidate image without moving the public `latest` tag.
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true'
     runs-on: ubuntu-24.04
-    env:
-      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
     permissions:
       contents: read
       packages: write
@@ -204,7 +211,8 @@ jobs:
         uses: ./.github/actions/install-signing-tools
 
       # Promotion copies the already-tested candidate image digest to `latest`
-      # and records audit tags. It does not rebuild the image.
+      # and records audit tags. The candidate signature carries over because
+      # both tags resolve to the same digest.
       - name: Promote candidate image to latest and audit tags
         shell: bash
         env:
@@ -214,25 +222,3 @@ jobs:
           IMAGE_NAME: ${{ steps.defaults.outputs.image_name }}
         run: |
           python3 -m ci_tools.cli promote-stable
-
-      # Sign the stable digest after promotion when a private key is available.
-      # A freshly split repo may not have its signing secret configured yet, so
-      # publication should still succeed and leave the image unsigned for now.
-      - name: Sign promoted stable image digest
-        if: env.HAS_SIGNING_SECRET == 'true'
-        shell: bash
-        env:
-          IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
-          IMAGE_NAME: ${{ steps.defaults.outputs.image_name }}
-          IMAGE_TAG: latest
-          REGISTRY_ACTOR: ${{ github.actor }}
-          REGISTRY_TOKEN: ${{ github.token }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-        run: |
-          python3 -m ci_tools.cli sign-image
-
-      - name: Explain skipped stable signing without secret
-        if: env.HAS_SIGNING_SECRET != 'true'
-        shell: bash
-        run: |
-          echo "SIGNING_SECRET is not configured for this repository, so the promoted stable image was published without a cosign signature."

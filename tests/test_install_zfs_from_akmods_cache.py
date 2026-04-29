@@ -11,10 +11,12 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 def _load_helper_module():
@@ -65,6 +67,41 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
         )
 
         self.assertEqual(image_ref, "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43")
+
+    def test_run_cmd_redacts_secret_args_in_failure_message(self) -> None:
+        args = [
+            "skopeo",
+            "inspect",
+            "--creds",
+            "actor:token-secret",
+            "--src-creds=actor:src-secret",
+        ]
+        result = subprocess.CompletedProcess(args, 1, stdout="", stderr="failed")
+        with patch.object(helper.subprocess, "run", return_value=result):
+            with self.assertRaises(RuntimeError) as context:
+                helper._run_cmd(args)
+
+        message = str(context.exception)
+        self.assertNotIn("token-secret", message)
+        self.assertNotIn("src-secret", message)
+        self.assertIn("--creds ***REDACTED***", message)
+        self.assertIn("--src-creds=***REDACTED***", message)
+
+    def test_image_kernels_from_modules_root_uses_natural_sort(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            modules_root = Path(temp_dir)
+            (modules_root / "6.10.0-200.fc43.x86_64").mkdir()
+            (modules_root / "6.9.0-200.fc43.x86_64").mkdir()
+
+            kernels = helper.image_kernels_from_modules_root(modules_root)
+
+        self.assertEqual(
+            kernels,
+            [
+                "6.9.0-200.fc43.x86_64",
+                "6.10.0-200.fc43.x86_64",
+            ],
+        )
 
     def test_load_layer_files_from_oci_layout_reads_manifest_layers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

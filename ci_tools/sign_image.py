@@ -8,10 +8,17 @@ Goal: Provide one reusable signing helper for candidate, branch, and stable tags
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 from typing import Callable
 
-from ci_tools.common import CiToolError, normalize_owner, require_env, run_cmd, skopeo_inspect_digest
+from ci_tools.common import (
+    CiToolError,
+    REPO_ROOT,
+    normalize_owner,
+    require_env,
+    run_cmd,
+    skopeo_inspect_digest,
+)
 
 
 def image_tag_ref(image_org: str, image_name: str, image_tag: str) -> str:
@@ -46,8 +53,13 @@ def sign_published_image(
 
     if not cosign_private_key:
         raise CiToolError("SIGNING_SECRET is empty; cannot sign published image.")
-    if not Path("cosign.pub").exists():
-        raise CiToolError("Missing required verification key file: cosign.pub")
+    cosign_public_key_path = os.environ.get("COSIGN_PUBLIC_KEY_PATH", "").strip()
+    if cosign_public_key_path:
+        verification_key = cosign_public_key_path
+    else:
+        verification_key = str(REPO_ROOT / "cosign.pub")
+    if not os.path.exists(verification_key):
+        raise CiToolError(f"Missing required verification key file: {verification_key}")
 
     tag_ref = image_tag_ref(image_org, image_name, image_tag)
     digest = digest_lookup(tag_ref)
@@ -55,12 +67,7 @@ def sign_published_image(
         raise CiToolError(f"Failed to resolve digest for {tag_ref}")
 
     digest_ref = image_digest_ref(image_org, image_name, digest)
-    registry_args = [
-        "--registry-username",
-        registry_actor,
-        "--registry-password",
-        registry_token,
-    ]
+    del registry_actor, registry_token
 
     command_runner(
         [
@@ -69,12 +76,11 @@ def sign_published_image(
             "--yes",
             "--key",
             "env://COSIGN_PRIVATE_KEY",
-            *registry_args,
             digest_ref,
         ],
         capture_output=False,
         env={
-            "COSIGN_PASSWORD": "",
+            "COSIGN_PASSWORD": os.environ.get("COSIGN_PASSWORD", ""),
             "COSIGN_PRIVATE_KEY": cosign_private_key,
         },
     )
@@ -83,8 +89,7 @@ def sign_published_image(
             "cosign",
             "verify",
             "--key",
-            "cosign.pub",
-            *registry_args,
+            verification_key,
             digest_ref,
         ]
     )

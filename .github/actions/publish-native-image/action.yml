@@ -1,6 +1,6 @@
 name: Publish Native Image
 
-description: Push one locally built image tag to GitHub Container Registry (GHCR) and optionally sign it.
+description: Push one locally built image tag to GitHub Container Registry (GHCR) and sign it.
 
 inputs:
   image_registry:
@@ -10,7 +10,7 @@ inputs:
     description: Image name under the registry owner path.
     required: true
   image_tag:
-    description: Image tag to push and optionally sign.
+    description: Image tag to push and sign.
     required: true
   registry_username:
     description: Registry username.
@@ -22,17 +22,22 @@ inputs:
     description: Lowercase registry owner used for signing lookups.
     required: true
   cosign_private_key:
-    description: Private signing key. Leave empty to skip signing.
-    required: false
-    default: ""
+    description: Private signing key used to sign the pushed image digest.
+    required: true
 
 runs:
-  # This action owns the publication sequence: authenticate, push one tag, then
-  # sign the pushed digest when a private key is available. Keeping those steps
-  # together reduces the chance that one workflow path publishes differently
-  # from another.
+  # This action owns the publication sequence: authenticate, push a transient
+  # tag, sign its digest, then promote that same digest to the requested tag.
+  # That keeps user-facing tags from pointing at unsigned content.
   using: composite
   steps:
+    - name: Require signing key before publication
+      if: inputs.cosign_private_key == ''
+      shell: bash
+      run: |
+        echo "SIGNING_SECRET is not configured. Refusing to publish an unsigned image." >&2
+        exit 1
+
     # Authenticate once so both the push action and any later `skopeo` or
     # `cosign` calls can talk to GHCR as the current workflow actor.
     - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
@@ -41,9 +46,24 @@ runs:
         username: ${{ inputs.registry_username }}
         password: ${{ inputs.registry_password }}
 
-    # Push the exact local image tag built earlier in the workflow. Publication
-    # is separated from the build step on purpose so validation-only workflows
-    # can stop before this point.
+    - name: Compute transient publication tag
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+      run: |
+        echo "TRANSIENT_IMAGE_TAG=${IMAGE_TAG}-unsigned-${GITHUB_RUN_ID}" >> "${GITHUB_ENV}"
+
+    - name: Retag local image for transient publication
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+      run: |
+        buildah tag "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
+
+    # Push a non-publishable transient tag first. The requested tag is only
+    # moved after cosign verifies the digest that will be promoted.
     - uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c
       env:
         REGISTRY_USER: ${{ inputs.registry_username }}
@@ -51,25 +71,41 @@ runs:
       with:
         registry: ${{ inputs.image_registry }}
         image: ${{ inputs.image_name }}
-        tags: ${{ inputs.image_tag }}
+        tags: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
         username: ${{ env.REGISTRY_USER }}
         password: ${{ env.REGISTRY_PASSWORD }}
 
-    # Install signing tools only when signing is enabled for this workflow path.
-    # Branch builds for bot accounts, for example, skip signing entirely.
-    - if: inputs.cosign_private_key != ''
-      uses: ./.github/actions/install-signing-tools
+    # Install signing tools for the mandatory post-push signature.
+    - uses: ./.github/actions/install-signing-tools
 
     # Sign the pushed image by digest, not by a mutable tag name. A tag such as
     # `latest` can move later, but a digest names one exact image forever.
-    - if: inputs.cosign_private_key != ''
+    - name: Sign transient image digest
       shell: bash
       env:
         IMAGE_ORG: ${{ inputs.image_org }}
         IMAGE_NAME: ${{ inputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image_tag }}
+        IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
         REGISTRY_ACTOR: ${{ inputs.registry_username }}
         REGISTRY_TOKEN: ${{ inputs.registry_password }}
         COSIGN_PRIVATE_KEY: ${{ inputs.cosign_private_key }}
       run: |
         python3 -m ci_tools.cli sign-image
+
+    - name: Promote signed digest to requested tag
+      shell: bash
+      env:
+        IMAGE_REGISTRY: ${{ inputs.image_registry }}
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+      run: |
+        transient_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
+        transient_digest="$(skopeo inspect --format '{{ .Digest }}' "${transient_ref}")"
+        signed_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}@${transient_digest}"
+        final_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+        skopeo copy --multi-arch=all "${signed_ref}" "${final_ref}"
+        final_digest="$(skopeo inspect --format '{{ .Digest }}' "${final_ref}")"
+        if [ "${final_digest}" != "${transient_digest}" ]; then
+          echo "Promoted tag digest ${final_digest} does not match signed digest ${transient_digest}" >&2
+          exit 1
+        fi
