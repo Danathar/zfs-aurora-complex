@@ -27,7 +27,6 @@ class ExportRepoDefaultsTests(unittest.TestCase):
             "AKMODS_REPO": "zfs-aurora-complex-akmods",
             "DEFAULT_BASE_IMAGE": "ghcr.io/example/base:latest",
             "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/example/build:latest",
-            "DEFAULT_BREW_IMAGE": "ghcr.io/example/brew:latest",
             "DEFAULT_ZFS_MINOR_VERSION": "2.4",
         }
 
@@ -42,8 +41,8 @@ class ExportRepoDefaultsTests(unittest.TestCase):
             env_text = env_path.read_text(encoding="utf-8")
             self.assertIn("image_name<<", output_text)
             self.assertIn("zfs-aurora-complex", output_text)
-            self.assertIn("default_brew_image<<", output_text)
-            self.assertIn("ghcr.io/example/brew:latest", output_text)
+            self.assertIn("default_build_container_image<<", output_text)
+            self.assertIn("ghcr.io/example/build:latest", output_text)
             self.assertIn("IMAGE_NAME<<", env_text)
             self.assertIn("DEFAULT_ZFS_MINOR_VERSION<<", env_text)
 

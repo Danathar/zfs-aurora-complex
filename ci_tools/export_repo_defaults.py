@@ -19,7 +19,6 @@ OUTPUT_NAME_MAP = {
     "AKMODS_REPO": "akmods_repo",
     "DEFAULT_BASE_IMAGE": "default_base_image",
     "DEFAULT_BUILD_CONTAINER_IMAGE": "default_build_container_image",
-    "DEFAULT_BREW_IMAGE": "default_brew_image",
     "DEFAULT_ZFS_MINOR_VERSION": "default_zfs_minor_version",
 }
 

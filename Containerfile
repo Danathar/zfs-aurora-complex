@@ -4,7 +4,10 @@
 # standard bootc-style Containerfile so CI can control tags directly.
 
 ARG BASE_IMAGE="ghcr.io/ublue-os/aurora:latest"
-ARG BREW_IMAGE="ghcr.io/ublue-os/brew:latest"
+# Aurora already includes the Universal Blue brew payload. If BASE_IMAGE is
+# changed to a base that does not include brew, such as Fedora Atomic, uncomment
+# BREW_IMAGE, the brew stage, and the COPY --from=brew line below.
+# ARG BREW_IMAGE="ghcr.io/ublue-os/brew:latest"
 
 FROM scratch AS ctx
 COPY build_files /
@@ -13,7 +16,7 @@ COPY files /files
 COPY shared /shared
 COPY cosign.pub /cosign.pub
 
-FROM ${BREW_IMAGE} AS brew
+# FROM ${BREW_IMAGE} AS brew
 
 FROM ${BASE_IMAGE}
 
@@ -34,9 +37,8 @@ ENV AKMODS_IMAGE_TEMPLATE="${AKMODS_IMAGE_TEMPLATE}"
 ENV IMAGE_REPO="${IMAGE_REPO}"
 ENV SIGNING_KEY_FILENAME="${SIGNING_KEY_FILENAME}"
 
-# The brew OCI image already packages the tarball, systemd presets, shell
-# integration, and first-boot setup units.
-COPY --from=brew /system_files /
+# Optional brew payload import for bases that do not already include brew.
+# COPY --from=brew /system_files /
 
 # Keep the custom build logic in repo files rather than a long inline RUN.
 COPY --from=ctx / /

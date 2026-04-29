@@ -24,9 +24,6 @@ outputs:
   default_build_container_image:
     description: Default build container ref.
     value: ${{ steps.defaults.outputs.default_build_container_image }}
-  default_brew_image:
-    description: Default brew Open Container Initiative (OCI) image ref.
-    value: ${{ steps.defaults.outputs.default_brew_image }}
   default_zfs_minor_version:
     description: Default OpenZFS minor line.
     value: ${{ steps.defaults.outputs.default_zfs_minor_version }}

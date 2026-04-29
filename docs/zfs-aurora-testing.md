@@ -112,10 +112,9 @@ The final image build is standard OCI composition now.
 The workflow passes build arguments directly into [`Containerfile`](../Containerfile):
 
 1. `BASE_IMAGE`
-2. `BREW_IMAGE`
-3. `AKMODS_IMAGE`
-4. `IMAGE_REPO`
-5. `SIGNING_KEY_FILENAME`
+2. `AKMODS_IMAGE`
+3. `IMAGE_REPO`
+4. `SIGNING_KEY_FILENAME`
 
 That means there is no generated workspace and no per-run file mutation layer.
 `AKMODS_IMAGE_TEMPLATE` is still available as a `Containerfile` fallback for

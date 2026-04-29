@@ -91,7 +91,7 @@ Common cases:
 
 1. the base image no longer includes a command the helper expected
 2. the shared akmods cache contains out-of-date or malformed RPMs
-3. brew OCI payload layout changed upstream
+3. the base image no longer includes the brew payload or services
 4. `dnf5` or `rpm-ostree` behavior changed in the builder environment
 
 Repair path:

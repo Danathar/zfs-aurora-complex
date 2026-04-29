@@ -33,7 +33,7 @@ This repository builds a signed Aurora image with:
 
 - ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
 - Distrobox inherited from the upstream Aurora image
-- Homebrew from the official `ghcr.io/ublue-os/brew:latest` OCI image
+- Homebrew inherited from the upstream Aurora image
 - a single-repository signing policy for future signed `bootc upgrade` flows
 
 The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
@@ -233,7 +233,7 @@ Docs-only changes do not trigger image builds.
 At a high level, the final image build now works like this:
 
 1. `Containerfile` starts from `ghcr.io/ublue-os/aurora`
-2. `COPY --from=ghcr.io/ublue-os/brew:latest /system_files /` imports the official brew payload
+2. Aurora already includes Homebrew; the optional `ghcr.io/ublue-os/brew:latest` stage can be uncommented if `BASE_IMAGE` is changed to a base without brew, such as Fedora Atomic
 3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
 4. `bootc container lint` validates the final image
 

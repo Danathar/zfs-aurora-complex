@@ -12,9 +12,6 @@ inputs:
   base_image:
     description: Digest-pinned base image ref.
     required: true
-  brew_image:
-    description: Brew OCI image ref copied into the final image.
-    required: true
   akmods_image:
     description: Shared akmods cache image ref.
     required: true
@@ -46,7 +43,6 @@ runs:
         tags: ${{ inputs.image_tag }}
         build-args: |
           BASE_IMAGE=${{ inputs.base_image }}
-          BREW_IMAGE=${{ inputs.brew_image }}
           AKMODS_IMAGE=${{ inputs.akmods_image }}
           IMAGE_REPO=${{ inputs.image_repo }}
           SIGNING_KEY_FILENAME=${{ inputs.signing_key_filename }}

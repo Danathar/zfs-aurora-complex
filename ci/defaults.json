@@ -6,6 +6,5 @@
   "AKMODS_REPO": "zfs-aurora-complex-akmods",
   "DEFAULT_BASE_IMAGE": "ghcr.io/ublue-os/aurora:latest",
   "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/ublue-os/devcontainer:latest",
-  "DEFAULT_BREW_IMAGE": "ghcr.io/ublue-os/brew:latest",
   "DEFAULT_ZFS_MINOR_VERSION": "2.4"
 }

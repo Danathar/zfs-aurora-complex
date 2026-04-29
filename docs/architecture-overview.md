@@ -150,7 +150,7 @@ The final image is defined by the repository root [`Containerfile`](../Container
 It does four important things:
 
 1. starts from the pinned `BASE_IMAGE`
-2. copies the official `ublue-os/brew` Open Container Initiative (OCI) payload into the image root
+2. inherits Homebrew from Aurora, with an optional `ublue-os/brew` payload stage left commented for bases that do not include brew
 3. runs [`build_files/build-image.sh`](../build_files/build-image.sh)
 4. runs `bootc container lint`
 
