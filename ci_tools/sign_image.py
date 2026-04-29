@@ -75,6 +75,7 @@ def sign_published_image(
             "sign",
             "--yes",
             "--new-bundle-format=false",
+            "--use-signing-config=false",
             "--registry-referrers-mode=legacy",
             "--key",
             "env://COSIGN_PRIVATE_KEY",

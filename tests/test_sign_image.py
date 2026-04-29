@@ -82,12 +82,13 @@ class SignImageTests(unittest.TestCase):
             "ghcr.io/danathar/zfs-aurora-complex@sha256:stable",
         )
         self.assertEqual(
-            calls[0][0][:5],
+            calls[0][0][:6],
             [
                 "cosign",
                 "sign",
                 "--yes",
                 "--new-bundle-format=false",
+                "--use-signing-config=false",
                 "--registry-referrers-mode=legacy",
             ],
         )
