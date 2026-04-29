@@ -129,12 +129,23 @@ What to inspect:
 2. whether `SIGNING_SECRET` is present in repository secrets
 3. whether `cosign.pub` in the repo matches the private key stored in the secret
 4. whether GitHub Container Registry (GHCR) permissions for the workflow token are correct
+5. whether old-format verification succeeds:
+   `cosign verify --new-bundle-format=false --key cosign.pub ghcr.io/danathar/zfs-aurora-complex:latest`
+6. whether the registry contains the bootc-compatible
+   `sha256-<digest-without-colon>.sig` attachment tag
 
 Repair path:
 
 1. confirm the candidate tag exists in GitHub Container Registry (GHCR)
 2. confirm `SIGNING_SECRET` is the matching private key for committed `cosign.pub`
-3. rerun the workflow without changing the already-built candidate digest if the failure was transient
+3. if cosign v3 behavior changed, confirm `ci_tools/sign_image.py` still signs
+   with `--new-bundle-format=false`, `--use-signing-config=false`, and
+   `--registry-referrers-mode=legacy`
+4. rerun the workflow without changing the already-built candidate digest if the failure was transient
+
+For the full signing model and the failure mode where default `cosign verify`
+succeeds but `bootc upgrade` cannot find a usable signature, see
+[`docs/signing-and-bootc.md`](./signing-and-bootc.md).
 
 ## Branch Or Pull Request Validation Failures
 

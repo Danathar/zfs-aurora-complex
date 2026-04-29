@@ -22,6 +22,7 @@ docs/
   glossary.md                 <- shared term and command definitions
   code-reading-guide.md       <- step-by-step code reading order
   architecture-overview.md    <- high-level design and flow
+  signing-and-bootc.md        <- image signing, bootc policy, and cosign compatibility
   upstream-change-response.md <- incident triage and recovery actions
   zfs-aurora-testing.md       <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how akmods source refs are selected and pinned
@@ -36,6 +37,7 @@ docs/
 1. [`README.md`](../README.md)
 2. [`docs/glossary.md`](./glossary.md)
 3. [`docs/architecture-overview.md`](./architecture-overview.md)
+4. [`docs/signing-and-bootc.md`](./signing-and-bootc.md)
 
 ### Goal: I want to understand the code end-to-end
 
@@ -46,7 +48,8 @@ docs/
 ### Goal: A workflow run failed and I need recovery steps
 
 1. [`docs/upstream-change-response.md`](./upstream-change-response.md)
-2. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
+2. [`docs/signing-and-bootc.md`](./signing-and-bootc.md)
+3. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
 
 ### Goal: I need to update the akmods source pin
 
@@ -58,6 +61,7 @@ docs/
 1. Put shared term definitions in [`docs/glossary.md`](./glossary.md).
 2. Put newcomer overview content in [`README.md`](../README.md).
 3. Put design reasoning in [`docs/architecture-overview.md`](./architecture-overview.md).
-4. Put runbook and incident-response steps in [`docs/upstream-change-response.md`](./upstream-change-response.md).
-5. Put deeper workflow history and validation notes in [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md).
-6. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).
+4. Put signing and bootc trust details in [`docs/signing-and-bootc.md`](./signing-and-bootc.md).
+5. Put runbook and incident-response steps in [`docs/upstream-change-response.md`](./upstream-change-response.md).
+6. Put deeper workflow history and validation notes in [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md).
+7. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).

@@ -335,7 +335,10 @@ sudo zfs list
 ## Signature Verification
 
 ```bash
-cosign verify --key cosign.pub ghcr.io/danathar/zfs-aurora-complex:latest
+cosign verify \
+  --key cosign.pub \
+  --new-bundle-format=false \
+  ghcr.io/danathar/zfs-aurora-complex:latest
 ```
 
 The verification key is also installed into the image at
@@ -343,6 +346,15 @@ The verification key is also installed into the image at
 signature policy for `ghcr.io/danathar/zfs-aurora-complex`. After booting this
 image family, `bootc upgrade` expects future `latest` digests to carry a matching
 cosign signature.
+
+The `--new-bundle-format=false` flag is intentional. This repo signs with
+legacy cosign registry attachments so Fedora/Aurora's current bootc signature
+policy path can discover the signature through `use-sigstore-attachments`.
+Default cosign v3 verification can find newer OCI-referrer bundle signatures
+that the bootc policy path used here may not accept.
+
+For the full signing model, read
+[`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
 
 ## Reading Order
 
@@ -352,10 +364,11 @@ If you want the full technical design and workflow details, read:
 2. [`docs/documentation-guide.md`](./docs/documentation-guide.md)
 3. [`docs/architecture-overview.md`](./docs/architecture-overview.md)
 4. [`docs/code-reading-guide.md`](./docs/code-reading-guide.md)
-5. [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md)
-6. [`docs/upstream-change-response.md`](./docs/upstream-change-response.md)
-7. [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md)
-8. [`.github/scripts/README.md`](./.github/scripts/README.md)
+5. [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md)
+6. [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md)
+7. [`docs/upstream-change-response.md`](./docs/upstream-change-response.md)
+8. [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md)
+9. [`.github/scripts/README.md`](./.github/scripts/README.md)
 
 ## References
 

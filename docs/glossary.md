@@ -32,7 +32,10 @@ This page defines terms used across this repository's docs and workflow comments
 - `digest-pinned ref`: an exact image pointer like `name@sha256:...`; it does not move unless you change the digest.
 - `temporary checkout`: a short-lived local clone created only for the current CI run. In this repo, the akmods fork is cloned into `/tmp/akmods` and thrown away after the job ends.
 - `signature`: cryptographic proof that an image digest was signed by a trusted key.
-- `sigstore attachment`: the OCI artifact where tools like cosign store image signatures.
+- `sigstore attachment`: the registry artifact where tools like cosign store image signatures in the legacy attachment layout used by containers/image policy checks.
+- `OCI referrer`: newer registry mechanism for attaching related artifacts, including newer cosign bundle signatures, to an image digest.
+- `Sigstore bundle`: newer Sigstore format that packages signature material and verification metadata together.
+- `containers/image`: shared container-image library used by tools such as skopeo, podman, buildah, and bootc for image transport and policy checks.
 - `stop instead of guessing`: if a required safety input is missing, stop with an error instead of guessing.
 - `out-of-date module` / `out-of-date kmod`: a kernel module built for an older kernel release than the one currently in the base image.
 - `hardening`: add safety checks or stricter rules so failures are less likely and easier to catch early.

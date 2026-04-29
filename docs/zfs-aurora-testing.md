@@ -128,13 +128,16 @@ without requiring a manual `modprobe zfs`.
 
 ### 5. Sign Published Tags
 
-Tags published outside pull request validation are signed after push by resolving the pushed tag to a digest and then signing that digest.
+Tags published outside pull request validation are signed after push by resolving
+the pushed tag to a digest and then signing that digest.
 
 This keeps signature behavior consistent for:
 
 1. candidate tags
 2. branch tags
-3. stable `latest`
+
+Stable `latest` is promoted by copying the already-signed candidate digest, not
+by signing a second time.
 
 Branch note:
 
@@ -148,7 +151,9 @@ Promotion only copies the tested candidate digest to:
 1. `latest`
 2. `stable-<run>-<sha>`
 
-Then `latest` is signed explicitly.
+The candidate signature carries over because both promoted tags resolve to the
+same digest. The signer uses legacy cosign attachment storage so bootc's current
+containers/image policy path can discover the signature during `bootc upgrade`.
 
 ## Why This Repo Is Easier To Reason About
 

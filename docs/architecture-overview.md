@@ -250,6 +250,15 @@ What was intentionally given up:
 
 ### 5. Promotion And Signing
 
+Publication signs the candidate digest before any user-facing tag is moved.
+
+The publish action:
+
+1. pushes a transient `*-unsigned-<run_id>` tag
+2. resolves that transient tag to a digest
+3. signs and verifies that digest
+4. copies the signed digest to the requested candidate tag
+
 Promotion is a separate job.
 
 It:
@@ -257,14 +266,21 @@ It:
 1. resolves the candidate tag digest
 2. copies that digest to `latest`
 3. copies that digest to `stable-<run>-<sha>`
-4. signs candidate after publish
-5. signs `latest` after promotion
+
+It does not sign `latest` again. Cosign signatures are tied to the digest, so
+the candidate signature carries over when `latest` resolves to the same digest.
 
 Because candidate and stable tags are in the same repository, the trust model is simpler:
 
 - no second image path under `ghcr.io`
 - no stable-vs-candidate policy drift
 - no host-side repair script to normalize two repository names
+
+The signer uses legacy cosign registry attachments because the bootc policy path
+used here discovers signatures through containers/image
+`use-sigstore-attachments`. See
+[`docs/signing-and-bootc.md`](./signing-and-bootc.md) for the detailed signing
+model and the cosign v3 compatibility flags.
 
 ## Operational Model
 
