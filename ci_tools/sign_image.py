@@ -74,6 +74,8 @@ def sign_published_image(
             "cosign",
             "sign",
             "--yes",
+            "--new-bundle-format=false",
+            "--registry-referrers-mode=legacy",
             "--key",
             "env://COSIGN_PRIVATE_KEY",
             digest_ref,
@@ -88,6 +90,7 @@ def sign_published_image(
         [
             "cosign",
             "verify",
+            "--new-bundle-format=false",
             "--key",
             verification_key,
             digest_ref,

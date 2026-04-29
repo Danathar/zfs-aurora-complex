@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 
 from ci_tools.common import CiToolError
 from ci_tools.sign_image import image_digest_ref, image_tag_ref, sign_published_image
@@ -80,7 +81,16 @@ class SignImageTests(unittest.TestCase):
             digest_ref,
             "ghcr.io/danathar/zfs-aurora-complex@sha256:stable",
         )
-        self.assertEqual(calls[0][0][:4], ["cosign", "sign", "--yes", "--key"])
+        self.assertEqual(
+            calls[0][0][:5],
+            [
+                "cosign",
+                "sign",
+                "--yes",
+                "--new-bundle-format=false",
+                "--registry-referrers-mode=legacy",
+            ],
+        )
         self.assertEqual(calls[0][1], False)
         self.assertEqual(
             calls[0][2],
@@ -89,8 +99,11 @@ class SignImageTests(unittest.TestCase):
                 "COSIGN_PRIVATE_KEY": "private-key",
             },
         )
-        self.assertEqual(calls[1][0][:3], ["cosign", "verify", "--key"])
-        self.assertEqual(calls[1][0][3], str(key_path))
+        self.assertEqual(
+            calls[1][0][:4],
+            ["cosign", "verify", "--new-bundle-format=false", "--key"],
+        )
+        self.assertEqual(calls[1][0][4], str(key_path))
         self.assertEqual(calls[1][2], None)
 
     def test_cosign_password_comes_from_environment_when_set(self) -> None:
@@ -160,7 +173,7 @@ class SignImageTests(unittest.TestCase):
                 os.chdir(previous_cwd)
 
         repo_key = Path(__file__).resolve().parent.parent / "cosign.pub"
-        self.assertEqual(calls[1][0][3], str(repo_key))
+        self.assertEqual(calls[1][0][4], str(repo_key))
         self.assertEqual(digest_ref, "ghcr.io/danathar/zfs-aurora-complex@sha256:stable")
 
 
