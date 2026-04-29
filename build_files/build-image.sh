@@ -35,6 +35,7 @@ install -m 0644 /cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 # Distrobox is already included by upstream Aurora. If this image needs to add
 # Fedora RPM packages during the container build, prefer `dnf5 -y install ...`.
 # `rpm-ostree install distrobox`
+dnf5 -y install nethack
 
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
 python3 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
