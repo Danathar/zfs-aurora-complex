@@ -188,6 +188,7 @@ runs:
         CI: "1"
         REGISTRY_ACTOR: ${{ inputs.registry_actor }}
         REGISTRY_TOKEN: ${{ inputs.registry_token }}
+        GITHUB_TOKEN: ${{ inputs.registry_token }}
       run: |
         mkdir -p artifacts
         set -o pipefail
