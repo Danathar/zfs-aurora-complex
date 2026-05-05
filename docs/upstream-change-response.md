@@ -56,6 +56,7 @@ Likely causes:
 1. Fedora shipped a new kernel that current OpenZFS does not support yet
 2. the resolved akmods source ref does not contain the needed support yet
 3. upstream akmods changed assumptions around cache layout
+4. the akmods fork could not resolve the current OpenZFS release metadata
 
 What to inspect:
 
@@ -71,6 +72,24 @@ Repair path:
 3. if support exists only at a specific SHA, temporarily pin `AKMODS_UPSTREAM_REF`
 4. rerun `build.yml` with `rebuild_akmods=true`
 5. if support does not exist yet, let stable remain on the last good build
+
+### Case Study: OpenZFS Release API Response Was Not A Release List
+
+On May 5, 2026, manual run [25387132471](https://github.com/Danathar/zfs-aurora-complex/actions/runs/25387132471) failed while rebuilding the shared ZFS akmods cache. The failure was not a ZFS/kernel compile error. The nested `Danathar/akmods` build script fetched OpenZFS release metadata from the GitHub REST API, then piped the response into `jq` as if it were always a release array:
+
+```text
+curl https://api.github.com/repos/openzfs/zfs/releases -o data.json
+jq: error (at data.json:1): Cannot index string with string "prerelease"
+```
+
+The short response size and `jq` error meant the API returned an error-shaped JSON value, such as a rate-limit or other GitHub API message, instead of the expected release list. The durable fix was split across the two repo boundary points:
+
+1. `Danathar/akmods@2807991` hardened `build_files/zfs/build-kmod-zfs.sh` to use `curl -fsSL`, authenticate release lookup when a token is available, validate that the API response is a JSON array, and fail with a clear message when no matching release exists.
+2. `Danathar/zfs-aurora-complex@74b8f0e` exposed the existing workflow token to the akmods build as `GITHUB_TOKEN`, so the fork can pass it into the nested `podman build` as a secret.
+
+Validated by manual run [25388986645](https://github.com/Danathar/zfs-aurora-complex/actions/runs/25388986645), which rebuilt the shared akmods cache, built the candidate image, and promoted it to stable successfully.
+
+If this symptom appears again, do not treat it as an upstream ZFS compatibility outage until you inspect the OpenZFS release-discovery log lines. Look for the explicit `OpenZFS releases API response was not a JSON array.` message first.
 
 ## Failure: Candidate Image Build
 
