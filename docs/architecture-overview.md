@@ -155,7 +155,7 @@ It does four important things:
 4. runs `bootc container lint`
 
 The buildah invocation uses Docker v2s2 manifest format (`oci: false`) rather than
-OCI image manifests because `ostree container commit` and `rpm-ostree` work more
+OCI image manifests because `ostree container commit` and host update tooling work more
 reliably with the Docker format. The "OCI" terminology elsewhere in this project
 refers to OCI standards for registry interaction and layer handling, not the
 specific container image manifest format produced by buildah.
@@ -201,7 +201,7 @@ Instead, the helper does this:
 1. inspect every kernel directory under `/lib/modules`
 2. choose the newest detected kernel as the supported primary kernel
 3. require one matching `kmod-zfs` RPM for that kernel
-4. install ZFS userspace RPMs and that one primary `kmod-zfs` through `rpm-ostree`
+4. install ZFS userspace RPMs and that one primary `kmod-zfs` through `dnf5`
 5. run `depmod -a <kernel>` for the supported primary kernel
 6. fail the build if that supported kernel does not end up with a `zfs.ko` module (the check accepts uncompressed `zfs.ko` as well as Fedora's compressed forms `zfs.ko.xz` and `zfs.ko.zst`)
 

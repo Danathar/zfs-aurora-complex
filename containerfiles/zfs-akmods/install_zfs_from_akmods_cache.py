@@ -57,7 +57,7 @@ class InstallPlan:
     Why this object exists:
     1. The helper first computes a fail-closed plan from cache contents.
     2. Only after that plan is complete does it mutate the image root.
-    3. Tests can validate the planning rules without running `rpm-ostree`.
+    3. Tests can validate the planning rules without running `dnf5`.
     """
 
     detected_kernel_releases: list[str]
@@ -248,7 +248,7 @@ def build_install_plan(
 
     1. choose the newest detected kernel as the supported boot target
     2. require one matching `kmod-zfs` RPM for that kernel
-    3. install that one `kmod-zfs` normally through `rpm-ostree`
+    3. install that one `kmod-zfs` normally through `dnf5`
     """
 
     managed_rpms: list[Path] = []
@@ -288,10 +288,10 @@ def build_install_plan(
     )
 
 
-def rpm_ostree_install(rpms: list[Path]) -> None:
-    """Install shared RPMs plus the supported primary kernel module through rpm-ostree."""
+def dnf5_install(rpms: list[Path]) -> None:
+    """Install shared RPMs plus the supported primary kernel module through dnf5."""
 
-    install_args = ["rpm-ostree", "install", *(str(rpm) for rpm in rpms)]
+    install_args = ["dnf5", "install", "-y", *(str(rpm) for rpm in rpms)]
     _run_cmd(install_args, capture_output=False)
 
 
@@ -334,7 +334,7 @@ def main() -> None:
 
     _require_command("python3")
     _require_command("rpm")
-    _require_command("rpm-ostree")
+    _require_command("dnf5")
     _require_command("skopeo")
     _require_command("depmod")
 
@@ -353,7 +353,7 @@ def main() -> None:
     zfs_rpms = discover_zfs_rpms()
     install_plan = build_install_plan(image_kernels, zfs_rpms)
 
-    rpm_ostree_install([*install_plan.managed_rpms, install_plan.supported_kmod_rpm])
+    dnf5_install([*install_plan.managed_rpms, install_plan.supported_kmod_rpm])
     validate_installed_modules(install_plan.supported_kernel_release)
 
 

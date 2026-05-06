@@ -1,7 +1,7 @@
 """
 Script: tests/test_install_zfs_from_akmods_cache.py
 What: Tests the helper that installs cached ZFS RPMs into the build root.
-Doing: Exercises the primary-kernel planning rules without invoking `rpm-ostree` or mutating the host.
+Doing: Exercises the primary-kernel planning rules without invoking `dnf5` or mutating the host.
 Why: The old inline Containerfile shell block was hard to reason about and almost impossible to unit test.
 Goal: Keep the simplified primary-kernel contract explicit and reviewable.
 """

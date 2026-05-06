@@ -255,7 +255,7 @@ The ZFS install step follows the repo policy above:
 1. inspect every detected kernel under `/lib/modules`
 2. choose the newest detected kernel as the supported primary kernel
 3. require a matching `kmod-zfs` RPM for that kernel
-4. install only that kernel's `kmod-zfs` package through `rpm-ostree`
+4. install only that kernel's `kmod-zfs` package through `dnf5`
 5. run `depmod` for that supported kernel
 
 If the base image carries older bundled kernels too, those older kernels are not treated as supported ZFS targets inside the same image. The recovery path for a bad image is rollback to the previous image, not booting an older bundled kernel from the current one.
