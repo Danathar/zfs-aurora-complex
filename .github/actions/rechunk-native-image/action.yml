@@ -1,0 +1,75 @@
+name: Rechunk Native Image
+
+description: Post-process one locally built image with chunkah for content-based layers.
+
+inputs:
+  image_name:
+    description: Local image name to rechunk.
+    required: true
+  image_tag:
+    description: Local image tag to replace with chunkah output.
+    required: true
+  chunkah_version:
+    description: Verified chunkah release used for the splitter Containerfile.
+    required: false
+    default: v0.5.0
+  chunkah_image:
+    description: Digest-pinned chunkah image used by the splitter Containerfile.
+    required: false
+    default: quay.io/coreos/chunkah@sha256:352097f3d32186ac11082f8b74cd544678b00388b50c96ba5c8e79503a454fe3
+  max_layers:
+    description: Maximum content-based layers emitted by chunkah.
+    required: false
+    default: "128"
+
+runs:
+  using: composite
+  steps:
+    - name: Rechunk image with chunkah
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        CHUNKAH_VERSION: ${{ inputs.chunkah_version }}
+        CHUNKAH_IMAGE: ${{ inputs.chunkah_image }}
+        MAX_LAYERS: ${{ inputs.max_layers }}
+      run: |
+        set -euo pipefail
+
+        source_ref="${IMAGE_NAME}:${IMAGE_TAG}"
+        original_tag="${IMAGE_TAG}-pre-chunkah-${GITHUB_RUN_ID}"
+        original_ref="${IMAGE_NAME}:${original_tag}"
+        splitter_url="https://github.com/coreos/chunkah/releases/download/${CHUNKAH_VERSION}/Containerfile.splitter"
+
+        buildah tag "${source_ref}" "${original_ref}"
+        config_json="$(
+          buildah inspect --type image "${original_ref}" \
+            | python3 -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["OCIv1"], separators=(",", ":")))'
+        )"
+        rm -f out.ociarchive
+
+        # chunkah has no bootc-specific mode. Per upstream guidance for OSTree
+        # bootc images, prune /sysroot, remove ostree-specific labels, and keep
+        # the original inspect metadata so labels such as containers.bootc=1 survive.
+        buildah build \
+          --skip-unused-stages=false \
+          --volume "${PWD}:/run/src" \
+          --security-opt=label=disable \
+          --from "${original_ref}" \
+          --build-arg "CHUNKAH=${CHUNKAH_IMAGE}" \
+          --build-arg "CHUNKAH_CONFIG_STR=${config_json}" \
+          --build-arg "CHUNKAH_ARGS=--compressed --max-layers ${MAX_LAYERS} --prune /sysroot/ --label ostree.commit- --label ostree.final-diffid-" \
+          -t "${source_ref}" \
+          "${splitter_url}"
+        rm -f out.ociarchive
+
+    - name: Lint rechunked bootc image
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+      run: |
+        set -euo pipefail
+        container="$(buildah from "${IMAGE_NAME}:${IMAGE_TAG}")"
+        trap 'buildah rm "${container}" >/dev/null 2>&1 || true' EXIT
+        buildah run "${container}" bootc container lint

@@ -143,6 +143,15 @@ jobs:
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 
+      # Test chunkah as a post-processing step only. The normal bootc build and
+      # ZFS install path stay unchanged; this replaces the local branch tag with
+      # a content-layered version before publication.
+      - name: Rechunk branch image with chunkah
+        uses: ./.github/actions/rechunk-native-image
+        with:
+          image_name: ${{ steps.defaults.outputs.image_name }}
+          image_tag: ${{ steps.tags.outputs.branch_image_tag }}
+
       # Human-owned branches publish a signed test image so the branch can be
       # tried on a real machine if needed.
       - name: Push and sign branch image
@@ -156,6 +165,25 @@ jobs:
           registry_password: ${{ github.token }}
           image_org: ${{ steps.registry.outputs.image_org }}
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}
+
+      - name: Compare chunkah branch image to main
+        if: steps.registry.outputs.actor_is_bot != 'true'
+        shell: bash
+        env:
+          MAIN_IMAGE_REF: docker://ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}:latest
+          BRANCH_IMAGE_REF: docker://ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}:${{ steps.tags.outputs.branch_image_tag }}
+          REPORT_JSON_PATH: artifacts/chunkah-image-comparison.json
+        run: |
+          python3 -m ci_tools.cli compare-image-layers
+
+      - name: Upload chunkah comparison report
+        if: steps.registry.outputs.actor_is_bot != 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: chunkah-image-comparison-${{ github.run_id }}
+          path: artifacts/chunkah-image-comparison.json
+          if-no-files-found: error
+          retention-days: 30
 
       # Automated dependency update branches still run the full build, but they
       # stop short of publishing to avoid cluttering the registry with bot-only
