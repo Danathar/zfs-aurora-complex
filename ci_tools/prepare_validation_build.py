@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from ci_tools.akmods_clone_pinned import clone_pinned
 from ci_tools.check_akmods_cache import inspect_akmods_cache
-from ci_tools.common import CiToolError, normalize_owner, require_env, require_env_or_default
+from ci_tools.common import (
+    CiToolError,
+    normalize_owner,
+    require_env,
+    require_env_or_default,
+    write_github_outputs,
+)
 from ci_tools.resolve_build_inputs import resolve_build_inputs, write_resolved_build_outputs
 
 
@@ -45,10 +51,17 @@ def main() -> None:
             "then rerun this workflow."
         )
 
+    write_github_outputs(
+        {
+            "akmods_image": status.source_image,
+            "akmods_image_pinned": status.source_image_pinned,
+        }
+    )
     print(
         f"Read-only validation will reuse {status.source_image} for primary kernel "
         f"{inputs.kernel_release}."
     )
+    print(f"Digest-pinned akmods cache image for validation build: {status.source_image_pinned}")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from ci_tools.check_akmods_cache import _has_kernel_matching_rpm, inspect_akmods_cache
 from ci_tools.common import CiToolError
@@ -30,9 +30,6 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             )
 
     def test_inspect_akmods_cache_reads_shared_cache_image(self) -> None:
-        def fake_exists(image_ref: str) -> bool:
-            return image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
-
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
@@ -55,8 +52,14 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                     rpm_dir / "kmod-zfs-6.18.16-200.fc43.x86_64-2.4.1-1.fc43.x86_64.rpm"
                 ).touch()
 
-            with patch("ci_tools.check_akmods_cache.skopeo_exists", side_effect=fake_exists):
-                with patch("ci_tools.check_akmods_cache.skopeo_copy", side_effect=fake_copy) as skopeo_copy:
+            with patch(
+                "ci_tools.check_akmods_cache.skopeo_inspect_digest",
+                return_value="sha256:abc123",
+            ) as inspect_digest:
+                with patch(
+                    "ci_tools.check_akmods_cache.skopeo_copy",
+                    side_effect=fake_copy,
+                ) as skopeo_copy:
                     with patch(
                         "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
                         side_effect=fake_load_layers,
@@ -73,11 +76,24 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                             )
 
         self.assertTrue(status.reusable)
+        self.assertEqual(
+            status.source_image_pinned,
+            "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
+        )
         self.assertEqual(status.inspection_method, "unpacked-image")
-        skopeo_copy.assert_called_once()
+        inspect_digest.assert_called_once_with(
+            "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
+        )
+        skopeo_copy.assert_called_once_with(
+            "docker://ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
+            ANY,
+        )
 
     def test_inspect_akmods_cache_raises_ci_error_when_layer_unpacking_fails(self) -> None:
-        with patch("ci_tools.check_akmods_cache.skopeo_exists", return_value=True):
+        with patch(
+            "ci_tools.check_akmods_cache.skopeo_inspect_digest",
+            return_value="sha256:abc123",
+        ):
             with patch("ci_tools.check_akmods_cache.skopeo_copy"):
                 with patch(
                     "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",

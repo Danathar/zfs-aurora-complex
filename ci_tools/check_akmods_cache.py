@@ -1,7 +1,7 @@
 """
 Script: ci_tools/check_akmods_cache.py
 What: Checks whether the shared akmods cache can be reused for the current primary base-image kernel.
-Doing: Pulls the cache image, unpacks layers when needed, checks for a matching `kmod-zfs` RPM, then writes `exists=true|false`.
+Doing: Pins and pulls the cache image, checks for a matching `kmod-zfs` RPM, then writes cache state outputs.
 Why: Skip rebuild when safe, but rebuild when the required primary-kernel module set is missing or older than the current target kernel.
 Goal: Control rebuild decisions in main and validation workflows.
 """
@@ -17,7 +17,7 @@ from ci_tools.common import (
     normalize_owner,
     require_env,
     skopeo_copy,
-    skopeo_exists,
+    skopeo_inspect_digest,
     write_github_outputs,
 )
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
@@ -29,12 +29,14 @@ class AkmodsCacheStatus:
     Result of checking one shared akmods cache image against the required kernel.
 
     `image_exists` tells us whether the source tag is present at all.
+    `source_image_pinned` is the exact image digest that was inspected.
     `missing_release` is the fail-closed kernel not covered by that image.
     A reusable cache must satisfy both conditions.
     """
 
     source_image: str
     image_exists: bool
+    source_image_pinned: str = ""
     missing_release: str = ""
     inspection_method: str = "unpacked-image"
 
@@ -70,7 +72,9 @@ def inspect_akmods_cache(
     """
 
     source_image = f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
-    if not skopeo_exists(f"docker://{source_image}"):
+    try:
+        source_digest = skopeo_inspect_digest(f"docker://{source_image}")
+    except CiToolError:
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=False,
@@ -78,10 +82,11 @@ def inspect_akmods_cache(
             inspection_method="missing-image",
         )
 
+    source_image_pinned = f"ghcr.io/{image_org}/{source_repo}@{source_digest}"
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         akmods_dir = root / "akmods"
-        skopeo_copy(f"docker://{source_image}", f"dir:{akmods_dir}")
+        skopeo_copy(f"docker://{source_image_pinned}", f"dir:{akmods_dir}")
 
         try:
             layer_files = load_layer_files_from_oci_layout(akmods_dir)
@@ -93,6 +98,7 @@ def inspect_akmods_cache(
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=True,
+            source_image_pinned=source_image_pinned,
             missing_release=missing_release,
             inspection_method="unpacked-image",
         )
@@ -117,11 +123,18 @@ def main() -> None:
         return
 
     if status.reusable:
-        write_github_outputs({"exists": "true"})
+        write_github_outputs(
+            {
+                "exists": "true",
+                "akmods_image": status.source_image,
+                "akmods_image_pinned": status.source_image_pinned,
+            }
+        )
         print(
             f"Found matching {status.source_image} kmods for primary kernel {kernel_release}; "
             f"akmods rebuild can be skipped. Inspection method: {status.inspection_method}."
         )
+        print(f"Checked akmods cache digest: {status.source_image_pinned}")
         return
 
     write_github_outputs({"exists": "false"})

@@ -25,6 +25,7 @@ class CliTests(unittest.TestCase):
             "export-repo-defaults",
             "export-registry-context",
             "prepare-validation-build",
+            "pin-akmods-cache",
             "compute-branch-metadata",
             "promote-stable",
             "sign-image",

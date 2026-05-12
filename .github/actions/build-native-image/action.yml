@@ -32,6 +32,11 @@ runs:
   # copying the same Buildah settings into several workflow files.
   using: composite
   steps:
+    - name: Show pinned akmods cache input
+      shell: bash
+      run: |
+        echo "Final image build will consume akmods cache image: ${{ inputs.akmods_image }}"
+
     # Buildah is the Open Container Initiative (OCI) image builder used by this
     # repository. We pass every build input explicitly so readers can see which
     # parts of the final image are chosen by the workflow.

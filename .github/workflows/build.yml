@@ -77,6 +77,8 @@ jobs:
       use_input_lock: ${{ steps.prepare.outputs.use_input_lock }}
       lock_file_path: ${{ steps.prepare.outputs.lock_file_path }}
       akmods_cache_exists: ${{ steps.prepare.outputs.akmods_cache_exists }}
+      akmods_image: ${{ steps.prepare.outputs.akmods_image }}
+      akmods_image_pinned: ${{ steps.prepare.outputs.akmods_image_pinned }}
     permissions:
       contents: read
       packages: write
@@ -159,7 +161,7 @@ jobs:
           image_name: ${{ steps.defaults.outputs.image_name }}
           image_tag: ${{ steps.tags.outputs.candidate_tag }}
           base_image: ${{ needs.build-zfs-akmods.outputs.base_image_pinned }}
-          akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          akmods_image: ${{ needs.build-zfs-akmods.outputs.akmods_image_pinned }}
           akmods_upstream_ref: ${{ needs.build-zfs-akmods.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub

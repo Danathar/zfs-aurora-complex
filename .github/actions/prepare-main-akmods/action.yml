@@ -77,6 +77,12 @@ outputs:
   akmods_cache_exists:
     description: Whether a reusable shared akmods cache was found.
     value: ${{ steps.cache.outputs.exists }}
+  akmods_image:
+    description: Shared akmods cache tag that was checked or built.
+    value: ${{ steps.pin_akmods.outputs.akmods_image || steps.cache.outputs.akmods_image }}
+  akmods_image_pinned:
+    description: Digest-pinned shared akmods cache image ref for the final image build.
+    value: ${{ steps.pin_akmods.outputs.akmods_image_pinned || steps.cache.outputs.akmods_image_pinned }}
 
 runs:
   # This composite action is the "front half" of the main workflow. It decides
@@ -221,3 +227,17 @@ runs:
         path: artifacts/akmods-failure.json
         if-no-files-found: warn
         retention-days: 30
+
+    # When this run rebuilt the shared cache, pin the freshly published tag to
+    # the exact registry digest the final image build should consume. Reused
+    # caches get their digest from the earlier check step, which validated that
+    # same pinned image.
+    - id: pin_akmods
+      name: Resolve shared akmods cache digest
+      if: inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+      shell: bash
+      env:
+        FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+        AKMODS_REPO: ${{ inputs.akmods_repo }}
+      run: |
+        python3 -m ci_tools.cli pin-akmods-cache

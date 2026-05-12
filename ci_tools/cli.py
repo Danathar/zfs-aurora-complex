@@ -29,6 +29,7 @@ def command_map() -> dict[str, Callable[[], None]]:
     from ci_tools.classify_akmods_failure import main as classify_akmods_failure
     from ci_tools.export_repo_defaults import main as export_repo_defaults
     from ci_tools.prepare_validation_build import main as prepare_validation_build
+    from ci_tools.pin_akmods_cache import main as pin_akmods_cache
     from ci_tools.promote_stable import main as promote_stable
     from ci_tools.resolve_build_inputs import main as resolve_build_inputs
     from ci_tools.sign_image import main as sign_image
@@ -49,6 +50,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         "export-repo-defaults": export_repo_defaults,
         "export-registry-context": main_export_registry_context,
         "prepare-validation-build": prepare_validation_build,
+        "pin-akmods-cache": pin_akmods_cache,
         "compute-branch-metadata": main_compute_branch_metadata,
         "promote-stable": promote_stable,
         "sign-image": sign_image,

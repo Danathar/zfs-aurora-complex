@@ -57,7 +57,7 @@ jobs:
           image_name: ${{ steps.defaults.outputs.image_name }}
           image_tag: pr-validation
           base_image: ${{ steps.prepare.outputs.base_image_pinned }}
-          akmods_image: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.akmods_repo }}:main-${{ steps.prepare.outputs.version }}
+          akmods_image: ${{ steps.prepare.outputs.akmods_image_pinned }}
           akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub

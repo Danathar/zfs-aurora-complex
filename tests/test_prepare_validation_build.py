@@ -78,6 +78,9 @@ class PrepareValidationBuildTests(unittest.TestCase):
                             return_value=AkmodsCacheStatus(
                                 source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
                                 image_exists=True,
+                                source_image_pinned=(
+                                    "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123"
+                                ),
                                 missing_release="",
                             ),
                         ) as inspect_cache:
@@ -94,6 +97,16 @@ class PrepareValidationBuildTests(unittest.TestCase):
             )
             self.assertIn("base_image_tag<<", outputs)
             self.assertIn("latest-20260307.1", outputs)
+            self.assertIn("akmods_image<<", outputs)
+            self.assertIn(
+                "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                outputs,
+            )
+            self.assertIn("akmods_image_pinned<<", outputs)
+            self.assertIn(
+                "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
+                outputs,
+            )
 
             inspect_cache.assert_called_once_with(
                 image_org="danathar",
