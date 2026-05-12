@@ -2,6 +2,8 @@
 
 [![build](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Danathar/zfs-aurora-complex)
+
 GitHub Actions workflow: `build.yml`
 
 > [!IMPORTANT]
