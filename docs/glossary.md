@@ -70,7 +70,7 @@ This page defines terms used across this repository's docs and workflow comments
 
 ### Akmods Inputs
 
-- `AKMODS_IMAGE`: exact shared akmods cache image ref used by the final image build to install ZFS RPMs.
+- `AKMODS_IMAGE`: exact shared akmods cache image ref used by the final image build to install ZFS RPMs. In CI this is digest-pinned.
 - `AKMODS_IMAGE_TEMPLATE`: fallback cache-image template containing `{fedora}` for local builds that do not pass `AKMODS_IMAGE`.
 - `AKMODS_REPO`: GHCR repository name for the shared akmods cache image.
 - `AKMODS_UPSTREAM_REPO`: Git URL for the akmods fork this repo builds from.

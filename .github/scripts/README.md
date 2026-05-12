@@ -17,6 +17,7 @@ If a term is unfamiliar, check the shared glossary first:
 | Resolve build inputs | `resolve-build-inputs` | `ci_tools.resolve_build_inputs` |
 | Write build inputs manifest | `write-build-inputs-manifest` | `ci_tools.write_build_inputs_manifest` |
 | Check shared akmods cache | `check-akmods-cache` | `ci_tools.check_akmods_cache` |
+| Resolve shared akmods cache tag to digest | `pin-akmods-cache` | `ci_tools.pin_akmods_cache` |
 | Export normalized registry context for later workflow steps | `export-registry-context` | `ci_tools.tagging_context` |
 | Export checked-in repo defaults for workflow steps | `export-repo-defaults` | `ci_tools.export_repo_defaults` |
 | Resolve pull request (PR) validation inputs and verify shared akmods cache | `prepare-validation-build` | `ci_tools.prepare_validation_build` |
@@ -70,7 +71,7 @@ These composite actions keep the workflow files focused on job order and data fl
 - [`load-ci-defaults`](../actions/load-ci-defaults/action.yml)
   - exports values from `ci/defaults.json`
 - [`prepare-main-akmods`](../actions/prepare-main-akmods/action.yml)
-  - resolves main-workflow inputs, uploads the build-input manifest, verifies shared akmods cache state, and rebuilds the shared cache only when required
+  - resolves main-workflow inputs, uploads the build-input manifest, verifies shared akmods cache state, rebuilds the shared cache only when required, and exports the digest-pinned cache image
 - [`prepare-registry-context`](../actions/prepare-registry-context/action.yml)
   - computes lowercase GitHub Container Registry (GHCR) paths and whether the current account is an automation bot
 - [`build-native-image`](../actions/build-native-image/action.yml)

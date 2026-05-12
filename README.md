@@ -141,6 +141,7 @@ Shared akmods cache image:
 
 - `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
 - architecture-specific inspection tag: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>-x86_64`
+- CI resolves the shared `main-<fedora>` tag to `ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:<digest>` before building the final OS image
 
 The important simplification is this:
 
@@ -247,7 +248,7 @@ Three workflow-side simplifications now support that image build:
 
 One Fedora-version detail matters here:
 
-1. GitHub Actions usually passes an exact `AKMODS_IMAGE` reference for the detected Fedora major version
+1. GitHub Actions usually passes a digest-pinned `AKMODS_IMAGE` reference for the detected Fedora major version
 2. local builds do not need a hard-coded Fedora major version in `Containerfile`
 3. when `AKMODS_IMAGE` is not passed, the install helper renders `AKMODS_IMAGE_TEMPLATE`
    with the Fedora major version detected from the chosen base image itself
@@ -280,7 +281,7 @@ podman build \
 
 Notes:
 
-1. the `AKMODS_IMAGE` tag must match the Fedora major version of the chosen base image; inspect the base image (`skopeo inspect docker://<base>`) to confirm which `main-<fedora>` tag to reference
+1. the `AKMODS_IMAGE` tag must match the Fedora major version of the chosen base image; inspect the base image (`skopeo inspect docker://<base>`) to confirm which `main-<fedora>` tag to reference. CI uses the digest-pinned form of that same cache image.
 2. `AKMODS_IMAGE` can be omitted for offline experiments; the install helper falls back to `AKMODS_IMAGE_TEMPLATE` and auto-detects the Fedora version from the base image, but that fallback still requires network access to pull the cache image
 3. local builds do not go through the candidate-before-promote flow or signing; the resulting image tag is ephemeral and is not trusted by any `bootc` policy
 

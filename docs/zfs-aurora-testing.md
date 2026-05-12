@@ -30,6 +30,7 @@ The objective is to validate that we can safely:
 2. stable OS image: `ghcr.io/danathar/zfs-aurora-complex:latest`
 3. stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
 4. shared akmods cache image: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
+   - final image builds consume the digest-pinned form: `ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:<digest>`
 
 ### Branch Artifacts
 
@@ -118,7 +119,8 @@ The workflow passes build arguments directly into [`Containerfile`](../Container
 
 That means there is no generated workspace and no per-run file mutation layer.
 `AKMODS_IMAGE_TEMPLATE` is still available as a `Containerfile` fallback for
-local builds that do not pass an exact cache image ref.
+local builds that do not pass an exact cache image ref. CI passes the digest-pinned
+cache ref resolved by the earlier akmods job.
 
 The image also installs [`files/usr/lib/modules-load.d/zfs.conf`](../files/usr/lib/modules-load.d/zfs.conf)
 so `systemd-modules-load` loads the ZFS kernel module during boot. That makes

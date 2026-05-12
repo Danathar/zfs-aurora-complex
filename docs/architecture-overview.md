@@ -51,6 +51,11 @@ The shared cache remains separate because it is a different kind of build output
 - `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
 - `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>-x86_64`
 
+Workflow jobs still check or publish the readable `main-<fedora>` tag, but the
+final OS image build consumes that cache by digest:
+
+- `ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:<digest>`
+
 Why keep a separate akmods cache repository:
 
 1. it keeps the final OS image tags readable
@@ -76,12 +81,13 @@ The `main` workflow now wraps that whole preparation path in one local action:
 
 - [`.github/actions/prepare-main-akmods/action.yml`](../.github/actions/prepare-main-akmods/action.yml)
 
-That action does four things in one place:
+That action does five things in one place:
 
 1. resolve and record build inputs
 2. upload the build-input manifest
 3. verify whether the shared akmods cache can be reused
 4. rebuild and republish the shared cache only when required
+5. resolve the checked or rebuilt cache tag to the digest-pinned ref passed to the final image build
 
 ### 2. Shared Akmods Cache Reuse Or Rebuild
 
@@ -184,7 +190,7 @@ to write `policy.json`.
 
 Fedora-version handling is intentionally dynamic here:
 
-1. workflow runs normally pass an exact `AKMODS_IMAGE` build argument
+1. workflow runs normally pass a digest-pinned `AKMODS_IMAGE` build argument
 2. local builds can rely on `AKMODS_IMAGE_TEMPLATE` instead
 3. the helper fills in `{fedora}` by asking the selected base image which Fedora
    major version it is based on
