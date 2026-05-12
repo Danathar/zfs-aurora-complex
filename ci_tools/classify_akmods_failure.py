@@ -77,7 +77,11 @@ def zfs_max_kernel_is_below_resolved_kernel(log_text: str, kernel_release: str) 
 def build_failure_summary(*, failure_kind: str, kernel_release: str, log_text: str) -> str:
     """Build the human-readable reason shown in artifacts and job summaries."""
     zfs_version, max_kernel = zfs_metadata_from_log(log_text)
-    if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT and max_kernel:
+    if (
+        failure_kind == FAILURE_KIND_UPSTREAM_COMPAT
+        and max_kernel
+        and zfs_max_kernel_is_below_resolved_kernel(log_text, kernel_release)
+    ):
         version = zfs_version or "the selected OpenZFS release"
         return (
             f"OpenZFS {version} supports Linux kernels up to {max_kernel}, "

@@ -116,6 +116,21 @@ class FailureSummaryTests(unittest.TestCase):
         self.assertIn("7.0.4-200.fc44.x86_64", summary)
         self.assertIn("intentionally failing closed", summary)
 
+    def test_openzfs_max_kernel_summary_requires_newer_resolved_kernel(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+        )
+
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+            kernel_release="6.18.16-200.fc43.x86_64",
+            log_text=log,
+        )
+
+        self.assertNotIn("but the resolved base image uses", summary)
+        self.assertIn("known upstream ZFS/kernel compatibility pattern", summary)
+
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):
     def test_payload_key_is_stable_per_kernel_and_ref(self) -> None:
