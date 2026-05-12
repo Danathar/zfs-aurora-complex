@@ -21,6 +21,12 @@ FAILURE_KIND_UPSTREAM_COMPAT = "upstream-compat"
 FAILURE_KIND_UNKNOWN = "unknown"
 
 
+ZFS_META_VERSION_RE = re.compile(r"ZFS_META_VERSION='([^']+)'")
+ZFS_META_KVER_MAX_RE = re.compile(r"ZFS_META_KVER_MAX='([^']+)'")
+KERNEL_MAJOR_MINOR_RE = re.compile(r"^(\d+)\.(\d+)")
+ZFS_MAX_KERNEL_MISMATCH_PATTERN = "OpenZFS max supported kernel is below resolved kernel"
+
+
 UPSTREAM_COMPAT_PATTERNS: tuple[re.Pattern[str], ...] = (
     # Kernel API drift: kmod source calls a symbol the current kernel no longer provides
     re.compile(r"implicit declaration of function", re.IGNORECASE),
@@ -43,7 +49,50 @@ UPSTREAM_COMPAT_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def classify_log_text(log_text: str) -> tuple[str, list[str]]:
+def kernel_major_minor(value: str) -> tuple[int, int] | None:
+    """Return a comparable kernel major/minor tuple from values like `7.0.4`."""
+    match = KERNEL_MAJOR_MINOR_RE.search(value)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def zfs_metadata_from_log(log_text: str) -> tuple[str, str]:
+    """Extract OpenZFS version and declared max kernel from configure output."""
+    version_match = ZFS_META_VERSION_RE.search(log_text)
+    max_match = ZFS_META_KVER_MAX_RE.search(log_text)
+    return (version_match.group(1) if version_match else "", max_match.group(1) if max_match else "")
+
+
+def zfs_max_kernel_is_below_resolved_kernel(log_text: str, kernel_release: str) -> bool:
+    """Return true when OpenZFS metadata says the resolved kernel is too new."""
+    _, max_kernel = zfs_metadata_from_log(log_text)
+    resolved = kernel_major_minor(kernel_release)
+    supported_max = kernel_major_minor(max_kernel)
+    if resolved is None or supported_max is None:
+        return False
+    return resolved > supported_max
+
+
+def build_failure_summary(*, failure_kind: str, kernel_release: str, log_text: str) -> str:
+    """Build the human-readable reason shown in artifacts and job summaries."""
+    zfs_version, max_kernel = zfs_metadata_from_log(log_text)
+    if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT and max_kernel:
+        version = zfs_version or "the selected OpenZFS release"
+        return (
+            f"OpenZFS {version} supports Linux kernels up to {max_kernel}, "
+            f"but the resolved base image uses {kernel_release}. "
+            "The build is intentionally failing closed and image promotion was skipped."
+        )
+    if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT:
+        return (
+            "The akmods build failed with a known upstream ZFS/kernel compatibility pattern. "
+            "The build is intentionally failing closed and image promotion was skipped."
+        )
+    return "The akmods build failed, but no known compatibility pattern matched the log."
+
+
+def classify_log_text(log_text: str, *, kernel_release: str = "") -> tuple[str, list[str]]:
     """
     Classify a failure log body.
 
@@ -61,6 +110,9 @@ def classify_log_text(log_text: str) -> tuple[str, list[str]]:
         if pattern.search(log_text):
             matched.append(pattern.pattern)
 
+    if zfs_max_kernel_is_below_resolved_kernel(log_text, kernel_release):
+        matched.append(ZFS_MAX_KERNEL_MISMATCH_PATTERN)
+
     if matched:
         return FAILURE_KIND_UPSTREAM_COMPAT, matched
     return FAILURE_KIND_UNKNOWN, []
@@ -75,6 +127,7 @@ def build_sticky_issue_payload(
     run_id: str,
     run_url: str,
     matched_patterns: Iterable[str],
+    summary: str = "",
 ) -> dict:
     """
     Build the sticky-issue payload the visibility workflow uploads as an artifact.
@@ -92,8 +145,10 @@ def build_sticky_issue_payload(
         title = f"Unclassified akmods build failure: {kernel_release} + akmods@{safe_ref}"
 
     matched_list = "\n".join(f"- `{pat}`" for pat in matched_patterns) or "- (none)"
+    summary_section = f"**Summary:** {summary}\n\n" if summary else ""
     body = (
         f"**Failure kind:** `{failure_kind}`\n\n"
+        f"{summary_section}"
         f"**Primary kernel:** `{kernel_release}`\n"
         f"**Akmods upstream ref:** `{akmods_upstream_ref}`\n"
         f"**Fedora version:** `{fedora_version}`\n\n"
@@ -113,7 +168,34 @@ def build_sticky_issue_payload(
         "fedora_version": fedora_version,
         "run_id": run_id,
         "run_url": run_url,
+        "summary": summary,
     }
+
+
+def build_step_summary_markdown(payload: dict) -> str:
+    """Render a short GitHub Actions step summary for the failed akmods build."""
+    lines = [
+        "## Akmods build failure",
+        "",
+        f"- Failure kind: `{payload['failure_kind']}`",
+        f"- Primary kernel: `{payload['kernel_release']}`",
+        f"- Fedora version: `{payload['fedora_version']}`",
+        f"- Akmods upstream ref: `{payload['akmods_upstream_ref']}`",
+    ]
+    if payload.get("summary"):
+        lines.extend(["", payload["summary"]])
+    if payload.get("run_url"):
+        lines.extend(["", f"Failing run: {payload['run_url']}"])
+    return "\n".join(lines) + "\n"
+
+
+def write_step_summary(payload: dict) -> None:
+    """Append the akmods failure explanation to GitHub's job summary when available."""
+    summary_path = optional_env("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+    with Path(summary_path).open("a", encoding="utf-8") as summary_file:
+        summary_file.write(build_step_summary_markdown(payload))
 
 
 def main() -> None:
@@ -131,7 +213,12 @@ def main() -> None:
     if log_path and Path(log_path).exists():
         log_text = Path(log_path).read_text(encoding="utf-8", errors="replace")
 
-    failure_kind, matched_patterns = classify_log_text(log_text)
+    failure_kind, matched_patterns = classify_log_text(log_text, kernel_release=kernel_release)
+    summary = build_failure_summary(
+        failure_kind=failure_kind,
+        kernel_release=kernel_release,
+        log_text=log_text,
+    )
 
     payload = build_sticky_issue_payload(
         failure_kind=failure_kind,
@@ -141,11 +228,13 @@ def main() -> None:
         run_id=run_id,
         run_url=run_url,
         matched_patterns=matched_patterns,
+        summary=summary,
     )
 
     out_path = Path(payload_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_step_summary(payload)
 
     if os.environ.get("GITHUB_OUTPUT"):
         write_github_outputs(

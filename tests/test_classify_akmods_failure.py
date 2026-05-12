@@ -13,6 +13,9 @@ import unittest
 from ci_tools.classify_akmods_failure import (
     FAILURE_KIND_UNKNOWN,
     FAILURE_KIND_UPSTREAM_COMPAT,
+    ZFS_MAX_KERNEL_MISMATCH_PATTERN,
+    build_failure_summary,
+    build_step_summary_markdown,
     build_sticky_issue_payload,
     classify_log_text,
 )
@@ -39,6 +42,30 @@ class ClassifyLogTextTests(unittest.TestCase):
         log = "RuntimeError: Cached akmods do not cover the supported kernel; rebuild akmods."
         kind, _ = classify_log_text(log)
         self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+
+    def test_openzfs_max_kernel_below_resolved_kernel_is_upstream_compat(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+            "configure: exit 1\n"
+        )
+
+        kind, matched = classify_log_text(log, kernel_release="7.0.4-200.fc44.x86_64")
+
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertIn(ZFS_MAX_KERNEL_MISMATCH_PATTERN, matched)
+
+    def test_openzfs_max_kernel_does_not_match_without_newer_resolved_kernel(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+            "configure: exit 1\n"
+        )
+
+        kind, matched = classify_log_text(log, kernel_release="6.19.1-200.fc44.x86_64")
+
+        self.assertEqual(kind, FAILURE_KIND_UNKNOWN)
+        self.assertEqual(matched, [])
 
     def test_unrelated_python_traceback_is_unknown(self) -> None:
         log = (
@@ -70,6 +97,24 @@ class ClassifyLogTextTests(unittest.TestCase):
                 "conflicting types for",
             ],
         )
+
+
+class FailureSummaryTests(unittest.TestCase):
+    def test_openzfs_max_kernel_summary_explains_fail_closed_behavior(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+        )
+
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+            kernel_release="7.0.4-200.fc44.x86_64",
+            log_text=log,
+        )
+
+        self.assertIn("OpenZFS 2.4.1 supports Linux kernels up to 6.19", summary)
+        self.assertIn("7.0.4-200.fc44.x86_64", summary)
+        self.assertIn("intentionally failing closed", summary)
 
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):
@@ -115,6 +160,39 @@ class BuildStickyIssuePayloadTests(unittest.TestCase):
             matched_patterns=["unknown type name 'struct"],
         )
         self.assertIn("unknown-ref", payload["key"])
+
+    def test_payload_body_includes_summary_when_provided(self) -> None:
+        payload = build_sticky_issue_payload(
+            failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+            kernel_release="7.0.4-200.fc44.x86_64",
+            akmods_upstream_ref="28079918460b05c43422d48a2a5866aa78f1dce5",
+            fedora_version="44",
+            run_id="12345",
+            run_url="https://github.com/example/repo/actions/runs/12345",
+            matched_patterns=[ZFS_MAX_KERNEL_MISMATCH_PATTERN],
+            summary="OpenZFS 2.4.1 supports Linux kernels up to 6.19.",
+        )
+
+        self.assertIn("**Summary:** OpenZFS 2.4.1 supports Linux kernels up to 6.19.", payload["body"])
+        self.assertIn("summary", payload)
+
+
+class StepSummaryTests(unittest.TestCase):
+    def test_step_summary_shows_actionable_failure_reason(self) -> None:
+        markdown = build_step_summary_markdown(
+            {
+                "failure_kind": FAILURE_KIND_UPSTREAM_COMPAT,
+                "kernel_release": "7.0.4-200.fc44.x86_64",
+                "fedora_version": "44",
+                "akmods_upstream_ref": "28079918460b05c43422d48a2a5866aa78f1dce5",
+                "summary": "OpenZFS 2.4.1 supports Linux kernels up to 6.19.",
+                "run_url": "https://github.com/example/repo/actions/runs/12345",
+            }
+        )
+
+        self.assertIn("Failure kind: `upstream-compat`", markdown)
+        self.assertIn("Primary kernel: `7.0.4-200.fc44.x86_64`", markdown)
+        self.assertIn("OpenZFS 2.4.1 supports Linux kernels up to 6.19.", markdown)
 
 
 if __name__ == "__main__":
