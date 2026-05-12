@@ -234,7 +234,7 @@ runs:
     # same pinned image.
     - id: pin_akmods
       name: Resolve shared akmods cache digest
-      if: inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+      if: success() && (inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true')
       shell: bash
       env:
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}

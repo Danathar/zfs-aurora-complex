@@ -89,6 +89,28 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             ANY,
         )
 
+    def test_inspect_akmods_cache_reports_missing_image_when_digest_lookup_fails(self) -> None:
+        with patch(
+            "ci_tools.check_akmods_cache.skopeo_inspect_digest",
+            side_effect=CiToolError("manifest unknown"),
+        ):
+            status = inspect_akmods_cache(
+                image_org="danathar",
+                source_repo="zfs-aurora-complex-akmods",
+                fedora_version="43",
+                kernel_release="6.18.16-200.fc43.x86_64",
+            )
+
+        self.assertFalse(status.reusable)
+        self.assertFalse(status.image_exists)
+        self.assertEqual(
+            status.source_image,
+            "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+        )
+        self.assertEqual(status.source_image_pinned, "")
+        self.assertEqual(status.missing_release, "6.18.16-200.fc43.x86_64")
+        self.assertEqual(status.inspection_method, "missing-image")
+
     def test_inspect_akmods_cache_raises_ci_error_when_layer_unpacking_fails(self) -> None:
         with patch(
             "ci_tools.check_akmods_cache.skopeo_inspect_digest",
