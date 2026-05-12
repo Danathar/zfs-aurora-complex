@@ -294,6 +294,12 @@ model and the cosign v3 compatibility flags.
 3. `build-pr.yml`: read-only validation inputs plus no-push build
 4. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers
 5. `akmods-failure-triage.yml`: `workflow_run` visibility workflow that opens, updates, and closes sticky akmods failure issues
+   - failed shared-akmods builds upload `akmods-failure.json` before the job exits
+   - `upstream-compat` marks known ZFS/kernel compatibility failures; the build
+     still fails and `latest` is not promoted
+   - when OpenZFS configure metadata shows `ZFS_META_KVER_MAX` below the
+     resolved base-image kernel, the job summary and sticky payload call out
+     that this is an intentional fail-closed protection
 
 ## Design Principles
 

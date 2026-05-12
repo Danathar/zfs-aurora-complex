@@ -30,6 +30,25 @@ If a term is unfamiliar, check the shared glossary first:
 | Build and publish shared self-hosted ZFS akmods image | `akmods-build-and-publish` | `ci_tools.akmods_build_and_publish` |
 | Classify an akmods build failure for sticky-issue triage | `classify-akmods-failure` | `ci_tools.classify_akmods_failure` |
 
+### Akmods Failure Classification
+
+`classify-akmods-failure` reads `artifacts/akmods-build.log` after the shared
+ZFS akmods build fails. It writes `artifacts/akmods-failure.json` for the
+sticky-issue workflow and appends a short GitHub step summary when
+`GITHUB_STEP_SUMMARY` is available.
+
+The classifier is intentionally small and fail-closed:
+
+- `upstream-compat` means the log matched a known ZFS/kernel compatibility
+  surface. The build still fails, and image promotion remains blocked.
+- `unknown` means the log did not match a known compatibility pattern and needs
+  manual investigation.
+
+For OpenZFS configure output, the classifier also compares `ZFS_META_KVER_MAX`
+with the resolved `KERNEL_RELEASE`. If the base image kernel is newer than the
+OpenZFS-declared maximum, the payload explains that the build is intentionally
+failing closed until OpenZFS supports that kernel line.
+
 ## Workflow Map
 
 - [`build.yml`](../workflows/build.yml)
