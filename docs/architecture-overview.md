@@ -170,7 +170,7 @@ specific container image manifest format produced by buildah.
 
 1. installs the committed `cosign.pub` public key into the image trust-material path
 2. enables brew setup/update services via `systemctl preset`
-3. keeps Distrobox from the upstream Aurora DX image
+3. keeps Distrobox from the upstream Aurora DX NVIDIA image
 4. runs the ZFS install helper against the resolved akmods cache image reference
 5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
 6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`

@@ -4,7 +4,7 @@
   "AKMODS_UPSTREAM_REF": "",
   "IMAGE_NAME": "zfs-aurora-complex",
   "AKMODS_REPO": "zfs-aurora-complex-akmods",
-  "DEFAULT_BASE_IMAGE": "ghcr.io/ublue-os/aurora-dx:latest",
+  "DEFAULT_BASE_IMAGE": "ghcr.io/ublue-os/aurora-dx-nvidia:latest",
   "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/ublue-os/devcontainer:latest",
   "DEFAULT_ZFS_MINOR_VERSION": "2.4"
 }

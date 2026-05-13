@@ -1,9 +1,9 @@
-# Native container build for the Aurora + ZFS image.
+# Native container build for the Aurora DX NVIDIA + ZFS image.
 #
 # This repository intentionally avoids BlueBuild. The build is expressed as a
 # standard bootc-style Containerfile so CI can control tags directly.
 
-ARG BASE_IMAGE="ghcr.io/ublue-os/aurora-dx:latest"
+ARG BASE_IMAGE="ghcr.io/ublue-os/aurora-dx-nvidia:latest"
 # Aurora already includes the Universal Blue brew payload. If BASE_IMAGE is
 # changed to a base that does not include brew, such as Fedora Atomic, uncomment
 # BREW_IMAGE, the brew stage, and the COPY --from=brew line below.

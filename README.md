@@ -14,7 +14,7 @@ GitHub Actions workflow: `build.yml`
 > sudo systemctl reboot
 > ```
 >
-> Do not use plain `bootc switch` for the first move from stock Aurora DX into this
+> Do not use plain `bootc switch` for the first move from stock Aurora DX NVIDIA into this
 > image. This image installs a repository-specific signing policy for
 > `ghcr.io/danathar/zfs-aurora-complex`, so the first switch should record the
 > deployment as policy-verified. After rebooting into this image family, future
@@ -31,11 +31,11 @@ GitHub Actions workflow: `build.yml`
 >
 > The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
-This repository builds a signed Aurora DX image with:
+This repository builds a signed Aurora DX NVIDIA image with:
 
 - ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
-- Distrobox inherited from the upstream Aurora DX image
-- Homebrew inherited from the upstream Aurora DX image
+- Distrobox inherited from the upstream Aurora DX NVIDIA image
+- Homebrew inherited from the upstream Aurora DX NVIDIA image
 - a single-repository signing policy for future signed `bootc upgrade` flows
 
 The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
@@ -47,7 +47,7 @@ The problem has not changed:
 1. Fedora-family images move kernels quickly.
 2. ZFS is an out-of-tree kernel module.
 3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
-4. If you do not gate builds carefully, you can publish an Aurora DX image whose kernel and ZFS modules do not match.
+4. If you do not gate builds carefully, you can publish an Aurora DX NVIDIA image whose kernel and ZFS modules do not match.
 
 This repository intentionally uses:
 
@@ -235,9 +235,9 @@ Docs-only changes do not trigger image builds.
 
 At a high level, the final image build now works like this:
 
-1. `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx`
-2. Aurora DX already includes Homebrew; the optional `ghcr.io/ublue-os/brew:latest` stage can be uncommented if `BASE_IMAGE` is changed to a base without brew, such as Fedora Atomic
-3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora DX image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
+1. `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx-nvidia`
+2. Aurora DX NVIDIA already includes Homebrew; the optional `ghcr.io/ublue-os/brew:latest` stage can be uncommented if `BASE_IMAGE` is changed to a base without brew, such as Fedora Atomic
+3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora DX NVIDIA image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
 4. `bootc container lint` validates the final image
 
 Three workflow-side simplifications now support that image build:
@@ -273,7 +273,7 @@ CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-im
 
 ```bash
 podman build \
-    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora-dx:latest \
+    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora-dx-nvidia:latest \
     --build-arg AKMODS_IMAGE=ghcr.io/danathar/zfs-aurora-complex-akmods:main-43 \
     -t zfs-aurora-complex:local \
     .
@@ -292,7 +292,7 @@ For reproducing a specific published image exactly, prefer the CI workflow with 
 > [!WARNING]
 > This is an experimental image stream.
 
-Fresh stock Aurora DX can switch to the published image after the GitHub workflow
+Fresh stock Aurora DX NVIDIA can switch to the published image after the GitHub workflow
 has produced a signed `latest` tag:
 
 ```bash
