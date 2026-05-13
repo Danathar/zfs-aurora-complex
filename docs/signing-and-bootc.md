@@ -17,7 +17,7 @@ This repository uses a self-managed cosign keypair:
    `/etc/containers/registries.d/` file so future `bootc upgrade` operations
    require a matching signature for `ghcr.io/danathar/zfs-aurora-complex`.
 
-Use this command for the first switch from stock Aurora DX NVIDIA into this image:
+Use this command for the first switch from stock Aurora DX NVIDIA Open into this image:
 
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest

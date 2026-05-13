@@ -85,7 +85,7 @@ This page defines terms used across this repository's docs and workflow comments
 
 ### Image Build Inputs
 
-- `BASE_IMAGE`: base Aurora DX NVIDIA image ref passed to the root `Containerfile`.
+- `BASE_IMAGE`: base Aurora DX NVIDIA Open image ref passed to the root `Containerfile`.
 - `BREW_IMAGE`: optional Homebrew OCI image ref that can be uncommented in the `Containerfile` if the base image does not already include brew.
 - `IMAGE_REPO`: final OS image repository path used when writing signing policy.
 - `SIGNING_KEY_FILENAME`: public-key filename installed into the image for future signature verification.
