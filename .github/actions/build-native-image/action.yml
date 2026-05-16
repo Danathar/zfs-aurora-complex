@@ -19,6 +19,14 @@ inputs:
     description: Resolved akmods fork commit SHA used for this build. Recorded as an OCI image label for provenance.
     required: false
     default: ""
+  stable_signal_image:
+    description: Upstream stable-signal image ref recorded as OCI image provenance.
+    required: false
+    default: ""
+  stable_signal_digest:
+    description: Upstream stable-signal digest recorded as OCI image provenance.
+    required: false
+    default: ""
   image_repo:
     description: Public image repository path used by in-image signing policy.
     required: true
@@ -58,6 +66,8 @@ runs:
           org.zfs-aurora-complex.akmods-ref=${{ inputs.akmods_upstream_ref }}
           org.zfs-aurora-complex.akmods-image=${{ inputs.akmods_image }}
           org.zfs-aurora-complex.base-image=${{ inputs.base_image }}
+          org.zfs-aurora-complex.stable-signal-image=${{ inputs.stable_signal_image }}
+          org.zfs-aurora-complex.stable-signal-digest=${{ inputs.stable_signal_digest }}
         # Use Docker v2s2 manifest format instead of OCI image manifests.
         # `ostree container commit` and `rpm-ostree` work more reliably with the
         # Docker format. The "OCI" terminology elsewhere in this project refers to

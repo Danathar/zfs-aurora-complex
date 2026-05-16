@@ -57,8 +57,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  preflight:
+    name: Evaluate Stable Signal Gate
+    runs-on: ubuntu-24.04
+    outputs:
+      should_build: ${{ steps.gate.outputs.should_build }}
+      reason: ${{ steps.gate.outputs.reason }}
+      stable_signal_ref: ${{ steps.gate.outputs.stable_signal_ref }}
+      stable_signal_digest: ${{ steps.gate.outputs.stable_signal_digest }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
+      - name: Evaluate stable signal gate
+        id: gate
+        shell: bash
+        env:
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m ci_tools.cli check-stable-signal
+
   build-zfs-akmods:
     name: Build Shared ZFS Akmods Cache
+    needs: preflight
+    if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
     outputs:
       fedora_version: ${{ steps.prepare.outputs.version }}
@@ -115,7 +143,10 @@ jobs:
 
   build-candidate-image:
     name: Build Candidate Image
-    needs: build-zfs-akmods
+    needs:
+      - preflight
+      - build-zfs-akmods
+    if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
     env:
       HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
@@ -163,6 +194,8 @@ jobs:
           base_image: ${{ needs.build-zfs-akmods.outputs.base_image_pinned }}
           akmods_image: ${{ needs.build-zfs-akmods.outputs.akmods_image_pinned }}
           akmods_upstream_ref: ${{ needs.build-zfs-akmods.outputs.akmods_upstream_ref }}
+          stable_signal_image: ${{ needs.preflight.outputs.stable_signal_ref }}
+          stable_signal_digest: ${{ needs.preflight.outputs.stable_signal_digest }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

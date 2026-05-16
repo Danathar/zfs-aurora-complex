@@ -40,6 +40,21 @@ This repository builds a signed Aurora DX image with:
 
 The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
 
+## Changing The Base Image
+
+If you clone this repository and want it to build from a different upstream base image, change these files:
+
+1. [`ci/defaults.json`](./ci/defaults.json)
+   - update `DEFAULT_BASE_IMAGE`
+   - this is the default base image used by the GitHub Actions workflows
+2. [`Containerfile`](./Containerfile)
+   - update the fallback `ARG BASE_IMAGE`
+   - this keeps local `podman build` runs aligned with CI defaults
+3. [`README.md`](./README.md) and any other docs/examples that mention the old base image
+   - update example `BASE_IMAGE` arguments and descriptive text so the docs match the build
+
+If you use workflow replay mode with `use_input_lock=true`, also check [`ci/inputs.lock.json`](./ci/inputs.lock.json). That lock file can pin one exact base image for a specific replayed run even after the normal defaults have changed.
+
 ## Why This Repo Exists
 
 The problem has not changed:
