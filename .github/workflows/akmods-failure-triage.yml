@@ -43,8 +43,18 @@ jobs:
               repo: context.repo.repo,
               run_id: context.payload.workflow_run.id,
             });
+            const artifacts = artifactsResp.data.artifacts;
+
+            // A build-inputs-<run_id> artifact is uploaded only after the build
+            // job resolves inputs, so its presence means a real build ran. A
+            // scheduled run that the stable-signal gate skipped produces no such
+            // artifact yet still reports the run conclusion as "success". The
+            // auto-close step below gates on this so a skipped run cannot close
+            // sticky issues that track a still-unfixed failure.
+            core.setOutput('build_ran', artifacts.some(a => a.name.startsWith('build-inputs-')) ? 'true' : 'false');
+
             const prefix = 'akmods-failure-';
-            const artifact = artifactsResp.data.artifacts.find(a => a.name.startsWith(prefix));
+            const artifact = artifacts.find(a => a.name.startsWith(prefix));
             if (!artifact) {
               core.setOutput('has_payload', 'false');
               return;
@@ -129,7 +139,7 @@ jobs:
             }
 
       - name: Close stale sticky issues on successful run
-        if: github.event.workflow_run.conclusion == 'success'
+        if: github.event.workflow_run.conclusion == 'success' && steps.download.outputs.build_ran == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
