@@ -61,6 +61,60 @@ If you do need to pin (to debug, to freeze during an upstream outage, or to repr
 5. merge only after `main` builds and signs successfully
 6. when the outage clears, set `AKMODS_UPSTREAM_REF` back to `""` so the floating ref resumes
 
+## Syncing The Fork With Upstream
+
+The two processes above are about which fork commit this repo *consumes*. This
+section is about maintaining the fork itself: pulling new commits from
+`ublue-os/akmods` (the `upstream` remote) into `Danathar/akmods` so the floating
+`main` ref keeps gaining upstream ZFS and build fixes.
+
+Because `main` floats by default, a fork sync is what feeds new upstream work
+into this repo's next build. Sync periodically, and especially when a new Fedora
+kernel needs an upstream ZFS compatibility fix.
+
+A sync is **not** a clean fast-forward. The fork carries local customizations
+that this repo depends on, and they collide with upstream changes in the same
+files. Procedure:
+
+1. in the `Danathar/akmods` checkout, fetch both remotes:
+   `git fetch upstream && git fetch origin`
+2. branch from the fork tip: `git switch main && git pull && git switch -c sync/upstream-main`
+3. merge upstream: `git merge upstream/main` (expect a conflict, see below)
+4. resolve, validate, then merge the branch into `main` and push the fork only
+   after validation passes
+
+### Known Conflict: `Justfile`
+
+The fork's load-bearing customizations live in the `Justfile` and conflict with
+upstream every time upstream touches the same variable block. Resolve by
+**combining**, never by taking one side wholesale:
+
+1. keep the fork's `akmods_name := env('AKMODS_IMAGE_NAME', shell(yq + ' "...name" images.yaml', ...))`
+   line. This derives the published image name from `images.yaml` `.name`, which
+   [`ci_tools/akmods_configure_zfs_target.py`](../ci_tools/akmods_configure_zfs_target.py)
+   sets per run. Taking upstream's hardcoded `akmods-<target>` instead would make
+   the cache publish under the wrong name and silently break cache reuse here.
+2. adopt upstream's `yq` variable form (`shell(yq + ' ...')`) for every
+   `images.yaml` read, including the `akmods_name` line above. Upstream's
+   `yq := 'yq --yaml-fix-merge-anchor-to-spec'` is required by newer yq for the
+   merge anchors in `images.yaml`; this repo's configure step uses the same flag.
+3. preserve the fork's OpenZFS-release-discovery token hardening (the
+   `--secret=id=github_token` plumbing in the `build`/`test` recipes and the
+   xtrace/JSON-array guards in `build_files/zfs/build-kmod-zfs.sh`).
+
+### Validate The Sync
+
+Before pushing the fork:
+
+1. no conflict markers remain: `grep -rn '^<<<<<<<\|^>>>>>>>' .`
+2. the `Justfile` parses and resolves: `AKMODS_KERNEL=main AKMODS_VERSION=<fedora> AKMODS_TARGET=common just --evaluate` succeeds
+3. with the zfs target configured (as this repo does), `akmods_name` resolves to
+   the cache repo name, not `null`
+4. `bash -n build_files/zfs/build-kmod-zfs.sh` passes
+5. after pushing, run this repo's `build-branch` workflow (or a manual `build.yml`
+   with `rebuild_akmods=true`) so a real akmods build validates the synced fork
+   before `main` floats onto it
+
 ## What Usually Forces A Temporary Pin
 
 1. new Fedora kernel behavior where the tracking ref is not yet usable but a known-good commit is available

@@ -53,7 +53,7 @@ class AkmodsConfigureZfsTargetTests(unittest.TestCase):
                 env=None,
             ) -> str:
                 del cwd, env
-                if args[1] == "-i":
+                if "-i" in args:
                     self.assertFalse(capture_output)
                     self.assertEqual(os.environ["FEDORA_VERSION"], "43")
                     self.assertEqual(os.environ["IMAGE_ORG"], "danathar")
@@ -80,15 +80,22 @@ class AkmodsConfigureZfsTargetTests(unittest.TestCase):
 
             self.assertEqual(run_cmd.call_count, 2)
             first_args = run_cmd.call_args_list[0].args[0]
-            self.assertEqual(first_args[0:2], ["yq", "-i"])
-            self.assertIn(".images[strenv(FEDORA_VERSION)].main.zfs", first_args[2])
-            self.assertIn('"org": strenv(IMAGE_ORG)', first_args[2])
-            self.assertIn('"name": strenv(AKMODS_REPO)', first_args[2])
-            self.assertEqual(first_args[3], str(images_yaml))
+            self.assertEqual(
+                first_args[0:3], ["yq", "--yaml-fix-merge-anchor-to-spec", "-i"]
+            )
+            self.assertIn(".images[strenv(FEDORA_VERSION)].main.zfs", first_args[3])
+            self.assertIn('"org": strenv(IMAGE_ORG)', first_args[3])
+            self.assertIn('"name": strenv(AKMODS_REPO)', first_args[3])
+            self.assertEqual(first_args[4], str(images_yaml))
 
             self.assertEqual(
                 run_cmd.call_args_list[1].args[0],
-                ["yq", '.images["43"].main.zfs', str(images_yaml)],
+                [
+                    "yq",
+                    "--yaml-fix-merge-anchor-to-spec",
+                    '.images["43"].main.zfs',
+                    str(images_yaml),
+                ],
             )
             self.assertIn("org: danathar", stdout.getvalue())
             self.assertIn("name: zfs-aurora-complex-akmods", stdout.getvalue())

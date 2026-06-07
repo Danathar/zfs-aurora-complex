@@ -17,6 +17,14 @@ from ci_tools.common import CiToolError, normalize_owner, require_env, run_cmd
 AKMODS_WORKTREE = Path("/tmp/akmods")
 IMAGES_YAML = AKMODS_WORKTREE / "images.yaml"
 
+# Match the akmods fork's Justfile, which now reads images.yaml with
+# `yq --yaml-fix-merge-anchor-to-spec`. images.yaml uses YAML merge anchors, and
+# newer yq versions require this flag to merge them per spec (it also silences a
+# deprecation warning). Keeping the write and the read-back here consistent with
+# the fork avoids merge-anchor behavior drift between this configure step and the
+# fork's later `just build`.
+YQ = ("yq", "--yaml-fix-merge-anchor-to-spec")
+
 
 def main() -> None:
     # Inputs passed from workflow env.
@@ -53,11 +61,11 @@ def main() -> None:
       }
     """
     # -i means "edit file in place".
-    run_cmd(["yq", "-i", yq_expression, str(IMAGES_YAML)], capture_output=False)
+    run_cmd([*YQ, "-i", yq_expression, str(IMAGES_YAML)], capture_output=False)
 
     # Print final block so logs show the effective output destination.
     updated_block = run_cmd(
-        ["yq", f'.images["{fedora_version}"].main.zfs', str(IMAGES_YAML)],
+        [*YQ, f'.images["{fedora_version}"].main.zfs', str(IMAGES_YAML)],
     ).strip()
     if updated_block:
         print(updated_block)
