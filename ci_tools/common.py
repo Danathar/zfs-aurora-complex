@@ -162,6 +162,7 @@ def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
         raise CiToolError("git_ls_remote_resolve requires a non-empty ref")
 
     output = run_cmd(["git", "ls-remote", "--exit-code", repo_url, ref])
+    matches: dict[str, str] = {}
     for line in output.splitlines():
         line = line.strip()
         if not line:
@@ -170,8 +171,23 @@ def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
         sha = sha.strip()
         name = name.strip()
         if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha):
-            if name == f"refs/heads/{ref}" or name == f"refs/tags/{ref}" or name == ref or name == "HEAD":
-                return sha
+            matches.setdefault(name, sha)
+
+    # An annotated tag lists two lines: the tag object itself and a peeled
+    # `^{}` line that points at the underlying commit. Prefer the peeled commit
+    # so the returned SHA matches what `git checkout` resolves later in
+    # `akmods_clone_pinned`; otherwise its `rev-parse HEAD` check would fail with
+    # a spurious "ref mismatch" because HEAD lands on the commit, not the tag.
+    for preferred_name in (
+        f"refs/tags/{ref}^{{}}",
+        f"refs/heads/{ref}",
+        f"refs/tags/{ref}",
+        ref,
+        "HEAD",
+    ):
+        if preferred_name in matches:
+            return matches[preferred_name]
+
     # Fall back to the first line's SHA if the name didn't match a known form.
     first = output.strip().splitlines()[0] if output.strip() else ""
     sha = first.split("\t", 1)[0].strip() if first else ""

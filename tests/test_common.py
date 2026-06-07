@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from ci_tools.common import (
     CiToolError,
+    git_ls_remote_resolve,
     run_cmd,
     run_json_cmd,
     skopeo_exists,
@@ -45,6 +46,46 @@ def parse_github_file(path: Path) -> dict[str, str]:
             values[key] = value
         index += 1
     return values
+
+
+class GitLsRemoteResolveTests(unittest.TestCase):
+    BRANCH_SHA = "3333333333333333333333333333333333333333"
+    LIGHTWEIGHT_SHA = "4444444444444444444444444444444444444444"
+    TAG_OBJECT_SHA = "1111111111111111111111111111111111111111"
+    PEELED_COMMIT_SHA = "2222222222222222222222222222222222222222"
+
+    def _resolve(self, output: str, ref: str) -> str:
+        with patch("ci_tools.common.run_cmd", return_value=output):
+            return git_ls_remote_resolve("https://example.invalid/repo.git", ref)
+
+    def test_resolves_branch_ref(self) -> None:
+        output = f"{self.BRANCH_SHA}\trefs/heads/main\n"
+        self.assertEqual(self._resolve(output, "main"), self.BRANCH_SHA)
+
+    def test_resolves_lightweight_tag_ref(self) -> None:
+        output = f"{self.LIGHTWEIGHT_SHA}\trefs/tags/v1.0.0\n"
+        self.assertEqual(self._resolve(output, "v1.0.0"), self.LIGHTWEIGHT_SHA)
+
+    def test_annotated_tag_resolves_to_peeled_commit(self) -> None:
+        # An annotated tag lists the tag object first, then the peeled `^{}`
+        # commit. The commit is what `git checkout` lands on later, so it must
+        # be the value returned here.
+        output = (
+            f"{self.TAG_OBJECT_SHA}\trefs/tags/v2.4.0\n"
+            f"{self.PEELED_COMMIT_SHA}\trefs/tags/v2.4.0^{{}}\n"
+        )
+        self.assertEqual(self._resolve(output, "v2.4.0"), self.PEELED_COMMIT_SHA)
+
+    def test_branch_preferred_over_same_named_tag(self) -> None:
+        output = (
+            f"{self.BRANCH_SHA}\trefs/heads/main\n"
+            f"{self.LIGHTWEIGHT_SHA}\trefs/tags/main\n"
+        )
+        self.assertEqual(self._resolve(output, "main"), self.BRANCH_SHA)
+
+    def test_raises_when_no_resolvable_sha(self) -> None:
+        with self.assertRaises(CiToolError):
+            self._resolve("not-a-sha\trefs/heads/main\n", "main")
 
 
 class CommonTests(unittest.TestCase):

@@ -41,7 +41,7 @@ UPSTREAM_COMPAT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"kmod-zfs-[^\s]*\.rpm.*not found", re.IGNORECASE),
     re.compile(r"Cached akmods do not cover the supported kernel", re.IGNORECASE),
     # Our own install helper fail-closed path
-    re.compile(r"No matching kmod-zfs RPM for kernel", re.IGNORECASE),
+    re.compile(r"No kmod-zfs RPM found for the supported primary kernel", re.IGNORECASE),
     # ZFS configure-time rejection of the running kernel
     re.compile(r"configure: error: unsupported kernel version", re.IGNORECASE),
     re.compile(r"configure: error: \*{3} Please use a newer kernel", re.IGNORECASE),

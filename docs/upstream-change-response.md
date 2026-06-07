@@ -23,13 +23,13 @@ Not every red `build.yml` run needs a human to change a pinned value. The daily 
 
 Use this table before editing any pin:
 
-| Symptom | Does it need a human? |
-|---|---|
-| One red run, next scheduled run goes green without changes | No — transient upstream state; the cron healed it |
-| Red runs in a streak, but OpenZFS has not yet released support for the current Fedora kernel | No — wait for upstream. Stable is still on the last good image |
+| Symptom                                                                                                      | Does it need a human?                                                                                                          |
+|--------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| One red run, next scheduled run goes green without changes                                                   | No — transient upstream state; the cron healed it                                                                              |
+| Red runs in a streak, but OpenZFS has not yet released support for the current Fedora kernel                 | No — wait for upstream. Stable is still on the last good image                                                                 |
 | Red runs in a streak, and the floating akmods tracking ref has already landed support for the current kernel | Usually no edit - rerun or wait for the next cron. Set `AKMODS_UPSTREAM_REF` only for one-off validation or a temporary freeze |
-| Red run with a Python traceback or shell error unrelated to `just build` or `kmod-zfs` | Yes — this is a repo bug, not an upstream mismatch. Treat as a normal code fix |
-| Promotion job skipped because candidate failed | No action on the promotion side — fix the candidate failure by whichever branch above applies |
+| Red run with a Python traceback or shell error unrelated to `just build` or `kmod-zfs`                       | Yes — this is a repo bug, not an upstream mismatch. Treat as a normal code fix                                                 |
+| Promotion job skipped because candidate failed                                                               | No action on the promotion side — fix the candidate failure by whichever branch above applies                                  |
 
 The important idea: a red build is informative, not an emergency. The stable image tag does not move while builds are red, so users are not exposed to a broken image. Manual intervention is only correct when waiting will not fix the problem.
 

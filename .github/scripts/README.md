@@ -12,24 +12,25 @@ If a term is unfamiliar, check the shared glossary first:
 
 ## CLI Command Map
 
-| Workflow step (example) | CLI command | Python module |
-|---|---|---|
-| Resolve build inputs | `resolve-build-inputs` | `ci_tools.resolve_build_inputs` |
-| Write build inputs manifest | `write-build-inputs-manifest` | `ci_tools.write_build_inputs_manifest` |
-| Check shared akmods cache | `check-akmods-cache` | `ci_tools.check_akmods_cache` |
-| Resolve shared akmods cache tag to digest | `pin-akmods-cache` | `ci_tools.pin_akmods_cache` |
-| Export normalized registry context for later workflow steps | `export-registry-context` | `ci_tools.tagging_context` |
-| Export checked-in repo defaults for workflow steps | `export-repo-defaults` | `ci_tools.export_repo_defaults` |
-| Resolve pull request (PR) validation inputs and verify shared akmods cache | `prepare-validation-build` | `ci_tools.prepare_validation_build` |
-| Compute branch-safe image tag prefix | `compute-branch-metadata` | `ci_tools.tagging_context` |
-| Compose final branch image tag | `compose-branch-image-tag` | `ci_tools.tagging_context` |
-| Compute candidate image tag | `compute-candidate-tag` | `ci_tools.tagging_context` |
-| Promote candidate digest to latest and audit tags | `promote-stable` | `ci_tools.promote_stable` |
-| Sign one published image tag by digest | `sign-image` | `ci_tools.sign_image` |
-| Clone resolved upstream akmods tooling and verify the exact commit SHA | `akmods-clone-pinned` | `ci_tools.akmods_clone_pinned` |
-| Configure target image path for the akmods build wrapper | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
-| Build and publish shared self-hosted ZFS akmods image | `akmods-build-and-publish` | `ci_tools.akmods_build_and_publish` |
-| Classify an akmods build failure for sticky-issue triage | `classify-akmods-failure` | `ci_tools.classify_akmods_failure` |
+| Workflow step (example)                                                    | CLI command                   | Python module                          |
+|----------------------------------------------------------------------------|-------------------------------|----------------------------------------|
+| Evaluate the scheduled stable-signal build gate                            | `check-stable-signal`         | `ci_tools.check_stable_signal`         |
+| Resolve build inputs                                                       | `resolve-build-inputs`        | `ci_tools.resolve_build_inputs`        |
+| Write build inputs manifest                                                | `write-build-inputs-manifest` | `ci_tools.write_build_inputs_manifest` |
+| Check shared akmods cache                                                  | `check-akmods-cache`          | `ci_tools.check_akmods_cache`          |
+| Resolve shared akmods cache tag to digest                                  | `pin-akmods-cache`            | `ci_tools.pin_akmods_cache`            |
+| Export normalized registry context for later workflow steps                | `export-registry-context`     | `ci_tools.tagging_context`             |
+| Export checked-in repo defaults for workflow steps                         | `export-repo-defaults`        | `ci_tools.export_repo_defaults`        |
+| Resolve pull request (PR) validation inputs and verify shared akmods cache | `prepare-validation-build`    | `ci_tools.prepare_validation_build`    |
+| Compute branch-safe image tag prefix                                       | `compute-branch-metadata`     | `ci_tools.tagging_context`             |
+| Compose final branch image tag                                             | `compose-branch-image-tag`    | `ci_tools.tagging_context`             |
+| Compute candidate image tag                                                | `compute-candidate-tag`       | `ci_tools.tagging_context`             |
+| Promote candidate digest to latest and audit tags                          | `promote-stable`              | `ci_tools.promote_stable`              |
+| Sign one published image tag by digest                                     | `sign-image`                  | `ci_tools.sign_image`                  |
+| Clone resolved upstream akmods tooling and verify the exact commit SHA     | `akmods-clone-pinned`         | `ci_tools.akmods_clone_pinned`         |
+| Configure target image path for the akmods build wrapper                   | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
+| Build and publish shared self-hosted ZFS akmods image                      | `akmods-build-and-publish`    | `ci_tools.akmods_build_and_publish`    |
+| Classify an akmods build failure for sticky-issue triage                   | `classify-akmods-failure`     | `ci_tools.classify_akmods_failure`     |
 
 ### Akmods Failure Classification
 

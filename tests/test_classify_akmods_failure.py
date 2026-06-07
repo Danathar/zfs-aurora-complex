@@ -43,6 +43,17 @@ class ClassifyLogTextTests(unittest.TestCase):
         kind, _ = classify_log_text(log)
         self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
 
+    def test_install_helper_missing_rpm_message_is_upstream_compat(self) -> None:
+        # This is the exact wording the install helper emits, so the matching
+        # pattern must track that string and not drift away from it again.
+        log = (
+            "RuntimeError: No kmod-zfs RPM found for the supported primary kernel "
+            "6.18.16-200.fc43.x86_64."
+        )
+        kind, matched = classify_log_text(log)
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertIn("No kmod-zfs RPM found for the supported primary kernel", matched)
+
     def test_openzfs_max_kernel_below_resolved_kernel_is_upstream_compat(self) -> None:
         log = (
             "ZFS_META_VERSION='2.4.1'\n"
