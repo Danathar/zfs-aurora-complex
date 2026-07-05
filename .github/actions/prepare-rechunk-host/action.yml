@@ -1,0 +1,57 @@
+name: Prepare Rechunk Host
+
+description: Prepare a GitHub-hosted runner for a build that will be rechunked with Chunkah (podman version and disk layout).
+
+runs:
+  # Three identical setup steps are needed in every job that rechunks with
+  # Chunkah, so they live here once instead of being copied into each
+  # workflow file.
+  using: composite
+  steps:
+    # GitHub-hosted runners ship a lot of preinstalled software this repo
+    # never uses. Removing it frees disk headroom before the build and
+    # rechunk steps, which briefly need two copies of the image.
+    - name: Maximize build space
+      uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+    # Chunkah relies on OCI layer annotations to describe its content-based
+    # chunks. Podman versions before 5 silently drop those annotations on
+    # push, which would defeat the whole point of rechunking. Install a
+    # newer podman/buildah/crun/skopeo from Ubuntu's `resolute` suite until
+    # GitHub's hosted runner image ships podman >= 5 by default. This step
+    # skips itself once that happens, so it retires automatically instead of
+    # needing a follow-up removal.
+    - name: Update Podman
+      shell: bash
+      run: |
+        set -eux
+        need_major=5
+        have_major=$(podman --version | grep -oE '[0-9]+' | head -n 1)
+        if [ "${have_major}" -ge "${need_major}" ]; then
+          echo "Runner podman is already >= ${need_major}; skipping cross-release install"
+          exit 0
+        fi
+        echo "deb http://azure.archive.ubuntu.com/ubuntu resolute universe main" | sudo tee /etc/apt/sources.list.d/resolute.list
+        sudo apt-get update
+        sudo apt-get install -y --allow-downgrades \
+          crun/resolute \
+          buildah/resolute \
+          podman/resolute \
+          skopeo/resolute
+        podman --version
+
+    # GitHub-hosted runners keep most free disk space on /mnt (~66G) while /
+    # has far less headroom. Building the image and then rechunking it keeps
+    # two copies of the root filesystem in podman's storage at once, which
+    # can exhaust /. Relocate podman's rootless storage onto /mnt before the
+    # build so the later rechunk step has room.
+    - name: Move container storage to the large runner disk
+      shell: bash
+      run: |
+        set -eux
+        sudo mkdir -p /mnt/containers
+        sudo chown "$(id -u):$(id -g)" /mnt/containers
+        mkdir -p "${HOME}/.local/share"
+        rm -rf "${HOME}/.local/share/containers"
+        ln -s /mnt/containers "${HOME}/.local/share/containers"
+        df -h / /mnt
