@@ -274,17 +274,33 @@ def skopeo_inspect_digest(image_ref: str, *, creds: str | None = None) -> str:
     return digest
 
 
-def skopeo_exists(image_ref: str, *, creds: str | None = None) -> bool:
-    """True when the given image tag exists in the registry."""
-    command = ["skopeo", "inspect"]
-    if creds:
-        command.extend(["--creds", creds])
-    command.append(image_ref)
+_MISSING_IMAGE_ERROR_MARKERS = (
+    "manifest unknown",
+    "name unknown",
+    "not found",
+)
+
+
+def is_missing_image_error(message: str) -> bool:
+    """True when a registry inspect failure message means the image does not exist."""
+    normalized = message.lower()
+    return any(marker in normalized for marker in _MISSING_IMAGE_ERROR_MARKERS)
+
+
+def skopeo_inspect_json_optional(image_ref: str, *, creds: str | None = None) -> dict | None:
+    """
+    Inspect one image, returning `None` only when the image does not exist.
+
+    Other registry failures (auth, rate limiting, network errors) still raise
+    so callers do not mistake "we couldn't tell" for "it's missing" and make a
+    reuse/rebuild decision from unknown state.
+    """
     try:
-        run_cmd(command)
-        return True
-    except CiToolError:
-        return False
+        return skopeo_inspect_json(image_ref, creds=creds)
+    except CiToolError as exc:
+        if is_missing_image_error(str(exc)):
+            return None
+        raise
 
 
 def skopeo_copy(
