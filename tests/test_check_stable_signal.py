@@ -8,6 +8,7 @@ Goal: Keep the schedule-only cadence signal explicit and testable.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import unittest
@@ -23,6 +24,23 @@ from ci_tools.check_stable_signal import (
 )
 from ci_tools.common import CiToolError
 from tests.test_common import parse_github_file
+
+
+@contextlib.contextmanager
+def _patched_registry_inspect(side_effect):
+    """
+    Patch every path `evaluate_stable_signal_gate` uses to reach `skopeo_inspect_json`.
+
+    The stable-signal-image call goes through the name imported directly into
+    `ci_tools.check_stable_signal`. The current-`:latest` call goes through the
+    real (unmocked) `skopeo_inspect_json_optional`, which is defined in
+    `ci_tools.common` and looks up `skopeo_inspect_json` in that module's own
+    namespace. One side effect needs to be installed in both places so a
+    single dispatcher function can answer both calls.
+    """
+    with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=side_effect):
+        with patch("ci_tools.common.skopeo_inspect_json", side_effect=side_effect):
+            yield
 
 
 def _stable_signal_inspect(digest: str = "sha256:stable") -> dict:
@@ -58,7 +76,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 )
             raise AssertionError(image_ref)
 
-        with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect):
+        with _patched_registry_inspect(inspect):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
@@ -86,7 +104,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 )
             raise AssertionError(image_ref)
 
-        with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect):
+        with _patched_registry_inspect(inspect):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
@@ -106,7 +124,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 raise CiToolError("Command failed: skopeo inspect\nmanifest unknown")
             raise AssertionError(image_ref)
 
-        with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect):
+        with _patched_registry_inspect(inspect):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
@@ -130,7 +148,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 }
             raise AssertionError(image_ref)
 
-        with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect):
+        with _patched_registry_inspect(inspect):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
@@ -141,12 +159,35 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "current-latest-missing-stable-signal-labels")
 
+    def test_current_latest_registry_error_raises_instead_of_building(self) -> None:
+        # An auth/rate-limit/network failure on the current-`:latest` lookup is
+        # not the same as "no previous image yet" and must not be swallowed
+        # into a build decision from unknown state.
+        def inspect(image_ref: str, *, creds: str | None = None) -> dict:
+            del creds
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
+                return _stable_signal_inspect("sha256:new")
+            if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
+                raise CiToolError("unauthorized: authentication required")
+            raise AssertionError(image_ref)
+
+        with _patched_registry_inspect(inspect):
+            with self.assertRaises(CiToolError) as context:
+                evaluate_stable_signal_gate(
+                    image_org="danathar",
+                    image_name="zfs-aurora-complex",
+                    stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                    creds="actor:token",
+                )
+
+        self.assertIn("unauthorized", str(context.exception))
+
     def test_upstream_stable_signal_inspect_failure_raises(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
             del image_ref, creds
             raise CiToolError("upstream inspect failed")
 
-        with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect):
+        with _patched_registry_inspect(inspect):
             with self.assertRaises(CiToolError) as context:
                 evaluate_stable_signal_gate(
                     image_org="danathar",

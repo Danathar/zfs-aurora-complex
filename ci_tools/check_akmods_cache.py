@@ -17,7 +17,7 @@ from ci_tools.common import (
     normalize_owner,
     require_env,
     skopeo_copy,
-    skopeo_inspect_digest,
+    skopeo_inspect_json_optional,
     write_github_outputs,
 )
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
@@ -72,15 +72,18 @@ def inspect_akmods_cache(
     """
 
     source_image = f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
-    try:
-        source_digest = skopeo_inspect_digest(f"docker://{source_image}")
-    except CiToolError:
+    inspect_json = skopeo_inspect_json_optional(f"docker://{source_image}")
+    if inspect_json is None:
         return AkmodsCacheStatus(
             source_image=source_image,
             image_exists=False,
             missing_release=kernel_release,
             inspection_method="missing-image",
         )
+
+    source_digest = str(inspect_json.get("Digest") or "")
+    if not source_digest:
+        raise CiToolError(f"Missing digest in skopeo inspect output for docker://{source_image}")
 
     source_image_pinned = f"ghcr.io/{image_org}/{source_repo}@{source_digest}"
     with tempfile.TemporaryDirectory() as temp_dir:
