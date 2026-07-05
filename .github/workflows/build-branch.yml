@@ -112,6 +112,12 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      # Rechunking briefly needs two copies of the image unpacked at once, so
+      # prepare disk space, podman version, and storage layout before the
+      # build starts.
+      - name: Prepare runner for Chunkah rechunking
+        uses: ./.github/actions/prepare-rechunk-host
+
       # Load the checked-in defaults first so the rest of the workflow can say
       # "use the repository default" without repeating long image references.
       - id: defaults
@@ -147,6 +153,15 @@ jobs:
           akmods_upstream_ref: ${{ needs.build-branch-akmods.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
+
+      # Rechunk unconditionally, even for bot-authored branches that will not
+      # publish below. That way every branch build exercises the rechunk path
+      # before a human-authored branch (or main) relies on it.
+      - name: Rechunk branch image with Chunkah
+        uses: ./.github/actions/rechunk-native-image
+        with:
+          image_name: ${{ steps.defaults.outputs.image_name }}
+          image_tag: ${{ steps.tags.outputs.branch_image_tag }}
 
       # Human-owned branches publish a signed test image so the branch can be
       # tried on a real machine if needed.

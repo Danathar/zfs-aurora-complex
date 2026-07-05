@@ -24,6 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      # Rechunking briefly needs two copies of the image unpacked at once, so
+      # prepare disk space, podman version, and storage layout before the
+      # build starts.
+      - name: Prepare runner for Chunkah rechunking
+        uses: ./.github/actions/prepare-rechunk-host
+
       # Shared defaults keep branch, pull request, and main workflows aligned.
       - id: defaults
         name: Load repository defaults
@@ -61,3 +67,12 @@ jobs:
           akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
+
+      # Rechunk here too so a pull request cannot merge a change that breaks
+      # the rechunk step; this workflow never publishes, so the rechunked
+      # image is not pushed anywhere.
+      - name: Rechunk validation image with Chunkah
+        uses: ./.github/actions/rechunk-native-image
+        with:
+          image_name: ${{ steps.defaults.outputs.image_name }}
+          image_tag: pr-validation
