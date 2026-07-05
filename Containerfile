@@ -25,27 +25,25 @@ FROM ${BASE_IMAGE}
 # Local builds should not bake in one Fedora major version here. When CI does
 # not pass an explicit akmods image reference, the helper can render this
 # template with the Fedora version detected from the chosen base image.
+#
+# ARG values declared in this stage are already visible as shell environment
+# variables to the RUN instruction below, so build-image.sh can read them
+# directly without a separate ENV block.
 ARG AKMODS_IMAGE=""
 ARG AKMODS_IMAGE_TEMPLATE="ghcr.io/danathar/zfs-aurora-complex-akmods:main-{fedora}"
 ARG IMAGE_REPO="ghcr.io/danathar/zfs-aurora-complex"
 ARG SIGNING_KEY_FILENAME="zfs-aurora-complex.pub"
 
-# Convert the build arguments into environment variables once so the helper
-# script can read stable names while the Containerfile stays declarative.
-ENV AKMODS_IMAGE="${AKMODS_IMAGE}"
-ENV AKMODS_IMAGE_TEMPLATE="${AKMODS_IMAGE_TEMPLATE}"
-ENV IMAGE_REPO="${IMAGE_REPO}"
-ENV SIGNING_KEY_FILENAME="${SIGNING_KEY_FILENAME}"
-
 # Optional brew payload import for bases that do not already include brew.
 # COPY --from=brew /system_files /
 
-# Keep the custom build logic in repo files rather than a long inline RUN.
-COPY --from=ctx / /
-
-RUN --mount=type=cache,target=/var/cache \
+# Bind-mount the build context instead of COPYing it so none of these files
+# (build-image.sh, containerfiles/, files/, shared/, cosign.pub) end up baked
+# into the published image's filesystem.
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,target=/var/cache \
     --mount=type=cache,target=/var/log \
     --mount=type=tmpfs,target=/tmp \
-    /build-image.sh
+    /ctx/build-image.sh
 
 RUN bootc container lint

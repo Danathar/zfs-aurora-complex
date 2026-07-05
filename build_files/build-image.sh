@@ -24,7 +24,7 @@ set -euo pipefail
 
 # Copy the committed public key into the standard trust-material directory.
 install -d -m 0755 /etc/pki/containers /etc/containers/registries.d
-install -m 0644 /cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
+install -m 0644 /ctx/cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 
 # The OCI brew image ships systemd units and preset files. Presetting them at
 # build time means first boot automatically performs the brew extraction step.
@@ -38,12 +38,12 @@ install -m 0644 /cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 dnf5 -y install nethack
 
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
-python3 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
+python3 /ctx/containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 
 # Load the ZFS kernel module at boot so the installed userspace tools can report
 # both userspace and kernel-module versions without requiring a manual modprobe.
 install -D -m 0644 \
-  /files/usr/lib/modules-load.d/zfs.conf \
+  /ctx/files/usr/lib/modules-load.d/zfs.conf \
   /usr/lib/modules-load.d/zfs.conf
 
 # Write repository-specific trust policy into the final image so future signed
@@ -51,14 +51,14 @@ install -D -m 0644 \
 # host-side repair steps.
 IMAGE_REPO="${IMAGE_REPO}" \
 SIGNING_KEY_FILENAME="${SIGNING_KEY_FILENAME}" \
-python3 /files/scripts/configure_signing_policy.py
+python3 /ctx/files/scripts/configure_signing_policy.py
 
 # `bootc container lint` expects package-created state directories under `/var`
 # to have matching tmpfiles declarations. The `zfs` dependency chain pulls in
 # `pcp`, which creates `/var/lib/pcp/*` directories but does not ship tmpfiles
 # entries for this image build mode, so install a local declaration here.
 install -D -m 0644 \
-  /files/usr/lib/tmpfiles.d/zfs-aurora-complex.conf \
+  /ctx/files/usr/lib/tmpfiles.d/zfs-aurora-complex.conf \
   /usr/lib/tmpfiles.d/zfs-aurora-complex.conf
 
 # Remove build-only runtime state before the final ostree commit.
