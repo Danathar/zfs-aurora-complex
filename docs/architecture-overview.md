@@ -295,8 +295,9 @@ signed:
 The Chunkah container image version (currently `v0.6.0`) is pinned as the
 `chunkah_image` input default inside `rechunk-native-image/action.yml` and
 tracked by a Renovate custom manager in the root
-[`renovate.json`](../renovate.json), rather than by Dependabot, which owns
-GitHub Actions version bumps everywhere else in this repo.
+[`renovate.json`](../renovate.json). Renovate also owns every other version
+bump in this repo, including the GitHub Actions commit-SHA pins used
+throughout `.github/actions/` and `.github/workflows/`.
 
 ### 4. Primary-Kernel ZFS Install Logic
 

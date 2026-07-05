@@ -348,8 +348,8 @@ needs no changes to push and sign the rechunked content.
 
 The Chunkah container image version is pinned in that action's
 `chunkah_image` input default and tracked by a Renovate custom manager (see
-[`renovate.json`](./renovate.json)) rather than by Dependabot, which owns
-GitHub Actions version bumps for everything else in this repo.
+[`renovate.json`](./renovate.json)). Renovate also owns every other version
+bump in this repo, including GitHub Actions commit-SHA pins.
 
 ## Local Build
 
