@@ -211,10 +211,11 @@ It does four important things:
 4. runs `bootc container lint`
 
 The buildah invocation uses Docker v2s2 manifest format (`oci: false`) rather than
-OCI image manifests because `ostree container commit` and host update tooling work more
-reliably with the Docker format. The "OCI" terminology elsewhere in this project
-refers to OCI standards for registry interaction and layer handling, not the
-specific container image manifest format produced by buildah.
+OCI image manifests because host update tooling (`bootc upgrade` on booted
+machines) works more reliably with the Docker format. The "OCI" terminology
+elsewhere in this project refers to OCI standards for registry interaction and
+layer handling, not the specific container image manifest format produced by
+buildah.
 
 `build-image.sh` then:
 
@@ -225,7 +226,11 @@ specific container image manifest format produced by buildah.
 5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
 6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
 7. removes build-only runtime/container state
-8. finalizes the image with `ostree container commit`
+
+There is no explicit `ostree container commit` step: the `RUN bootc container
+lint` that follows already performs the equivalent validation/finalization, so
+a separate commit step is redundant. Universal Blue's own templates dropped it
+for the same reason (`ublue-os/image-template#137`, `ublue-os/aurora#1216`).
 
 For future Fedora package additions during image composition, use
 `dnf5 -y install ...` in the container build. Distrobox does not need a local

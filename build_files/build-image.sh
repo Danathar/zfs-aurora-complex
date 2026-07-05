@@ -3,7 +3,7 @@
 # Script: build_files/build-image.sh
 # What: Applies all image customizations in one place during the native build.
 # Doing: Enables brew services, installs cached ZFS RPMs, writes the in-image
-#        signing policy, and commits the ostree container.
+#        signing policy, and cleans up build-only state.
 # Why: A separate build script is easier to read than one large Containerfile
 #      shell block, and it keeps the teaching comments close to the steps.
 # Goal: Produce one bootable Aurora image with ZFS, upstream Aurora defaults,
@@ -61,7 +61,7 @@ install -D -m 0644 \
   /ctx/files/usr/lib/tmpfiles.d/zfs-aurora-complex.conf \
   /usr/lib/tmpfiles.d/zfs-aurora-complex.conf
 
-# Remove build-only runtime state before the final ostree commit.
+# Remove build-only runtime state before `bootc container lint` runs.
 # Why these paths are safe to drop:
 # 1. `/run` is runtime-only state and should not be baked into the image.
 # 2. `/var/lib/containers` here came from build-time image inspection, not from
@@ -82,5 +82,7 @@ find /run/systemd -mindepth 1 \
 find /run/systemd -depth -type d -empty -delete 2>/dev/null || true
 rm -rf /var/lib/containers
 
-# `ostree container commit` finalizes package-layering changes into the image.
-ostree container commit
+# No explicit `ostree container commit` here: `bootc container lint` (run next,
+# in the Containerfile) already performs the equivalent validation/finalization.
+# Universal Blue dropped the explicit commit step from their own templates for
+# the same reason (ublue-os/image-template#137, ublue-os/aurora#1216).
