@@ -293,11 +293,26 @@ def skopeo_copy(
     *,
     creds: str | None = None,
     retry_times: int = 3,
+    preserve_digests: bool = False,
+    multi_arch: str = "",
 ) -> None:
-    """Copy an image between registry references using skopeo."""
+    """
+    Copy an image between registry references using skopeo.
+
+    `preserve_digests` and `multi_arch` are opt-in because not every caller
+    wants them: `check_akmods_cache` copies into a local `dir:` layout and
+    reads `manifest.json` layers directly, and a `--multi-arch=all` manifest
+    list would change that file's shape. Callers that promote a tag to another
+    tag in the same registry (where the destination digest must match the
+    source) should pass both.
+    """
     command = ["skopeo", "copy", "--retry-times", str(retry_times)]
     if creds:
         command.extend(["--src-creds", creds, "--dest-creds", creds])
+    if preserve_digests:
+        command.append("--preserve-digests")
+    if multi_arch:
+        command.append(f"--multi-arch={multi_arch}")
     command.extend([source, destination])
     run_cmd(command, capture_output=False)
 

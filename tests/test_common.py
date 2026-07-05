@@ -20,6 +20,7 @@ from ci_tools.common import (
     git_ls_remote_resolve,
     run_cmd,
     run_json_cmd,
+    skopeo_copy,
     skopeo_exists,
     skopeo_inspect_digest,
     write_github_env,
@@ -118,6 +119,27 @@ class CommonTests(unittest.TestCase):
     def test_skopeo_exists_returns_false_when_inspect_fails(self) -> None:
         with patch("ci_tools.common.run_cmd", side_effect=CiToolError("missing image")):
             self.assertFalse(skopeo_exists("docker://ghcr.io/example/image:tag"))
+
+    def test_skopeo_copy_omits_digest_flags_by_default(self) -> None:
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            skopeo_copy("docker://src:tag", "docker://dst:tag")
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertNotIn("--preserve-digests", args)
+        self.assertFalse(any(arg.startswith("--multi-arch=") for arg in args))
+
+    def test_skopeo_copy_adds_preserve_digests_and_multi_arch_when_requested(self) -> None:
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            skopeo_copy(
+                "docker://src:tag",
+                "docker://dst:tag",
+                preserve_digests=True,
+                multi_arch="all",
+            )
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertIn("--preserve-digests", args)
+        self.assertIn("--multi-arch=all", args)
 
     def test_run_cmd_redacts_secret_args_in_failure_message(self) -> None:
         args = [
