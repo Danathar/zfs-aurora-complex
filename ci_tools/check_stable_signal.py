@@ -36,11 +36,29 @@ class StableSignalDecision:
 
 
 def _bypass_decision(stable_signal_image: str) -> StableSignalDecision:
+    """
+    Always build on push/manual events, but still record stable-signal provenance.
+
+    Without a digest here, the candidate's stable-signal-digest label (and the
+    label promoted onto `:latest`) would be empty, so the next scheduled run
+    would always see "current-latest-missing-stable-signal-labels" and do a
+    full rebuild even when Aurora stable never moved. The lookup is
+    best-effort: a registry hiccup must not fail a push/manual build, so any
+    failure here just falls back to the previous empty-digest behavior.
+    """
+    stable_signal_digest = ""
+    try:
+        inspect_json = skopeo_inspect_json_optional(_docker_ref(stable_signal_image))
+        if inspect_json is not None:
+            stable_signal_digest = str(inspect_json.get("Digest") or "")
+    except CiToolError:
+        stable_signal_digest = ""
+
     return StableSignalDecision(
         should_build=True,
         reason="not-schedule-event",
         stable_signal_ref=stable_signal_image,
-        stable_signal_digest="",
+        stable_signal_digest=stable_signal_digest,
     )
 
 

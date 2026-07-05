@@ -19,6 +19,7 @@ from ci_tools.check_stable_signal import (
     STABLE_SIGNAL_DIGEST_LABEL,
     STABLE_SIGNAL_IMAGE_LABEL,
     StableSignalDecision,
+    _bypass_decision,
     evaluate_stable_signal_gate,
     main,
 )
@@ -251,7 +252,11 @@ class CheckStableSignalMainTests(unittest.TestCase):
                 clear=False,
             ):
                 with patch("ci_tools.check_stable_signal.evaluate_stable_signal_gate") as evaluate:
-                    main()
+                    with patch(
+                        "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+                        return_value={"Digest": "sha256:push-time"},
+                    ):
+                        main()
 
             evaluate.assert_not_called()
             self.assertEqual(
@@ -260,9 +265,45 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "should_build": "true",
                     "reason": "not-schedule-event",
                     "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx:stable",
-                    "stable_signal_digest": "",
+                    "stable_signal_digest": "sha256:push-time",
                 },
             )
+
+
+class BypassDecisionTests(unittest.TestCase):
+    def test_fills_stable_signal_digest_from_registry(self) -> None:
+        with patch(
+            "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+            return_value={"Digest": "sha256:push-time"},
+        ) as inspect_optional:
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
+
+        inspect_optional.assert_called_once_with("docker://ghcr.io/ublue-os/aurora-dx:stable")
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.reason, "not-schedule-event")
+        self.assertEqual(decision.stable_signal_ref, "ghcr.io/ublue-os/aurora-dx:stable")
+        self.assertEqual(decision.stable_signal_digest, "sha256:push-time")
+
+    def test_leaves_digest_empty_when_signal_image_missing(self) -> None:
+        with patch(
+            "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+            return_value=None,
+        ):
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
+
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.stable_signal_digest, "")
+
+    def test_swallows_registry_error_and_leaves_digest_empty(self) -> None:
+        with patch(
+            "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+            side_effect=CiToolError("unauthorized: authentication required"),
+        ):
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
+
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.reason, "not-schedule-event")
+        self.assertEqual(decision.stable_signal_digest, "")
 
 
 if __name__ == "__main__":
