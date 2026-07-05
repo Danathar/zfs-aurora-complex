@@ -289,8 +289,9 @@ At a high level, the final image build now works like this:
 
 1. `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx`
 2. Aurora DX already includes Homebrew; the optional `ghcr.io/ublue-os/brew:latest` stage can be uncommented if `BASE_IMAGE` is changed to a base without brew, such as Fedora Atomic
-3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora DX image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, writes signing policy, and commits the ostree container
+3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora DX image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, and writes signing policy
 4. `bootc container lint` validates the final image
+5. the workflow re-layers the built image into content-addressed chunks with [Chunkah](https://github.com/coreos/chunkah) before pushing and signing it (see "Content-Based Layering With Chunkah" below)
 
 Three workflow-side simplifications now support that image build:
 
@@ -318,6 +319,37 @@ If the base image carries older bundled kernels too, those older kernels are not
 That logic lives in:
 
 - [`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](./containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py)
+
+## Content-Based Layering With Chunkah
+
+After `bootc container lint` passes, the candidate, branch, and pull-request
+validation workflows re-layer the locally built image with
+[Chunkah](https://github.com/coreos/chunkah) before anything is pushed or
+signed. Chunkah splits the same filesystem content into content-addressed
+layers instead of the layers buildah produced, so future `bootc upgrade` pulls
+can reuse layers whose content has not changed instead of re-downloading
+whole files that happen to share a layer with something that did change. It
+does not add, remove, or modify any file inside the image.
+
+This step needs two things a default GitHub-hosted runner does not provide,
+handled by [`.github/actions/prepare-rechunk-host`](./.github/actions/prepare-rechunk-host/action.yml)
+before the build starts:
+
+1. a podman version `>= 5`, because older podman drops Chunkah's layer
+   annotations when pushing, which would defeat the whole point of rechunking
+2. container storage relocated onto the runner's larger `/mnt` disk, because
+   rechunking briefly needs two unpacked copies of the image at once
+
+The rechunk step itself lives in
+[`.github/actions/rechunk-native-image`](./.github/actions/rechunk-native-image/action.yml).
+It rechunks the local image and re-tags the result back onto the same local
+tag, so [`publish-native-image`](./.github/actions/publish-native-image/action.yml)
+needs no changes to push and sign the rechunked content.
+
+The Chunkah container image version is pinned in that action's
+`chunkah_image` input default and tracked by a Renovate custom manager (see
+[`renovate.json`](./renovate.json)) rather than by Dependabot, which owns
+GitHub Actions version bumps for everything else in this repo.
 
 ## Local Build
 

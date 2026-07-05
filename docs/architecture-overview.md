@@ -252,6 +252,52 @@ Fedora-version handling is intentionally dynamic here:
 4. that keeps the root `Containerfile` from hard-coding `43`, `44`, or any
    other future Fedora major version into its local-build fallback
 
+#### Content-Based Layering With Chunkah
+
+After `bootc container lint` passes, the workflow (not the `Containerfile`)
+re-layers the locally built image with
+[Chunkah](https://github.com/coreos/chunkah), meaning it re-splits the same
+filesystem content into content-addressed layers instead of the layers
+buildah produced. Chunkah does not add, remove, or change any file inside the
+image; it only changes which layer each byte range lives in, so unrelated
+future updates can reuse layers whose content has not changed instead of
+re-pulling whole files that happen to share a layer with something that did
+change.
+
+This lives outside the `Containerfile` because it operates on the already-built
+local image, between the build and the point where that image is pushed and
+signed:
+
+1. [`.github/actions/prepare-rechunk-host`](../.github/actions/prepare-rechunk-host/action.yml)
+   runs at the top of each build job, before `build-native-image`, and prepares
+   two things a default GitHub-hosted runner does not provide:
+   - a podman version `>= 5`, installed from Ubuntu's `resolute` apt suite when
+     the runner's own podman is older; podman before 5 silently drops Chunkah's
+     layer annotations on push, which would defeat the whole point of
+     rechunking. This step self-skips once GitHub's hosted runner image ships
+     podman `>= 5` by default.
+   - container storage relocated onto the runner's larger `/mnt` disk, because
+     rechunking briefly needs two unpacked copies of the image in storage at once
+2. [`.github/actions/rechunk-native-image`](../.github/actions/rechunk-native-image/action.yml)
+   runs after `build-native-image` and before `publish-native-image`. It rechunks
+   the local image via `podman run --mount=type=image` against the Chunkah
+   container, buffers the compressed result to an OCI archive on `/`, prunes all
+   local container storage, then loads the archive with its temp directory
+   pointed at `/mnt` -- so neither disk ever has to hold two unpacked copies of
+   the image at once -- and finally re-tags the rechunked result back onto the
+   same local tag `publish-native-image` expects.
+3. `publish-native-image`'s promote step copies the signed digest to the
+   requested tag with `skopeo copy --preserve-digests`, so that copy cannot
+   silently re-encode the manifest and drop Chunkah's layer annotations.
+   `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
+   `--preserve-digests` for the same reason.
+
+The Chunkah container image version (currently `v0.6.0`) is pinned as the
+`chunkah_image` input default inside `rechunk-native-image/action.yml` and
+tracked by a Renovate custom manager in the root
+[`renovate.json`](../renovate.json), rather than by Dependabot, which owns
+GitHub Actions version bumps everywhere else in this repo.
+
 ### 4. Primary-Kernel ZFS Install Logic
 
 This repo no longer tries to keep every bundled kernel inside the current image

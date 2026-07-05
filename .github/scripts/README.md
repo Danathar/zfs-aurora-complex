@@ -80,6 +80,10 @@ These composite actions keep the workflow files focused on job order and data fl
   - computes lowercase GitHub Container Registry (GHCR) paths and whether the current account is an automation bot
 - [`build-native-image`](../actions/build-native-image/action.yml)
   - wraps the standard buildah invocation and build arguments for this repo
+- [`prepare-rechunk-host`](../actions/prepare-rechunk-host/action.yml)
+  - frees runner disk space, installs a podman version that preserves Chunkah's layer annotations, and relocates container storage onto the runner's larger disk, ahead of a build that will be rechunked
+- [`rechunk-native-image`](../actions/rechunk-native-image/action.yml)
+  - re-layers a locally built image into content-addressed chunks with Chunkah, in place, before it is pushed or signed
 - [`install-signing-tools`](../actions/install-signing-tools/action.yml)
   - installs `skopeo` and `cosign`
 - [`publish-native-image`](../actions/publish-native-image/action.yml)

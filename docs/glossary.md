@@ -45,6 +45,9 @@ This page defines terms used across this repository's docs and workflow comments
 - `VM`: virtual machine.
 - `OCI`: Open Container Initiative standards used for container image formats and registries.
 - `OCI layout`: a local on-disk directory format for container images. In this repo, cache checks copy an image into that format before unpacking its filesystem layers for inspection.
+- `Chunkah`: a tool ([`coreos/chunkah`](https://github.com/coreos/chunkah)) that re-layers an already-built container image into content-addressed chunks. It changes only how the image's filesystem content is split into layers; it does not add, remove, or modify any file.
+- `rechunk` / `rechunking`: the act of running Chunkah over a built image. In this repo, rechunking happens after `bootc container lint` and before the image is pushed or signed.
+- `content-based layering` / `content-addressed layers`: layers whose boundaries are chosen by the content itself (so unchanged content stays in a reusable layer across builds), instead of layers that simply reflect the order build steps happened to run in.
 - `RPM`: Red Hat Package Manager package format. Fedora packages and kernel-module packages in this repo are all RPM files.
 - `akmods`: Fedora-style tooling that builds kernel-module RPMs for a specific kernel release. In this repo, the "shared akmods cache image" is the container image that stores those prebuilt ZFS kernel-module RPMs.
 - `YAML`: human-readable config format used by GitHub Actions workflows.
