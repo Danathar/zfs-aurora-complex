@@ -62,7 +62,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `cosign`: signs and verifies container images.
 - `depmod`: regenerates kernel module dependency metadata so the kernel can find newly installed modules at boot time. Used after installing ZFS kernel modules.
 - `just`: task runner used by the upstream akmods repository.
-- `ostree container commit`: finalizes package-layering changes inside a container build into the ostree commit format that bootc-based systems expect. This is the last step in `build-image.sh`.
+- `ostree container commit`: an explicit command that used to finalize package-layering changes inside a container build into the ostree commit format bootc-based systems expect. This repo's `build-image.sh` no longer calls it directly; `bootc container lint` (which the `Containerfile` already runs) performs the equivalent validation/finalization, matching the current Universal Blue templates.
 - `systemctl preset`: applies vendor-supplied preset rules to enable or disable systemd units according to policy files shipped in the image. Used to activate brew services at build time.
 - `tmpfiles.d`: systemd's mechanism for declaratively creating, deleting, or cleaning up files and directories at boot or on demand. This repo ships a `tmpfiles.d` entry for `pcp` state directories that ZFS dependencies pull in.
 - `yq`: YAML processor used to update the upstream akmods target file.
