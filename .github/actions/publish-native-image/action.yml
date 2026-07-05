@@ -103,7 +103,12 @@ runs:
         transient_digest="$(skopeo inspect --format '{{ .Digest }}' "${transient_ref}")"
         signed_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}@${transient_digest}"
         final_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-        skopeo copy --multi-arch=all "${signed_ref}" "${final_ref}"
+        # --preserve-digests keeps this copy byte-identical rather than
+        # letting skopeo re-encode the manifest; a re-encode would be
+        # invisible here (the digest check below only compares tags this
+        # same job pushed) but would silently drop Chunkah's layer
+        # annotations, which is the entire point of rechunking.
+        skopeo copy --multi-arch=all --preserve-digests "${signed_ref}" "${final_ref}"
         final_digest="$(skopeo inspect --format '{{ .Digest }}' "${final_ref}")"
         if [ "${final_digest}" != "${transient_digest}" ]; then
           echo "Promoted tag digest ${final_digest} does not match signed digest ${transient_digest}" >&2
