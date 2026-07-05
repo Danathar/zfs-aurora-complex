@@ -41,7 +41,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `out-of-date module` / `out-of-date kmod`: a kernel module built for an older kernel release than the one currently in the base image.
 - `hardening`: add safety checks or stricter rules so failures are less likely and easier to catch early.
 - `PR`: pull request.
-- `automation account`: an automated account that triggered the workflow, for example `dependabot[bot]`.
+- `automation account`: an automated account that triggered the workflow, for example `renovate[bot]`.
 - `VM`: virtual machine.
 - `OCI`: Open Container Initiative standards used for container image formats and registries.
 - `OCI layout`: a local on-disk directory format for container images. In this repo, cache checks copy an image into that format before unpacking its filesystem layers for inspection.

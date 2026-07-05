@@ -58,6 +58,7 @@ class TaggingContextTests(unittest.TestCase):
         self.assertTrue(branch_tag.startswith("br-"))
 
     def test_actor_is_bot_matches_github_bot_suffix(self) -> None:
+        self.assertTrue(actor_is_bot("renovate[bot]"))
         self.assertTrue(actor_is_bot("dependabot[bot]"))
         self.assertFalse(actor_is_bot("dbaggett"))
 
@@ -65,7 +66,7 @@ class TaggingContextTests(unittest.TestCase):
         self.assertEqual(
             export_registry_context_values(
                 repository_owner="Danathar",
-                actor_name="dependabot[bot]",
+                actor_name="renovate[bot]",
             ),
             {
                 "image_org": "danathar",
@@ -82,7 +83,7 @@ class TaggingContextTests(unittest.TestCase):
                 os.environ,
                 {
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "GITHUB_ACTOR": "dependabot[bot]",
+                    "GITHUB_ACTOR": "renovate[bot]",
                     "GITHUB_OUTPUT": str(output_path),
                     "GITHUB_ENV": str(env_path),
                 },

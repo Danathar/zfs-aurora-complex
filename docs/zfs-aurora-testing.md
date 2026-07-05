@@ -143,7 +143,7 @@ by signing a second time.
 Branch note:
 
 - only human-authored branch runs push/sign branch tags
-- automation accounts such as Dependabot still run the build, but they stop before the GitHub Container Registry (GHCR) push/signing step so the registry does not fill with unsigned test images
+- automation accounts such as Renovate still run the build, but they stop before the GitHub Container Registry (GHCR) push/signing step so the registry does not fill with unsigned test images
 
 ### 6. Promote Candidate To Stable
 
