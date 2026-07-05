@@ -40,7 +40,7 @@ runs:
 
     # Authenticate once so both the push action and any later `skopeo` or
     # `cosign` calls can talk to GHCR as the current workflow actor.
-    - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
+    - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
       with:
         registry: ghcr.io
         username: ${{ inputs.registry_username }}
@@ -64,7 +64,7 @@ runs:
 
     # Push a non-publishable transient tag first. The requested tag is only
     # moved after cosign verifies the digest that will be promoted.
-    - uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c
+    - uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
       env:
         REGISTRY_USER: ${{ inputs.registry_username }}
         REGISTRY_PASSWORD: ${{ inputs.registry_password }}

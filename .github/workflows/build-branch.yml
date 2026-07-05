@@ -33,7 +33,7 @@ jobs:
     outputs:
       branch_tag: ${{ steps.branch.outputs.branch_tag }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       # Branch names can contain slashes and other characters that do not make
       # good image tags. This step turns the Git branch name into a safe prefix
       # that can be used in the registry.
@@ -78,7 +78,7 @@ jobs:
       image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - id: defaults
         name: Load repository defaults
@@ -110,7 +110,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Rechunking briefly needs two copies of the image unpacked at once, so
       # prepare disk space, podman version, and storage layout before the
