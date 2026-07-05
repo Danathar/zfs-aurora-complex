@@ -165,6 +165,8 @@ def choose_base_image_tag(
         # Example label: 43.20260227.1
         # We only need the suffix part (20260227.1) to build candidate tags.
         version_suffix = plain_match.group("stamp")
+        # ublue images commonly publish a tag equal to this label verbatim.
+        append_candidate(version_label)
         append_candidate(f"{source_tag}-{version_suffix}" if source_tag else "")
         append_candidate(f"latest-{version_suffix}")
         append_candidate(f"{fedora_version}-{version_suffix}")

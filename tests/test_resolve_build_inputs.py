@@ -60,7 +60,22 @@ class ChooseBaseImageTagTests(unittest.TestCase):
             digest_lookup=lambda t: digests.get(t, ""),
         )
         self.assertEqual(tag, "latest-20260227.1")
-        self.assertEqual(checked, ["latest-20260227.1", "43-20260227.1"])
+        self.assertEqual(checked, ["43.20260227.1", "latest-20260227.1", "43-20260227.1"])
+
+    def test_derives_tag_from_bare_version_label_when_only_it_matches(self) -> None:
+        # Some ublue images publish a tag equal to org.opencontainers.image.version
+        # verbatim, with none of the other derived candidate forms present.
+        digests = {"43.20260610.3": "sha256:match"}
+
+        tag, checked = choose_base_image_tag(
+            source_tag="latest",
+            version_label="43.20260610.3",
+            fedora_version="43",
+            expected_digest="sha256:match",
+            digest_lookup=lambda t: digests.get(t, ""),
+        )
+        self.assertEqual(tag, "43.20260610.3")
+        self.assertEqual(checked[0], "43.20260610.3")
 
     def test_derives_tag_from_prefixed_version_label_and_digest_match(self) -> None:
         digests = {
