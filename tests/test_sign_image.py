@@ -35,8 +35,6 @@ class SignImageTests(unittest.TestCase):
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 image_tag="latest",
-                registry_actor="actor",
-                registry_token="token",
                 cosign_private_key="",
             )
 
@@ -65,8 +63,6 @@ class SignImageTests(unittest.TestCase):
                     image_org="danathar",
                     image_name="zfs-aurora-complex",
                     image_tag="candidate-deadbee-43",
-                    registry_actor="actor",
-                    registry_token="token",
                     cosign_private_key="private-key",
                     digest_lookup=lambda _ref: "sha256:stable",
                     command_runner=fake_run_cmd,
@@ -75,8 +71,6 @@ class SignImageTests(unittest.TestCase):
         all_args = [arg for call_args, _capture, _env in calls for arg in call_args]
         self.assertNotIn("--registry-username", all_args)
         self.assertNotIn("--registry-password", all_args)
-        self.assertNotIn("actor", all_args)
-        self.assertNotIn("token", all_args)
         self.assertEqual(
             digest_ref,
             "ghcr.io/danathar/zfs-aurora-complex@sha256:stable",
@@ -133,8 +127,6 @@ class SignImageTests(unittest.TestCase):
                     image_org="danathar",
                     image_name="zfs-aurora-complex",
                     image_tag="latest",
-                    registry_actor="actor",
-                    registry_token="token",
                     cosign_private_key="private-key",
                     digest_lookup=lambda _ref: "sha256:stable",
                     command_runner=fake_run_cmd,
@@ -164,8 +156,6 @@ class SignImageTests(unittest.TestCase):
                     image_org="danathar",
                     image_name="zfs-aurora-complex",
                     image_tag="latest",
-                    registry_actor="actor",
-                    registry_token="token",
                     cosign_private_key="private-key",
                     digest_lookup=lambda _ref: "sha256:stable",
                     command_runner=fake_run_cmd,

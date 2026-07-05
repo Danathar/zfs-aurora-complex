@@ -53,9 +53,9 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 ).touch()
 
             with patch(
-                "ci_tools.check_akmods_cache.skopeo_inspect_digest",
-                return_value="sha256:abc123",
-            ) as inspect_digest:
+                "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+                return_value={"Digest": "sha256:abc123"},
+            ) as inspect_json_optional:
                 with patch(
                     "ci_tools.check_akmods_cache.skopeo_copy",
                     side_effect=fake_copy,
@@ -81,7 +81,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
         )
         self.assertEqual(status.inspection_method, "unpacked-image")
-        inspect_digest.assert_called_once_with(
+        inspect_json_optional.assert_called_once_with(
             "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
         )
         skopeo_copy.assert_called_once_with(
@@ -89,10 +89,10 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             ANY,
         )
 
-    def test_inspect_akmods_cache_reports_missing_image_when_digest_lookup_fails(self) -> None:
+    def test_inspect_akmods_cache_reports_missing_image_when_tag_does_not_exist(self) -> None:
         with patch(
-            "ci_tools.check_akmods_cache.skopeo_inspect_digest",
-            side_effect=CiToolError("manifest unknown"),
+            "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+            return_value=None,
         ):
             status = inspect_akmods_cache(
                 image_org="danathar",
@@ -111,10 +111,28 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         self.assertEqual(status.missing_release, "6.18.16-200.fc43.x86_64")
         self.assertEqual(status.inspection_method, "missing-image")
 
+    def test_inspect_akmods_cache_raises_on_non_missing_registry_error(self) -> None:
+        # skopeo_inspect_json_optional already re-raises everything except a
+        # missing-image error; inspect_akmods_cache must not swallow it into a
+        # false "image_exists=False" the way it used to.
+        with patch(
+            "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+            side_effect=CiToolError("unauthorized: authentication required"),
+        ):
+            with self.assertRaises(CiToolError) as context:
+                inspect_akmods_cache(
+                    image_org="danathar",
+                    source_repo="zfs-aurora-complex-akmods",
+                    fedora_version="43",
+                    kernel_release="6.18.16-200.fc43.x86_64",
+                )
+
+        self.assertIn("unauthorized", str(context.exception))
+
     def test_inspect_akmods_cache_raises_ci_error_when_layer_unpacking_fails(self) -> None:
         with patch(
-            "ci_tools.check_akmods_cache.skopeo_inspect_digest",
-            return_value="sha256:abc123",
+            "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+            return_value={"Digest": "sha256:abc123"},
         ):
             with patch("ci_tools.check_akmods_cache.skopeo_copy"):
                 with patch(

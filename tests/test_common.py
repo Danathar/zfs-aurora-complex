@@ -18,10 +18,12 @@ from unittest.mock import patch
 from ci_tools.common import (
     CiToolError,
     git_ls_remote_resolve,
+    is_missing_image_error,
     run_cmd,
     run_json_cmd,
-    skopeo_exists,
+    skopeo_copy,
     skopeo_inspect_digest,
+    skopeo_inspect_json_optional,
     write_github_env,
     write_github_outputs,
 )
@@ -99,25 +101,59 @@ class CommonTests(unittest.TestCase):
 
         self.assertIn("docker://ghcr.io/example/image:tag", str(context.exception))
 
-    def test_skopeo_exists_returns_true_when_inspect_succeeds(self) -> None:
-        with patch("ci_tools.common.run_cmd", return_value="") as run_cmd:
-            self.assertTrue(
-                skopeo_exists("docker://ghcr.io/example/image:tag", creds="actor:token")
+    def test_is_missing_image_error_matches_known_markers(self) -> None:
+        self.assertTrue(is_missing_image_error("manifest unknown"))
+        self.assertTrue(is_missing_image_error("Error: reading manifest: name unknown"))
+        self.assertTrue(is_missing_image_error("404 Not Found"))
+        self.assertFalse(is_missing_image_error("unauthorized: authentication required"))
+
+    def test_skopeo_inspect_json_optional_returns_none_for_missing_image(self) -> None:
+        with patch(
+            "ci_tools.common.skopeo_inspect_json",
+            side_effect=CiToolError("manifest unknown"),
+        ):
+            self.assertIsNone(
+                skopeo_inspect_json_optional("docker://ghcr.io/example/image:tag")
             )
 
-        run_cmd.assert_called_once_with(
-            [
-                "skopeo",
-                "inspect",
-                "--creds",
-                "actor:token",
-                "docker://ghcr.io/example/image:tag",
-            ]
-        )
+    def test_skopeo_inspect_json_optional_reraises_other_errors(self) -> None:
+        with patch(
+            "ci_tools.common.skopeo_inspect_json",
+            side_effect=CiToolError("unauthorized: authentication required"),
+        ):
+            with self.assertRaises(CiToolError):
+                skopeo_inspect_json_optional("docker://ghcr.io/example/image:tag")
 
-    def test_skopeo_exists_returns_false_when_inspect_fails(self) -> None:
-        with patch("ci_tools.common.run_cmd", side_effect=CiToolError("missing image")):
-            self.assertFalse(skopeo_exists("docker://ghcr.io/example/image:tag"))
+    def test_skopeo_inspect_json_optional_returns_result_on_success(self) -> None:
+        with patch(
+            "ci_tools.common.skopeo_inspect_json",
+            return_value={"Digest": "sha256:abc"},
+        ):
+            self.assertEqual(
+                skopeo_inspect_json_optional("docker://ghcr.io/example/image:tag", creds="a:b"),
+                {"Digest": "sha256:abc"},
+            )
+
+    def test_skopeo_copy_omits_digest_flags_by_default(self) -> None:
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            skopeo_copy("docker://src:tag", "docker://dst:tag")
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertNotIn("--preserve-digests", args)
+        self.assertFalse(any(arg.startswith("--multi-arch=") for arg in args))
+
+    def test_skopeo_copy_adds_preserve_digests_and_multi_arch_when_requested(self) -> None:
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            skopeo_copy(
+                "docker://src:tag",
+                "docker://dst:tag",
+                preserve_digests=True,
+                multi_arch="all",
+            )
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertIn("--preserve-digests", args)
+        self.assertIn("--multi-arch=all", args)
 
     def test_run_cmd_redacts_secret_args_in_failure_message(self) -> None:
         args = [

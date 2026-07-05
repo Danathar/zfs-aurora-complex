@@ -22,9 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
-      - name: Install test runner
+      - name: Install test runner and linter
         shell: bash
-        run: pip install --quiet pytest
+        run: pip install --quiet pytest ruff
+
+      - name: Lint with ruff
+        shell: bash
+        run: ruff check ci_tools/ shared/ tests/ files/ containerfiles/
 
       - name: Run tests
         shell: bash

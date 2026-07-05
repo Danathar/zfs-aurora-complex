@@ -64,6 +64,56 @@ Why keep a separate akmods cache repository:
 
 ## How It Works
 
+### 0. Scheduled-Build Gate
+
+Before anything else runs, the `preflight` job in `build.yml` decides whether
+a scheduled run should build at all. Push and manual (`workflow_dispatch`)
+runs always build; only the daily `schedule` trigger is gated. This logic
+lives in [`ci_tools/check_stable_signal.py`](../ci_tools/check_stable_signal.py).
+
+The upstream `STABLE_SIGNAL_IMAGE` (`ghcr.io/ublue-os/aurora-dx:stable` by
+default; see [`ci/defaults.json`](../ci/defaults.json)) is treated as the
+authoritative cadence signal for "has Aurora stable moved since we last
+published?" This repo's own `:latest` image only carries provenance: every
+build writes two OCI labels onto the candidate (and promotion carries them
+onto `:latest`):
+
+- `org.zfs-aurora-complex.stable-signal-image`: which upstream image was used as the signal
+- `org.zfs-aurora-complex.stable-signal-digest`: that image's digest at build time
+
+On a scheduled run, the gate compares the current upstream digest against the
+digest recorded in those labels on `:latest` and returns one of:
+
+| Reason | Meaning | Builds? |
+|---|---|---|
+| `stable-signal-unchanged` | current `:latest` already reflects this exact upstream digest | no |
+| `stable-signal-advanced` | upstream digest moved since the last promoted image | yes |
+| `stable-signal-image-changed` | `STABLE_SIGNAL_IMAGE` itself was reconfigured since the last promotion | yes |
+| `current-latest-missing` | no `:latest` has ever been published | yes |
+| `current-latest-missing-stable-signal-labels` | `:latest` exists but predates this gate, or was built by a non-schedule event before provenance was recorded | yes |
+| `not-schedule-event` | push or manual run; the gate is bypassed entirely | yes |
+
+The gate is fail-closed on unknown state: a registry error while checking the
+upstream signal image always raises and fails the job. A registry error while
+checking the repo's own `:latest` (auth failure, rate limit, network blip) is
+treated the same way, *except* for a genuine "tag does not exist" response,
+which is a normal `current-latest-missing` build reason. The point is that
+"we couldn't tell" must never be silently treated as "nothing changed."
+
+Push and manual runs still resolve and record the current upstream
+stable-signal digest (best-effort; a registry hiccup does not fail the build)
+so the *next* scheduled run has fresh provenance to compare against. Without
+this, a push build would leave the label empty, and the following scheduled
+run would always see `current-latest-missing-stable-signal-labels` and do a
+full rebuild even when Aurora stable had not moved.
+
+The `akmods-failure-triage.yml` workflow (see "Operational Model" below)
+checks for a `build-inputs-<run_id>` artifact before treating a run as a real
+build. A gate-skipped scheduled run reports `success` but never reaches input
+resolution, so it never uploads that artifact — this keeps a skipped run from
+being mistaken for a green build and auto-closing sticky failure issues that
+track a still-unfixed problem.
+
 ### 1. Input Resolution
 
 The main workflow resolves and pins:
@@ -270,8 +320,18 @@ Promotion is a separate job.
 It:
 
 1. resolves the candidate tag digest
-2. copies that digest to `latest`
-3. copies that digest to `stable-<run>-<sha>`
+2. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
+3. copies that digest to `latest`
+
+Audit-before-`latest` is deliberate: `build.yml` cancels an in-progress
+promotion when a newer push starts a fresh run (see the workflow's
+`concurrency` block), so if the job is cancelled between the two copies, an
+audit record with no `latest` move is a safer partial state than a moved
+`latest` with no audit record. Each copy uses skopeo's `--preserve-digests`
+and `--multi-arch=all`, and is followed by inspecting the destination tag to
+confirm it resolved to the exact candidate digest — this keeps the copy
+fail-closed if a future manifest-list image or a change in skopeo's
+conversion behavior would otherwise change the digest silently.
 
 It does not sign `latest` again. Cosign signatures are tied to the digest, so
 the candidate signature carries over when `latest` resolves to the same digest.
@@ -293,6 +353,8 @@ model and the cosign v3 compatibility flags.
 1. `build.yml`: candidate-first build and promotion
    - the workflow now uses small Python helpers for registry-context export and
      candidate-tag generation instead of inline shell snippets
+   - scheduled runs are gated on Aurora stable advancing; see "0. Scheduled-Build
+     Gate" above. Push and manual runs always build
 2. `build-branch.yml`: branch-tagged push with shared-cache reuse or rebuild when required
    - bot-authored branch runs still build locally but intentionally skip push and signing
    - human-authored branch runs push/sign normally

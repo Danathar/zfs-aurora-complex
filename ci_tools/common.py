@@ -274,17 +274,33 @@ def skopeo_inspect_digest(image_ref: str, *, creds: str | None = None) -> str:
     return digest
 
 
-def skopeo_exists(image_ref: str, *, creds: str | None = None) -> bool:
-    """True when the given image tag exists in the registry."""
-    command = ["skopeo", "inspect"]
-    if creds:
-        command.extend(["--creds", creds])
-    command.append(image_ref)
+_MISSING_IMAGE_ERROR_MARKERS = (
+    "manifest unknown",
+    "name unknown",
+    "not found",
+)
+
+
+def is_missing_image_error(message: str) -> bool:
+    """True when a registry inspect failure message means the image does not exist."""
+    normalized = message.lower()
+    return any(marker in normalized for marker in _MISSING_IMAGE_ERROR_MARKERS)
+
+
+def skopeo_inspect_json_optional(image_ref: str, *, creds: str | None = None) -> dict | None:
+    """
+    Inspect one image, returning `None` only when the image does not exist.
+
+    Other registry failures (auth, rate limiting, network errors) still raise
+    so callers do not mistake "we couldn't tell" for "it's missing" and make a
+    reuse/rebuild decision from unknown state.
+    """
     try:
-        run_cmd(command)
-        return True
-    except CiToolError:
-        return False
+        return skopeo_inspect_json(image_ref, creds=creds)
+    except CiToolError as exc:
+        if is_missing_image_error(str(exc)):
+            return None
+        raise
 
 
 def skopeo_copy(
@@ -293,11 +309,26 @@ def skopeo_copy(
     *,
     creds: str | None = None,
     retry_times: int = 3,
+    preserve_digests: bool = False,
+    multi_arch: str = "",
 ) -> None:
-    """Copy an image between registry references using skopeo."""
+    """
+    Copy an image between registry references using skopeo.
+
+    `preserve_digests` and `multi_arch` are opt-in because not every caller
+    wants them: `check_akmods_cache` copies into a local `dir:` layout and
+    reads `manifest.json` layers directly, and a `--multi-arch=all` manifest
+    list would change that file's shape. Callers that promote a tag to another
+    tag in the same registry (where the destination digest must match the
+    source) should pass both.
+    """
     command = ["skopeo", "copy", "--retry-times", str(retry_times)]
     if creds:
         command.extend(["--src-creds", creds, "--dest-creds", creds])
+    if preserve_digests:
+        command.append("--preserve-digests")
+    if multi_arch:
+        command.append(f"--multi-arch={multi_arch}")
     command.extend([source, destination])
     run_cmd(command, capture_output=False)
 

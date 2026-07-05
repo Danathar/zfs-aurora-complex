@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+# sys.path must be extended before these imports so the shared/ package is
+# importable both inside the built image and from a plain script invocation.
+"containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py" = ["E402"]
