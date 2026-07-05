@@ -28,13 +28,13 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.event.workflow_run.event != 'pull_request'
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Pull down the failure payload artifact (if the build job uploaded one)
       # without using the moving `actions/download-artifact` default branch.
       - name: Download failure payload if present
         id: download
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
@@ -79,7 +79,7 @@ jobs:
 
       - name: Open or update sticky issue on failed run
         if: github.event.workflow_run.conclusion == 'failure' && steps.download.outputs.has_payload == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
@@ -140,7 +140,7 @@ jobs:
 
       - name: Close stale sticky issues on successful run
         if: github.event.workflow_run.conclusion == 'success' && steps.download.outputs.build_ran == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const stickyLabel = 'akmods-failure';

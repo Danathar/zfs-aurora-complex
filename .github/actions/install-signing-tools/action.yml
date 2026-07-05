@@ -20,6 +20,6 @@ runs:
     # Note: Renovate updates the action SHA automatically, but the
     # `cosign-release` input must be updated manually when a new cosign
     # version is needed.
-    - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
+    - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
       with:
         cosign-release: v3.0.6
