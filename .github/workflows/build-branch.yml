@@ -72,6 +72,9 @@ jobs:
       # Reuse the same privileged akmods-build environment as the main
       # workflow. The upstream akmods tooling depends on `just`, container
       # storage access, and the build packages included in this image.
+      # This fallback must match DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json;
+      # a job's `container:` block cannot read step outputs, so it cannot read the
+      # checked-in default and this literal must be kept in sync manually.
       image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
