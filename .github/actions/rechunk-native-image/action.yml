@@ -1,0 +1,88 @@
+name: Rechunk Native Image
+
+description: Re-layer one locally built image into content-addressed chunks with Chunkah.
+
+inputs:
+  image_name:
+    description: Local image name to rechunk.
+    required: true
+  image_tag:
+    description: Local image tag to rechunk in place.
+    required: true
+  chunkah_image:
+    description: >-
+      Chunkah container image reference. The default below is the value
+      Renovate's custom manager tracks; see the "Track stable Chunkah
+      container releases" entry in renovate.json.
+    required: false
+    default: quay.io/coreos/chunkah:v0.6.0
+
+runs:
+  # Chunkah re-layers an already-built local image into content-addressed
+  # chunks, so update pulls can reuse unchanged content instead of
+  # re-downloading whole layers. It only changes how the image is split into
+  # layers; it does not add, remove, or modify any file inside the image.
+  using: composite
+  steps:
+    - name: Rechunk local image with Chunkah
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        CHUNKAH_IMAGE: ${{ inputs.chunkah_image }}
+      run: |
+        set -euo pipefail
+
+        source_image="localhost/${IMAGE_NAME}:${IMAGE_TAG}"
+        chunked_image="localhost/${IMAGE_NAME}:chunkah"
+        archive=/tmp/chunkah-oci.tar
+
+        echo "==> Disk usage before rechunk"
+        df -h / /mnt
+
+        # Chunkah reads the source image's own config (labels, env, etc.) so
+        # the rechunked output preserves it instead of starting from a blank
+        # image config.
+        export CHUNKAH_CONFIG_STR
+        CHUNKAH_CONFIG_STR="$(podman inspect "${source_image}")"
+
+        # Buffer to a compressed OCI archive on / rather than piping straight
+        # into `podman load`. Piping would require the source image and the
+        # rechunked copy to coexist unpacked in one container storage at
+        # once (~2x the image size); buffering lets us prune the source
+        # first and only then load the rechunked archive.
+        podman run --rm \
+          --mount=type=image,src="${source_image}",target=/chunkah \
+          -e CHUNKAH_CONFIG_STR \
+          "${CHUNKAH_IMAGE}" build \
+            --verbose \
+            --compressed \
+            --max-layers 128 \
+            --prune /sysroot/ \
+            --label ostree.commit- \
+            --label ostree.final-diffid- \
+            --tag "${chunked_image}" > "${archive}"
+
+        # The archive is self-contained, so nothing left in container storage
+        # is needed anymore: not the source image, not the base/akmods images
+        # baked into it, not the Chunkah image itself. Prune everything so
+        # the load below starts against an empty store instead of holding two
+        # unpacked copies of the root filesystem at once.
+        podman image prune -af
+        echo "==> Disk usage after pruning container storage"
+        df -h / /mnt
+
+        # podman unpacks OCI archives into TMPDIR before applying them; keep
+        # that on /mnt next to the relocated container storage instead of
+        # /var/tmp on the smaller root disk. /mnt is root-owned on
+        # GitHub-hosted runners, hence sudo + chown.
+        sudo mkdir -p /mnt/tmp
+        sudo chown "$(id -u):$(id -g)" /mnt/tmp
+        TMPDIR=/mnt/tmp podman load -i "${archive}"
+        rm -f "${archive}"
+        echo "==> Disk usage after load"
+        df -h / /mnt
+
+        # Re-tag the rechunked image back onto the tag the caller passed in,
+        # so downstream steps (publish-native-image, etc.) need no changes.
+        podman tag "${chunked_image}" "${IMAGE_NAME}:${IMAGE_TAG}"

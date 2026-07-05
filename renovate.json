@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices"
+  ],
+
+  "rebaseWhen": "never",
+
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track stable Chunkah container releases",
+      "managerFilePatterns": [
+        "/^\\.github/actions/rechunk-native-image/action\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "default:\\s+\"?quay\\.io/coreos/chunkah:(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"?"
+      ],
+      "depNameTemplate": "quay.io/coreos/chunkah",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    }
+  ],
+
+  "packageRules": [
+    {
+      "automerge": true,
+      "matchUpdateTypes": ["pin", "pinDigest"]
+    },
+    {
+      "description": "Track the Chunkah version tag only; this repo intentionally does not pin a digest for it.",
+      "enabled": false,
+      "matchUpdateTypes": ["digest", "pinDigest", "pin"],
+      "matchPackageNames": ["quay.io/coreos/chunkah"]
+    },
+    {
+      "description": "Dependabot owns GitHub Actions version updates (see .github/dependabot.yml); disable Renovate's github-actions manager to avoid duplicate PRs. Renovate still owns the Chunkah custom manager above.",
+      "enabled": false,
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "Containerfile base-image ARGs are resolved at build time by this repo's own CI input resolution (ci_tools/resolve_build_inputs.py), not hand-pinned versions Renovate should track.",
+      "enabled": false,
+      "matchManagers": ["dockerfile"]
+    }
+  ]
+}
