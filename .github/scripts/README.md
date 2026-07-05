@@ -55,11 +55,14 @@ failing closed until OpenZFS supports that kernel line.
 
 - [`build.yml`](../workflows/build.yml)
   - main candidate build, promotion, and signing
+  - scheduled runs are gated on Aurora stable advancing (`check-stable-signal`); push and manual runs always build
 - [`build-branch.yml`](../workflows/build-branch.yml)
   - branch-tagged push using shared-cache reuse or rebuild when required
   - bot-authored runs stop after local validation and do not push/sign public branch tags
 - [`build-pr.yml`](../workflows/build-pr.yml)
   - no-push validation build
+- [`test.yml`](../workflows/test.yml)
+  - Python unit tests (`pytest`) and `ruff check` for the CI tool modules
 - [`akmods-failure-triage.yml`](../workflows/akmods-failure-triage.yml)
   - runs after `build.yml` completes via `workflow_run` trigger
   - opens or updates a sticky GitHub issue on classified akmods failures

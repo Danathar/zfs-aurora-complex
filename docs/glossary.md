@@ -8,6 +8,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `CD`: continuous delivery or continuous deployment. In this repo, the publishing and promotion steps in the `main` workflow are the closest thing to CD.
 - `candidate`: test tag built first on `main` before promotion moves `latest`.
 - `stable`: the normal user-facing tag, `latest`.
+- `stable signal` / `stable-signal image`: the upstream image (`ghcr.io/ublue-os/aurora-dx:stable` by default) used as the cadence signal for scheduled builds. When its digest has not changed since the last promoted image, the scheduled workflow run skips instead of rebuilding.
 - `audit tag`: immutable stable tag written during promotion so one published snapshot can be referenced later.
 - `artifact`: a saved output file from a workflow run that you can inspect or reuse later.
 - `manifest`: a structured data file that records what a run produced or which exact inputs it used.
