@@ -80,14 +80,14 @@ runs:
 
     # Sign the pushed image by digest, not by a mutable tag name. A tag such as
     # `latest` can move later, but a digest names one exact image forever.
+    # Signing relies on the registry login performed above, not on separate
+    # credentials passed into sign-image.
     - name: Sign transient image digest
       shell: bash
       env:
         IMAGE_ORG: ${{ inputs.image_org }}
         IMAGE_NAME: ${{ inputs.image_name }}
         IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
-        REGISTRY_ACTOR: ${{ inputs.registry_username }}
-        REGISTRY_TOKEN: ${{ inputs.registry_password }}
         COSIGN_PRIVATE_KEY: ${{ inputs.cosign_private_key }}
       run: |
         python3 -m ci_tools.cli sign-image

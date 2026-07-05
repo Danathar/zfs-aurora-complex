@@ -38,8 +38,6 @@ def sign_published_image(
     image_org: str,
     image_name: str,
     image_tag: str,
-    registry_actor: str,
-    registry_token: str,
     cosign_private_key: str,
     digest_lookup: Callable[[str], str] = skopeo_inspect_digest,
     command_runner: Callable[..., str] = run_cmd,
@@ -48,7 +46,11 @@ def sign_published_image(
     Sign and verify the digest currently referenced by one image tag.
 
     The helper signs the digest rather than the tag text. That keeps signature
-    verification tied to immutable content instead of a movable label.
+    verification tied to immutable content instead of a movable label. Cosign
+    and skopeo both rely on the registry login the calling workflow step
+    already performed (see `docker/login-action` in
+    `.github/actions/publish-native-image/action.yml`); no registry
+    credentials are threaded through here.
     """
 
     if not cosign_private_key:
@@ -67,7 +69,6 @@ def sign_published_image(
         raise CiToolError(f"Failed to resolve digest for {tag_ref}")
 
     digest_ref = image_digest_ref(image_org, image_name, digest)
-    del registry_actor, registry_token
 
     command_runner(
         [
@@ -106,16 +107,12 @@ def main() -> None:
     image_org = normalize_owner(require_env("IMAGE_ORG"))
     image_name = require_env("IMAGE_NAME")
     image_tag = require_env("IMAGE_TAG")
-    registry_actor = require_env("REGISTRY_ACTOR")
-    registry_token = require_env("REGISTRY_TOKEN")
     cosign_private_key = require_env("COSIGN_PRIVATE_KEY")
 
     sign_published_image(
         image_org=image_org,
         image_name=image_name,
         image_tag=image_tag,
-        registry_actor=registry_actor,
-        registry_token=registry_token,
         cosign_private_key=cosign_private_key,
     )
 
