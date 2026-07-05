@@ -46,7 +46,7 @@ def _patched_registry_inspect(side_effect):
 
 def _stable_signal_inspect(digest: str = "sha256:stable") -> dict:
     return {
-        "Name": "ghcr.io/ublue-os/aurora-dx-nvidia-open",
+        "Name": "ghcr.io/ublue-os/aurora-dx",
         "Digest": digest,
         "Labels": {},
     }
@@ -66,13 +66,13 @@ def _current_latest_inspect(*, signal_image: str, signal_digest: str) -> dict:
 class EvaluateStableSignalGateTests(unittest.TestCase):
     def test_unchanged_signal_skips_schedule_build(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
-            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable":
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
                 self.assertIsNone(creds)
                 return _stable_signal_inspect("sha256:same")
             if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
                 self.assertEqual(creds, "actor:token")
                 return _current_latest_inspect(
-                    signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     signal_digest="sha256:same",
                 )
             raise AssertionError(image_ref)
@@ -81,7 +81,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
-                stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                 creds="actor:token",
             )
 
@@ -89,18 +89,18 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
         self.assertEqual(decision.reason, "stable-signal-unchanged")
         self.assertEqual(
             decision.stable_signal_ref,
-            "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+            "ghcr.io/ublue-os/aurora-dx:stable",
         )
         self.assertEqual(decision.stable_signal_digest, "sha256:same")
 
     def test_changed_signal_builds(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
             del creds
-            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable":
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
                 return _stable_signal_inspect("sha256:new")
             if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
                 return _current_latest_inspect(
-                    signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     signal_digest="sha256:old",
                 )
             raise AssertionError(image_ref)
@@ -109,7 +109,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
-                stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                 creds="actor:token",
             )
 
@@ -119,7 +119,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
     def test_missing_previous_image_builds(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
             del creds
-            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable":
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
                 return _stable_signal_inspect("sha256:new")
             if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
                 raise CiToolError("Command failed: skopeo inspect\nmanifest unknown")
@@ -129,7 +129,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
-                stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                 creds="actor:token",
             )
 
@@ -139,7 +139,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
     def test_missing_previous_labels_builds(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
             del creds
-            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable":
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
                 return _stable_signal_inspect("sha256:new")
             if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
                 return {
@@ -153,7 +153,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
-                stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                 creds="actor:token",
             )
 
@@ -166,7 +166,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
         # into a build decision from unknown state.
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
             del creds
-            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable":
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
                 return _stable_signal_inspect("sha256:new")
             if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
                 raise CiToolError("unauthorized: authentication required")
@@ -177,7 +177,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 evaluate_stable_signal_gate(
                     image_org="danathar",
                     image_name="zfs-aurora-complex",
-                    stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     creds="actor:token",
                 )
 
@@ -193,7 +193,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 evaluate_stable_signal_gate(
                     image_org="danathar",
                     image_name="zfs-aurora-complex",
-                    stable_signal_image="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     creds="actor:token",
                 )
 
@@ -213,7 +213,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "REGISTRY_ACTOR": "actor",
                     "REGISTRY_TOKEN": "token",
                     "IMAGE_NAME": "zfs-aurora-complex",
-                    "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
                 },
                 clear=False,
             ):
@@ -222,7 +222,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     return_value=StableSignalDecision(
                         should_build=False,
                         reason="stable-signal-unchanged",
-                        stable_signal_ref="ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                        stable_signal_ref="ghcr.io/ublue-os/aurora-dx:stable",
                         stable_signal_digest="sha256:same",
                     ),
                 ):
@@ -233,7 +233,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                 {
                     "should_build": "false",
                     "reason": "stable-signal-unchanged",
-                    "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx:stable",
                     "stable_signal_digest": "sha256:same",
                 },
             )
@@ -247,7 +247,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "GITHUB_OUTPUT": str(output_path),
                     "GITHUB_EVENT_NAME": "workflow_dispatch",
                     "IMAGE_NAME": "zfs-aurora-complex",
-                    "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
                 },
                 clear=False,
             ):
@@ -264,7 +264,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                 {
                     "should_build": "true",
                     "reason": "not-schedule-event",
-                    "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable",
+                    "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx:stable",
                     "stable_signal_digest": "sha256:push-time",
                 },
             )
@@ -276,12 +276,12 @@ class BypassDecisionTests(unittest.TestCase):
             "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
             return_value={"Digest": "sha256:push-time"},
         ) as inspect_optional:
-            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx-nvidia-open:stable")
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
 
-        inspect_optional.assert_called_once_with("docker://ghcr.io/ublue-os/aurora-dx-nvidia-open:stable")
+        inspect_optional.assert_called_once_with("docker://ghcr.io/ublue-os/aurora-dx:stable")
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "not-schedule-event")
-        self.assertEqual(decision.stable_signal_ref, "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable")
+        self.assertEqual(decision.stable_signal_ref, "ghcr.io/ublue-os/aurora-dx:stable")
         self.assertEqual(decision.stable_signal_digest, "sha256:push-time")
 
     def test_leaves_digest_empty_when_signal_image_missing(self) -> None:
@@ -289,7 +289,7 @@ class BypassDecisionTests(unittest.TestCase):
             "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
             return_value=None,
         ):
-            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx-nvidia-open:stable")
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
 
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.stable_signal_digest, "")
@@ -299,7 +299,7 @@ class BypassDecisionTests(unittest.TestCase):
             "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
             side_effect=CiToolError("unauthorized: authentication required"),
         ):
-            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx-nvidia-open:stable")
+            decision = _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
 
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "not-schedule-event")
