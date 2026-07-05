@@ -81,14 +81,39 @@ This is not a legal opinion and nothing in this repository is legal advice. Oper
 
 Stable users should only see tested outputs.
 
-So the `main` GitHub Actions workflow does this:
+Scheduled runs first check whether there is anything new to build. The
+`preflight` job compares the digest of the upstream `STABLE_SIGNAL_IMAGE`
+(`ghcr.io/ublue-os/aurora-dx:stable` by default, see
+[`ci/defaults.json`](./ci/defaults.json)) against the stable-signal digest
+recorded as an OCI label on this repo's own current `:latest` image. If Aurora
+stable has not advanced since the last promoted image, the scheduled run skips
+the rest of the workflow instead of spending build time on a rebuild that
+would produce the same result. Push and manual (`workflow_dispatch`) runs
+always build regardless of this check; only the daily `schedule` trigger is
+gated. Any registry error while checking (auth failure, rate limit, missing
+`:latest`, missing labels) fails open toward building rather than silently
+skipping, so an unknown state never masks a real update. See
+["Scheduled-Build Gate"](docs/architecture-overview.md) in the architecture
+overview for the full skip/build decision table.
+
+Once a run decides to build, the `main` GitHub Actions workflow does this:
 
 1. resolve and pin the exact base image, detected kernel list, primary boot kernel, builder image, and ZFS line for the run
 2. reuse or rebuild the shared akmods cache image for that primary kernel
 3. build a candidate image tag in the same repository
 4. sign that candidate digest
-5. promote the tested candidate digest to `latest` and to an immutable audit tag
+5. promote the tested candidate digest to an immutable audit tag, then to `latest`
 6. rely on the candidate digest signature after promotion, because `latest` resolves to the same digest
+
+The audit tag is promoted before `latest` on purpose: `main` cancels
+in-progress runs when a newer push arrives (see `concurrency` in
+[`.github/workflows/build.yml`](./.github/workflows/build.yml)), so if
+promotion is cancelled between the two copies, an audit record with no
+`latest` move is safer than a moved `latest` with no audit record. Each
+promotion copy also verifies that the destination tag resolves to the exact
+candidate digest before moving on, so a future manifest-list image or a
+change in `skopeo`'s copy behavior cannot silently move `latest` to something
+other than what was signed.
 
 If candidate fails, `latest` does not move.
 
@@ -151,6 +176,17 @@ OS image tags in one repository:
 - stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
 - branch test image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
   - bot-authored branch runs validate locally but intentionally do not push this tag
+
+Each of those pushed tags is preceded by a short-lived `<tag>-unsigned-<run_id>`
+tag: the publish action pushes that transient tag first, signs and verifies
+its digest, then copies the signed digest onto the requested tag (see
+[`.github/actions/publish-native-image/action.yml`](./.github/actions/publish-native-image/action.yml)).
+These transient tags are left in the registry rather than deleted. GHCR does
+not support deleting one tag in isolation; deleting the underlying package
+version would also delete every other tag pointing at that same digest,
+including the promoted `latest`/audit/branch tag. Since the transient tag
+points at the same signed digest as the tag it preceded, it is harmless to
+leave in place.
 
 Shared akmods cache image:
 
@@ -234,6 +270,7 @@ docs/                                 teaching-style documentation
 - `.github/workflows/build.yml`
   - main push/schedule/manual workflow
   - candidate-first build and promotion
+  - scheduled runs skip when Aurora stable has not advanced since the last promoted image (see "Safety Model" above)
 - `.github/workflows/build-branch.yml`
   - branch-tagged test builds
   - reuse or rebuild the shared akmods cache when the branch targets a new primary kernel
@@ -241,7 +278,7 @@ docs/                                 teaching-style documentation
   - pull request (PR) validation build
   - no push and no signing
 - `.github/workflows/test.yml`
-  - Python unit tests for all CI tool modules
+  - Python unit tests and `ruff` lint for all CI tool modules
   - runs on pull requests and pushes to main
 
 Docs-only changes do not trigger image builds.
