@@ -159,6 +159,12 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      # Rechunking briefly needs two copies of the image unpacked at once, so
+      # prepare disk space, podman version, and storage layout before the
+      # build starts.
+      - name: Prepare runner for Chunkah rechunking
+        uses: ./.github/actions/prepare-rechunk-host
+
       # Re-load defaults here because each GitHub job runs on a fresh runner.
       - id: defaults
         name: Load repository defaults
@@ -201,6 +207,15 @@ jobs:
           stable_signal_digest: ${{ needs.preflight.outputs.stable_signal_digest }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
+
+      # Re-layer the built image into content-addressed chunks before it is
+      # published. This only changes how the image is split into layers, not
+      # which files it contains.
+      - name: Rechunk candidate image with Chunkah
+        uses: ./.github/actions/rechunk-native-image
+        with:
+          image_name: ${{ steps.defaults.outputs.image_name }}
+          image_tag: ${{ steps.tags.outputs.candidate_tag }}
 
       # Candidate publication is separate from promotion. This lets the workflow
       # test and sign the candidate first, then decide later whether it is safe
