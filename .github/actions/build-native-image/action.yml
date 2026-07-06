@@ -46,31 +46,45 @@ runs:
         echo "Final image build will consume akmods cache image: ${{ inputs.akmods_image }}"
 
     # Buildah is the Open Container Initiative (OCI) image builder used by this
-    # repository. We pass every build input explicitly so readers can see which
-    # parts of the final image are chosen by the workflow.
-    - uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
-      with:
-        containerfiles: |
-          ./Containerfile
-        image: ${{ inputs.image_name }}
-        tags: ${{ inputs.image_tag }}
-        build-args: |
-          BASE_IMAGE=${{ inputs.base_image }}
-          AKMODS_IMAGE=${{ inputs.akmods_image }}
-          IMAGE_REPO=${{ inputs.image_repo }}
-          SIGNING_KEY_FILENAME=${{ inputs.signing_key_filename }}
-        # Record the resolved akmods source commit as an OCI image label so any
-        # published image can be traced back to the exact upstream commit it was
-        # built from, even when the tracking ref has since moved.
-        labels: |
-          org.zfs-aurora-complex.akmods-ref=${{ inputs.akmods_upstream_ref }}
-          org.zfs-aurora-complex.akmods-image=${{ inputs.akmods_image }}
-          org.zfs-aurora-complex.base-image=${{ inputs.base_image }}
-          org.zfs-aurora-complex.stable-signal-image=${{ inputs.stable_signal_image }}
-          org.zfs-aurora-complex.stable-signal-digest=${{ inputs.stable_signal_digest }}
-        # Use Docker v2s2 manifest format instead of OCI image manifests.
-        # `ostree container commit` and `rpm-ostree` work more reliably with the
-        # Docker format. The "OCI" terminology elsewhere in this project refers to
-        # OCI standards for registry interaction and layer handling, not the
-        # specific container image manifest format produced by buildah.
-        oci: false
+    # repository. We call it directly (rather than through a wrapper action) so
+    # every build input is one explicit flag readers can see, and so this step
+    # does not depend on a third-party action's release cadence. buildah ships
+    # preinstalled on the GitHub-hosted runner this job uses.
+    - name: Build image with buildah
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        BASE_IMAGE: ${{ inputs.base_image }}
+        AKMODS_IMAGE: ${{ inputs.akmods_image }}
+        IMAGE_REPO: ${{ inputs.image_repo }}
+        SIGNING_KEY_FILENAME: ${{ inputs.signing_key_filename }}
+        # Recorded as OCI image labels below so any published image can be
+        # traced back to the exact upstream commit and stable-signal state it
+        # was built from, even when the tracking ref has since moved.
+        AKMODS_UPSTREAM_REF: ${{ inputs.akmods_upstream_ref }}
+        STABLE_SIGNAL_IMAGE: ${{ inputs.stable_signal_image }}
+        STABLE_SIGNAL_DIGEST: ${{ inputs.stable_signal_digest }}
+      run: |
+        set -euo pipefail
+        # --format docker (rather than buildah's oci default) uses Docker v2s2
+        # manifest format instead of OCI image manifests, because host update
+        # tooling (`bootc upgrade` on booted machines) works more reliably with
+        # the Docker format. The "OCI" terminology elsewhere in this project
+        # refers to OCI standards for registry interaction and layer handling,
+        # not the specific container image manifest format produced by buildah.
+        buildah build \
+          --tls-verify=true \
+          --format docker \
+          -f ./Containerfile \
+          --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
+          --build-arg "AKMODS_IMAGE=${AKMODS_IMAGE}" \
+          --build-arg "IMAGE_REPO=${IMAGE_REPO}" \
+          --build-arg "SIGNING_KEY_FILENAME=${SIGNING_KEY_FILENAME}" \
+          --label "org.zfs-aurora-complex.akmods-ref=${AKMODS_UPSTREAM_REF}" \
+          --label "org.zfs-aurora-complex.akmods-image=${AKMODS_IMAGE}" \
+          --label "org.zfs-aurora-complex.base-image=${BASE_IMAGE}" \
+          --label "org.zfs-aurora-complex.stable-signal-image=${STABLE_SIGNAL_IMAGE}" \
+          --label "org.zfs-aurora-complex.stable-signal-digest=${STABLE_SIGNAL_DIGEST}" \
+          -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+          .

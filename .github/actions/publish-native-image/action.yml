@@ -38,8 +38,11 @@ runs:
         echo "SIGNING_SECRET is not configured. Refusing to publish an unsigned image." >&2
         exit 1
 
-    # Authenticate once so both the push action and any later `skopeo` or
-    # `cosign` calls can talk to GHCR as the current workflow actor.
+    # The `podman push` below authenticates with its own explicit --creds, but
+    # the later `skopeo copy`/`skopeo inspect` calls in this file do not pass
+    # credentials at all -- they rely on this login's Docker config file via
+    # containers/image's fallback lookup. Authenticate here so those calls can
+    # talk to GHCR as the current workflow actor.
     - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
       with:
         registry: ghcr.io
@@ -64,16 +67,31 @@ runs:
 
     # Push a non-publishable transient tag first. The requested tag is only
     # moved after cosign verifies the digest that will be promoted.
-    - uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+    #
+    # Calls `podman push` directly rather than through a wrapper action:
+    # redhat-actions/push-to-registry hasn't cut a release since March 2024
+    # (though the repo itself is still active), and buildah/podman share the
+    # same local container storage, so a plain `podman push` of the tag
+    # buildah just built and the previous step retagged works the same way.
+    # --creds is passed explicitly (matching what the wrapper action did for
+    # this single-image, non-manifest case) rather than relying on the
+    # `docker/login-action` credentials above; that login is still needed for
+    # the later skopeo calls in this file, which read it via the containers/image
+    # library's fallback to the Docker config file.
+    - name: Push transient tag with podman
+      shell: bash
       env:
+        IMAGE_REGISTRY: ${{ inputs.image_registry }}
+        IMAGE_NAME: ${{ inputs.image_name }}
         REGISTRY_USER: ${{ inputs.registry_username }}
         REGISTRY_PASSWORD: ${{ inputs.registry_password }}
-      with:
-        registry: ${{ inputs.image_registry }}
-        image: ${{ inputs.image_name }}
-        tags: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
-        username: ${{ env.REGISTRY_USER }}
-        password: ${{ env.REGISTRY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        podman push \
+          --tls-verify=true \
+          --creds "${REGISTRY_USER}:${REGISTRY_PASSWORD}" \
+          "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}" \
+          "${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
 
     # Install signing tools for the mandatory post-push signature.
     - uses: ./.github/actions/install-signing-tools
