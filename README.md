@@ -353,7 +353,7 @@ bump in this repo, including GitHub Actions commit-SHA pins.
 
 ## Local Build
 
-CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-image/action.yml), which wraps `redhat-actions/buildah-build`. For local iteration you can invoke `podman build` directly against the repository root. `AKMODS_IMAGE` is the only build argument that is genuinely required outside CI, because the shared akmods cache image is the source of the `kmod-zfs` RPM for the primary kernel.
+CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-image/action.yml), which calls `buildah build` directly with the same flags shown below. For local iteration you can invoke `podman build` directly against the repository root. `AKMODS_IMAGE` is the only build argument that is genuinely required outside CI, because the shared akmods cache image is the source of the `kmod-zfs` RPM for the primary kernel.
 
 ```bash
 podman build \
