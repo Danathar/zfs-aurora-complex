@@ -49,19 +49,12 @@ runs:
         username: ${{ inputs.registry_username }}
         password: ${{ inputs.registry_password }}
 
-    - name: Compute transient publication tag
-      shell: bash
-      env:
-        IMAGE_TAG: ${{ inputs.image_tag }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-      run: |
-        echo "TRANSIENT_IMAGE_TAG=${IMAGE_TAG}-unsigned-${GITHUB_RUN_ID}" >> "${GITHUB_ENV}"
-
     - name: Retag local image for transient publication
       shell: bash
       env:
         IMAGE_NAME: ${{ inputs.image_name }}
         IMAGE_TAG: ${{ inputs.image_tag }}
+        TRANSIENT_IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
       run: |
         buildah tag "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
 
@@ -83,6 +76,7 @@ runs:
       env:
         IMAGE_REGISTRY: ${{ inputs.image_registry }}
         IMAGE_NAME: ${{ inputs.image_name }}
+        TRANSIENT_IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
         REGISTRY_USER: ${{ inputs.registry_username }}
         REGISTRY_PASSWORD: ${{ inputs.registry_password }}
       run: |
@@ -116,6 +110,7 @@ runs:
         IMAGE_REGISTRY: ${{ inputs.image_registry }}
         IMAGE_NAME: ${{ inputs.image_name }}
         IMAGE_TAG: ${{ inputs.image_tag }}
+        TRANSIENT_IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
       run: |
         transient_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
         transient_digest="$(skopeo inspect --format '{{ .Digest }}' "${transient_ref}")"

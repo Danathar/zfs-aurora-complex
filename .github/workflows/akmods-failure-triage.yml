@@ -29,6 +29,8 @@ jobs:
     if: github.event.workflow_run.event != 'pull_request'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       # Pull down the failure payload artifact (if the build job uploaded one)
       # without using the moving `actions/download-artifact` default branch.

@@ -43,7 +43,9 @@ runs:
     - name: Show pinned akmods cache input
       shell: bash
       run: |
-        echo "Final image build will consume akmods cache image: ${{ inputs.akmods_image }}"
+        echo "Final image build will consume akmods cache image: ${INPUTS_AKMODS_IMAGE}"
+      env:
+        INPUTS_AKMODS_IMAGE: ${{ inputs.akmods_image }}
 
     # Buildah is the Open Container Initiative (OCI) image builder used by this
     # repository. We call it directly (rather than through a wrapper action) so
