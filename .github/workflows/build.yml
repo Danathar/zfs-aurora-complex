@@ -70,6 +70,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install skopeo and cosign
         uses: ./.github/actions/install-signing-tools
@@ -121,6 +123,8 @@ jobs:
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       # Load the repository defaults, including akmods source-selection settings
       # and the default floating base-image reference.
@@ -158,6 +162,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       # Rechunking briefly needs two copies of the image unpacked at once, so
       # prepare disk space, podman version, and storage layout before the
@@ -245,6 +251,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       # Each job starts on a fresh runner, so we load defaults and registry
       # context again instead of depending on process-local state from earlier
