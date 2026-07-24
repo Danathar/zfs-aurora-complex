@@ -20,6 +20,18 @@
       "depNameTemplate": "quay.io/coreos/chunkah",
       "datasourceTemplate": "docker",
       "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the ruff version pinned for CI linting, so a new release surfaces as a reviewable PR (with its own lint-diff CI run) instead of silently changing default lint rules on an unrelated PR.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/test\\.yml$/"
+      ],
+      "matchStrings": [
+        "ruff==(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "ruff",
+      "datasourceTemplate": "pypi"
     }
   ],
 
