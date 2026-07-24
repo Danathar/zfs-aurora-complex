@@ -6,17 +6,16 @@ name: Akmods Failure Triage
 # workflow only adds visibility on top of red builds. On a green build it
 # auto-closes all open akmods-failure sticky issues so transient failures do not
 # stay pinned.
+#
+# It also keeps a small JSON file on the `status` branch in sync with the same
+# state, so the README's OpenZFS/kernel badge can show *why* a build is
+# blocked (not just that it is) without a reader having to open an issue.
 
 on:
   workflow_run:
     workflows: ["Build And Promote Main Image"]
     types:
       - completed
-
-permissions:
-  contents: read
-  issues: write
-  actions: read
 
 concurrency:
   group: akmods-failure-triage
@@ -27,6 +26,10 @@ jobs:
     name: Manage sticky akmods failure issue
     runs-on: ubuntu-24.04
     if: github.event.workflow_run.event != 'pull_request'
+    permissions:
+      contents: write
+      issues: write
+      actions: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -168,3 +171,51 @@ jobs:
               });
               core.info(`Closed sticky issue #${issue.number}`);
             }
+
+      # Only two conclusions tell us anything new about OpenZFS/kernel compat:
+      # a classified upstream-compat failure (has_payload is only 'true' when
+      # the akmods build step actually ran and failed) or a clean success. Any
+      # other conclusion leaves the previous badge state untouched.
+      - name: Build OpenZFS/kernel badge payload
+        id: badge
+        if: steps.download.outputs.has_payload == 'true' || github.event.workflow_run.conclusion == 'success'
+        shell: bash
+        env:
+          WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          FAILURE_PAYLOAD_PATH: artifacts/akmods-failure.json
+          BADGE_OUTPUT_PATH: artifacts/akmods-badge.json
+        run: |
+          python3 -m ci_tools.cli write-akmods-badge
+
+      # Publish the badge JSON to a dedicated `status` branch (not `main`) so
+      # this bot commit never touches the branch that produces signed images.
+      # shields.io's dynamic/endpoint badge reads this file straight off
+      # raw.githubusercontent.com.
+      - name: Publish badge to status branch
+        if: steps.badge.outputs.updated == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          work_dir="$(mktemp -d)"
+          cd "$work_dir"
+          git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git fetch --depth 1 origin status 2>/dev/null; then
+            git checkout -q FETCH_HEAD -b status
+          else
+            git checkout -q --orphan status
+          fi
+          git rm -rf . >/dev/null 2>&1 || true
+          cp "$GITHUB_WORKSPACE/artifacts/akmods-badge.json" akmods-badge.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add akmods-badge.json
+          if git diff --cached --quiet; then
+            echo "Badge content unchanged; nothing to commit."
+          else
+            git commit -q -m "Update OpenZFS/kernel status badge"
+            git push origin HEAD:status
+          fi

@@ -40,6 +40,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         main_compute_candidate_tag,
         main_export_registry_context,
     )
+    from ci_tools.write_akmods_badge import main as write_akmods_badge
     from ci_tools.write_build_inputs_manifest import main as write_build_inputs_manifest
 
     return {
@@ -60,6 +61,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         "akmods-configure-zfs-target": akmods_configure_zfs_target,
         "akmods-build-and-publish": akmods_build_and_publish,
         "classify-akmods-failure": classify_akmods_failure,
+        "write-akmods-badge": write_akmods_badge,
     }
 
 
