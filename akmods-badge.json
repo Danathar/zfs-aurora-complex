@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "openzfs/kernel",
-  "message": "waiting: OpenZFS 2.4.3 caps at 7.0, image is 7.1.4-200.fc44.x86_64",
+  "message": "waiting: OpenZFS 2.4.3 caps at 7.0, image is 7.1.4-202.fc44.x86_64",
   "color": "red"
 }
