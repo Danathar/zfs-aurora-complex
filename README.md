@@ -8,6 +8,22 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Danathar/zfs-aurora-complex)
 
+## Why This Repo Exists
+
+The problem has not changed:
+
+1. Fedora-family images move kernels quickly.
+2. ZFS is an out-of-tree kernel module.
+3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
+4. If you do not gate builds carefully, you can publish an Aurora DX image whose kernel and ZFS modules do not match.
+
+This repository intentionally uses:
+
+1. a standard `Containerfile`
+2. direct `buildah`/Open Container Initiative (OCI) build arguments
+3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
+4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
+
 GitHub Actions workflow: `build.yml`
 
 > [!IMPORTANT]
@@ -58,22 +74,6 @@ If you clone this repository and want it to build from a different upstream base
    - update example `BASE_IMAGE` arguments and descriptive text so the docs match the build
 
 If you use workflow replay mode with `use_input_lock=true`, also check [`ci/inputs.lock.json`](./ci/inputs.lock.json). That lock file can pin one exact base image for a specific replayed run even after the normal defaults have changed.
-
-## Why This Repo Exists
-
-The problem has not changed:
-
-1. Fedora-family images move kernels quickly.
-2. ZFS is an out-of-tree kernel module.
-3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
-4. If you do not gate builds carefully, you can publish an Aurora DX image whose kernel and ZFS modules do not match.
-
-This repository intentionally uses:
-
-1. a standard `Containerfile`
-2. direct `buildah`/Open Container Initiative (OCI) build arguments
-3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
-4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
 
 ## Licensing Note
 
