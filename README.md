@@ -31,6 +31,12 @@ This repository builds a signed Aurora DX image with:
 - Homebrew inherited from the upstream Aurora DX image
 - a single-repository signing policy for future signed `bootc upgrade` flows
 
+OpenZFS itself is not hand-pinned to a patch version baked into this repo. Each build resolves
+the latest stable release in a configured minor line (`ZFS_MINOR_VERSION`, `2.4` by default —
+see [`ci/defaults.json`](./ci/defaults.json)) directly from
+[OpenZFS's own GitHub releases](https://github.com/openzfs/zfs/releases) at build time, and
+that is the version it attempts to build and install.
+
 The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
 
 GitHub Actions workflow: `build.yml`
