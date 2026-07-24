@@ -132,6 +132,8 @@ def build_sticky_issue_payload(
     run_url: str,
     matched_patterns: Iterable[str],
     summary: str = "",
+    zfs_version: str = "",
+    max_kernel: str = "",
 ) -> dict:
     """
     Build the sticky-issue payload the visibility workflow uploads as an artifact.
@@ -140,6 +142,8 @@ def build_sticky_issue_payload(
     - `key`: identifies the distinct failure so one issue tracks one outage
     - `title`: human-readable title the sticky-issue workflow uses verbatim
     - `body`: pre-rendered markdown body
+    - `zfs_version`/`max_kernel`: structured OpenZFS metadata (when known) so
+      downstream consumers like the status badge don't need to re-parse `summary`
     """
     safe_ref = (akmods_upstream_ref or "unknown-ref")[:12]
     key = f"{failure_kind}:{kernel_release or 'unknown-kernel'}:{safe_ref}"
@@ -173,6 +177,8 @@ def build_sticky_issue_payload(
         "run_id": run_id,
         "run_url": run_url,
         "summary": summary,
+        "zfs_version": zfs_version,
+        "max_kernel": max_kernel,
     }
 
 
@@ -223,6 +229,7 @@ def main() -> None:
         kernel_release=kernel_release,
         log_text=log_text,
     )
+    zfs_version, max_kernel = zfs_metadata_from_log(log_text)
 
     payload = build_sticky_issue_payload(
         failure_kind=failure_kind,
@@ -233,6 +240,8 @@ def main() -> None:
         run_url=run_url,
         matched_patterns=matched_patterns,
         summary=summary,
+        zfs_version=zfs_version,
+        max_kernel=max_kernel,
     )
 
     out_path = Path(payload_out)
