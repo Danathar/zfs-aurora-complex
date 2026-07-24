@@ -24,6 +24,15 @@ This repository intentionally uses:
 3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
 4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
 
+This repository builds a signed Aurora DX image with:
+
+- ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
+- Distrobox inherited from the upstream Aurora DX image
+- Homebrew inherited from the upstream Aurora DX image
+- a single-repository signing policy for future signed `bootc upgrade` flows
+
+The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
+
 GitHub Actions workflow: `build.yml`
 
 > [!IMPORTANT]
@@ -50,15 +59,6 @@ GitHub Actions workflow: `build.yml`
 > For a simpler, more direct approach to the same problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple). That repo is the lightweight daily driver; this one exists to show what a fuller safety and automation pipeline looks like.
 >
 > The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
-
-This repository builds a signed Aurora DX image with:
-
-- ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
-- Distrobox inherited from the upstream Aurora DX image
-- Homebrew inherited from the upstream Aurora DX image
-- a single-repository signing policy for future signed `bootc upgrade` flows
-
-The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
 
 ## Changing The Base Image
 
