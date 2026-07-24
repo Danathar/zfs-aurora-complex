@@ -42,6 +42,7 @@ def command_map() -> dict[str, Callable[[], None]]:
     )
     from ci_tools.write_akmods_badge import main as write_akmods_badge
     from ci_tools.write_build_inputs_manifest import main as write_build_inputs_manifest
+    from ci_tools.write_last_good_build_badge import main as write_last_good_build_badge
 
     return {
         "resolve-build-inputs": resolve_build_inputs,
@@ -62,6 +63,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         "akmods-build-and-publish": akmods_build_and_publish,
         "classify-akmods-failure": classify_akmods_failure,
         "write-akmods-badge": write_akmods_badge,
+        "write-last-good-build-badge": write_last_good_build_badge,
     }
 
 

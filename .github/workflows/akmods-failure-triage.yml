@@ -7,9 +7,10 @@ name: Akmods Failure Triage
 # auto-closes all open akmods-failure sticky issues so transient failures do not
 # stay pinned.
 #
-# It also keeps a small JSON file on the `status` branch in sync with the same
+# It also keeps small JSON files on the `status` branch in sync with the same
 # state, so the README's OpenZFS/kernel badge can show *why* a build is
-# blocked (not just that it is) without a reader having to open an issue.
+# blocked (not just that it is), and a second badge shows how old the live
+# `:latest` image is, without a reader having to open an issue or the registry.
 
 on:
   workflow_run:
@@ -30,10 +31,16 @@ jobs:
       contents: write
       issues: write
       actions: read
+      packages: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Needed by the last-good-build badge step below, which inspects the
+      # published `:latest` image directly instead of tracking build state.
+      - name: Install skopeo
+        uses: ./.github/actions/install-signing-tools
 
       # Pull down the failure payload artifact (if the build job uploaded one)
       # without using the moving `actions/download-artifact` default branch.
@@ -187,12 +194,32 @@ jobs:
         run: |
           python3 -m ci_tools.cli write-akmods-badge
 
-      # Publish the badge JSON to a dedicated `status` branch (not `main`) so
-      # this bot commit never touches the branch that produces signed images.
-      # shields.io's dynamic/endpoint badge reads this file straight off
-      # raw.githubusercontent.com.
-      - name: Publish badge to status branch
-        if: steps.badge.outputs.updated == 'true'
+      # `:latest` only moves on a real promotion, so its age is meaningful on
+      # every run regardless of today's conclusion — this step always runs
+      # (unlike the badge above, which only speaks to a specific failure/
+      # success) so the day-count keeps advancing even on a run that doesn't
+      # otherwise change anything.
+      - name: Build last-good-build badge payload
+        id: last_good_build
+        shell: bash
+        env:
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          BADGE_OUTPUT_PATH: artifacts/last-good-build-badge.json
+        run: |
+          python3 -m ci_tools.cli write-last-good-build-badge
+
+      # Publish whichever badge JSON files changed this run to a dedicated
+      # `status` branch (not `main`) so these bot commits never touch the
+      # branch that produces signed images. shields.io's dynamic/endpoint
+      # badge reads these files straight off raw.githubusercontent.com.
+      #
+      # Only files present in `artifacts/` this run are overwritten — a run
+      # that only refreshes one badge (e.g. a cancelled run still updates
+      # last-good-build but has no new OpenZFS/kernel state) must not wipe
+      # out the other badge's last known-good content.
+      - name: Publish badges to status branch
+        if: steps.badge.outputs.updated == 'true' || steps.last_good_build.outputs.updated == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -208,14 +235,17 @@ jobs:
           else
             git checkout -q --orphan status
           fi
-          git rm -rf . >/dev/null 2>&1 || true
-          cp "$GITHUB_WORKSPACE/artifacts/akmods-badge.json" akmods-badge.json
+          for f in akmods-badge.json last-good-build-badge.json; do
+            if [ -f "$GITHUB_WORKSPACE/artifacts/$f" ]; then
+              cp "$GITHUB_WORKSPACE/artifacts/$f" "$f"
+            fi
+          done
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add akmods-badge.json
+          git add -A
           if git diff --cached --quiet; then
             echo "Badge content unchanged; nothing to commit."
           else
-            git commit -q -m "Update OpenZFS/kernel status badge"
+            git commit -q -m "Update status badges"
             git push origin HEAD:status
           fi
