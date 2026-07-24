@@ -9,10 +9,10 @@ Goal: Keep tag-to-digest signing behavior explicit, testable, and easy to refact
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
 import unittest
 import unittest.mock
+from pathlib import Path
 
 from ci_tools.common import CiToolError
 from ci_tools.sign_image import image_digest_ref, image_tag_ref, sign_published_image

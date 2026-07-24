@@ -20,7 +20,6 @@ from ci_tools.common import (
     run_cmd,
 )
 
-
 AKMODS_WORKTREE = Path("/tmp/akmods")
 
 

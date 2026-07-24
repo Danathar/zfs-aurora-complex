@@ -29,8 +29,8 @@ def command_map() -> dict[str, Callable[[], None]]:
     from ci_tools.check_stable_signal import main as check_stable_signal
     from ci_tools.classify_akmods_failure import main as classify_akmods_failure
     from ci_tools.export_repo_defaults import main as export_repo_defaults
-    from ci_tools.prepare_validation_build import main as prepare_validation_build
     from ci_tools.pin_akmods_cache import main as pin_akmods_cache
+    from ci_tools.prepare_validation_build import main as prepare_validation_build
     from ci_tools.promote_stable import main as promote_stable
     from ci_tools.resolve_build_inputs import main as resolve_build_inputs
     from ci_tools.sign_image import main as sign_image

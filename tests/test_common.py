@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from ci_tools.common import (
@@ -95,9 +95,8 @@ class CommonTests(unittest.TestCase):
         with patch(
             "ci_tools.common.skopeo_inspect_json",
             return_value={"Name": "example"},
-        ):
-            with self.assertRaises(CiToolError) as context:
-                skopeo_inspect_digest("docker://ghcr.io/example/image:tag")
+        ), self.assertRaises(CiToolError) as context:
+            skopeo_inspect_digest("docker://ghcr.io/example/image:tag")
 
         self.assertIn("docker://ghcr.io/example/image:tag", str(context.exception))
 
@@ -120,9 +119,8 @@ class CommonTests(unittest.TestCase):
         with patch(
             "ci_tools.common.skopeo_inspect_json",
             side_effect=CiToolError("unauthorized: authentication required"),
-        ):
-            with self.assertRaises(CiToolError):
-                skopeo_inspect_json_optional("docker://ghcr.io/example/image:tag")
+        ), self.assertRaises(CiToolError):
+            skopeo_inspect_json_optional("docker://ghcr.io/example/image:tag")
 
     def test_skopeo_inspect_json_optional_returns_result_on_success(self) -> None:
         with patch(
@@ -172,9 +170,11 @@ class CommonTests(unittest.TestCase):
             output="",
             stderr="failed",
         )
-        with patch("ci_tools.common.subprocess.run", side_effect=error):
-            with self.assertRaises(CiToolError) as context:
-                run_cmd(args)
+        with (
+            patch("ci_tools.common.subprocess.run", side_effect=error),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_cmd(args)
 
         message = str(context.exception)
         self.assertNotIn("src-secret", message)
@@ -185,9 +185,11 @@ class CommonTests(unittest.TestCase):
         self.assertIn("--dest-creds=***REDACTED***", message)
 
     def test_run_json_cmd_redacts_secret_args_in_failure_message(self) -> None:
-        with patch("ci_tools.common.run_cmd", return_value="not-json"):
-            with self.assertRaises(CiToolError) as context:
-                run_json_cmd(["skopeo", "inspect", "--creds", "actor:json-secret"])
+        with (
+            patch("ci_tools.common.run_cmd", return_value="not-json"),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_json_cmd(["skopeo", "inspect", "--creds", "actor:json-secret"])
 
         message = str(context.exception)
         self.assertNotIn("json-secret", message)

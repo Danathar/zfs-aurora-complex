@@ -179,10 +179,12 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="cafef00d" * 5), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch("ci_tools.resolve_build_inputs.git_ls_remote_resolve") as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="cafef00d" * 5), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch("ci_tools.resolve_build_inputs.git_ls_remote_resolve") as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "cafef00d" * 5)
         ls_remote.assert_not_called()
 
@@ -192,13 +194,15 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="main"), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch(
-                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
-                    return_value="b" * 40,
-                ) as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="main"), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch(
+                "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                return_value="b" * 40,
+            ) as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "b" * 40)
         ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "main")
 
@@ -208,13 +212,15 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="v2.4.0"), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch(
-                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
-                    return_value="c" * 40,
-                ) as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(AKMODS_UPSTREAM_REF="v2.4.0"), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch(
+                "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                return_value="c" * 40,
+            ) as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "c" * 40)
         ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "v2.4.0")
 
@@ -224,10 +230,12 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch("ci_tools.resolve_build_inputs.git_ls_remote_resolve") as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch("ci_tools.resolve_build_inputs.git_ls_remote_resolve") as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "0e06cd70879aa5063c4193710d8c7e37bbc2ab57")
         ls_remote.assert_not_called()
 
@@ -237,13 +245,15 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "stable",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch(
-                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
-                    return_value="d" * 40,
-                ) as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch(
+                "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                return_value="d" * 40,
+            ) as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "d" * 40)
         ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "main")
 
@@ -253,22 +263,26 @@ class ResolveDefaultAkmodsRefTests(unittest.TestCase):
             "AKMODS_UPSTREAM_TRACK": "main",
             "AKMODS_UPSTREAM_REPO": "https://example.invalid/akmods.git",
         }
-        with patch.dict(os.environ, self._env(), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with patch(
-                    "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
-                    return_value="a" * 40,
-                ) as ls_remote:
-                    resolved = _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            patch(
+                "ci_tools.resolve_build_inputs.git_ls_remote_resolve",
+                return_value="a" * 40,
+            ) as ls_remote,
+        ):
+            resolved = _resolve_default_akmods_ref()
         self.assertEqual(resolved, "a" * 40)
         ls_remote.assert_called_once_with("https://example.invalid/akmods.git", "main")
 
     def test_raises_when_nothing_is_configured(self) -> None:
         defaults = {"AKMODS_UPSTREAM_REF": "", "AKMODS_UPSTREAM_TRACK": "", "AKMODS_UPSTREAM_REPO": ""}
-        with patch.dict(os.environ, self._env(), clear=False):
-            with patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults):
-                with self.assertRaises(CiToolError):
-                    _resolve_default_akmods_ref()
+        with (
+            patch.dict(os.environ, self._env(), clear=False),
+            patch("ci_tools.resolve_build_inputs.load_repo_defaults", return_value=defaults),
+            self.assertRaises(CiToolError),
+        ):
+            _resolve_default_akmods_ref()
 
 
 class LockFileAkmodsRefInvariantTests(unittest.TestCase):

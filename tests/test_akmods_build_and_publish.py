@@ -8,9 +8,9 @@ Goal: Keep the simplified akmods publish path explicit and reviewable.
 
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import call, patch
 
 from ci_tools import akmods_build_and_publish as script
@@ -63,63 +63,68 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
         self.assertEqual(str(cache_path), "/custom/rpms/cache.json")
 
     def test_write_kernel_cache_file_exports_upstream_build_root(self) -> None:
-        with tempfile.TemporaryDirectory() as tempdir:
-            with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
-                with patch.dict(
-                    script.os.environ,
-                    {
-                        "AKMODS_KERNEL": "main",
-                        "AKMODS_VERSION": "43",
-                    },
-                    clear=True,
-                ):
-                    script.write_kernel_cache_file(
-                        kernel_release="6.18.16-200.fc43.x86_64",
-                    )
+        with (
+            tempfile.TemporaryDirectory() as tempdir,
+            patch.object(script, "AKMODS_WORKTREE", Path(tempdir)),
+            patch.dict(
+                script.os.environ,
+                {
+                    "AKMODS_KERNEL": "main",
+                    "AKMODS_VERSION": "43",
+                },
+                clear=True,
+            ),
+        ):
+            script.write_kernel_cache_file(
+                kernel_release="6.18.16-200.fc43.x86_64",
+            )
 
-                    self.assertEqual(
-                        script.os.environ["AKMODS_BUILDDIR"],
-                        f"{tempdir}/build",
-                    )
-                    self.assertFalse("KCPATH" in script.os.environ)
+            self.assertEqual(
+                script.os.environ["AKMODS_BUILDDIR"],
+                f"{tempdir}/build",
+            )
+            self.assertFalse("KCPATH" in script.os.environ)
 
     def test_write_kernel_cache_file_preserves_preexisting_kcpath_without_override(self) -> None:
-        with tempfile.TemporaryDirectory() as tempdir:
-            with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
-                with patch.dict(
-                    script.os.environ,
-                    {
-                        "AKMODS_KERNEL": "main",
-                        "AKMODS_VERSION": "43",
-                        "KCPATH": "/preexisting",
-                    },
-                    clear=True,
-                ):
-                    with patch.object(Path, "mkdir"):
-                        with patch.object(Path, "write_text"):
-                            script.write_kernel_cache_file(
-                                kernel_release="6.18.16-200.fc43.x86_64",
-                            )
+        with (
+            tempfile.TemporaryDirectory() as tempdir,
+            patch.object(script, "AKMODS_WORKTREE", Path(tempdir)),
+            patch.dict(
+                script.os.environ,
+                {
+                    "AKMODS_KERNEL": "main",
+                    "AKMODS_VERSION": "43",
+                    "KCPATH": "/preexisting",
+                },
+                clear=True,
+            ),
+        ):
+            with patch.object(Path, "mkdir"), patch.object(Path, "write_text"):
+                script.write_kernel_cache_file(
+                    kernel_release="6.18.16-200.fc43.x86_64",
+                )
 
-                    self.assertEqual(script.os.environ["KCPATH"], "/preexisting")
+            self.assertEqual(script.os.environ["KCPATH"], "/preexisting")
 
     def test_main_primary_kernel_runs_upstream_manifest_flow(self) -> None:
-        with tempfile.TemporaryDirectory() as tempdir:
-            with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
-                with patch.object(script, "build_and_push_kernel_release") as build_release:
-                    with patch.object(script, "run_cmd") as run_cmd:
-                        with patch.dict(
-                            script.os.environ,
-                            {
-                                "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
-                                "GITHUB_REPOSITORY_OWNER": "Danathar",
-                                "AKMODS_REPO": "zfs-aurora-complex-akmods",
-                                "AKMODS_KERNEL": "main",
-                                "AKMODS_VERSION": "43",
-                            },
-                            clear=False,
-                        ):
-                            script.main()
+        with (
+            tempfile.TemporaryDirectory() as tempdir,
+            patch.object(script, "AKMODS_WORKTREE", Path(tempdir)),
+            patch.object(script, "build_and_push_kernel_release") as build_release,
+            patch.object(script, "run_cmd") as run_cmd,
+            patch.dict(
+                script.os.environ,
+                {
+                    "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
+                    "GITHUB_REPOSITORY_OWNER": "Danathar",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
+                    "AKMODS_KERNEL": "main",
+                    "AKMODS_VERSION": "43",
+                },
+                clear=False,
+            ),
+        ):
+            script.main()
 
         build_release.assert_called_once_with("6.18.16-200.fc43.x86_64")
         self.assertEqual(
@@ -131,11 +136,13 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
         )
 
     def test_main_without_kernel_release_keeps_upstream_default_behavior(self) -> None:
-        with tempfile.TemporaryDirectory() as tempdir:
-            with patch.object(script, "AKMODS_WORKTREE", Path(tempdir)):
-                with patch.object(script, "run_cmd") as run_cmd:
-                    with patch.dict(script.os.environ, {}, clear=True):
-                        script.main()
+        with (
+            tempfile.TemporaryDirectory() as tempdir,
+            patch.object(script, "AKMODS_WORKTREE", Path(tempdir)),
+            patch.object(script, "run_cmd") as run_cmd,
+            patch.dict(script.os.environ, {}, clear=True),
+        ):
+            script.main()
 
         self.assertEqual(
             run_cmd.call_args_list,

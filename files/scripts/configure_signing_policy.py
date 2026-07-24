@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script: files/scripts/configure_signing_policy.py
 What: Writes trust policy for this repository's signed image path.
@@ -13,9 +12,8 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 DEFAULT_POLICY_FILE = Path("/etc/containers/policy.json")
 DEFAULT_REGISTRIES_DIR = Path("/etc/containers/registries.d")

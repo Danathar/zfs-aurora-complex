@@ -13,8 +13,8 @@ import os
 import re
 import subprocess
 import uuid
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 from shared.kernel_release import kernel_release_sort_key
 

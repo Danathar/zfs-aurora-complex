@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 
-
 KERNEL_RELEASE_PART_RE = re.compile(r"\d+|[^\d]+")
 
 

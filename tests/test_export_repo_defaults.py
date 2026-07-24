@@ -33,9 +33,15 @@ class ExportRepoDefaultsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "github-output.txt"
             env_path = Path(temp_dir) / "github-env.txt"
-            with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path), "GITHUB_ENV": str(env_path)}, clear=False):
-                with patch("ci_tools.export_repo_defaults.load_repo_defaults", return_value=defaults):
-                    main()
+            with (
+                patch.dict(
+                    os.environ,
+                    {"GITHUB_OUTPUT": str(output_path), "GITHUB_ENV": str(env_path)},
+                    clear=False,
+                ),
+                patch("ci_tools.export_repo_defaults.load_repo_defaults", return_value=defaults),
+            ):
+                main()
 
             output_text = output_path.read_text(encoding="utf-8")
             env_text = env_path.read_text(encoding="utf-8")

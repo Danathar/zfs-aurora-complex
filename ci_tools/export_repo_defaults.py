@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from ci_tools.common import load_repo_defaults, write_github_env, write_github_outputs
 
-
 OUTPUT_NAME_MAP = {
     "AKMODS_UPSTREAM_REPO": "akmods_upstream_repo",
     "AKMODS_UPSTREAM_TRACK": "akmods_upstream_track",

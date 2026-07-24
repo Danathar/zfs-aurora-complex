@@ -22,12 +22,11 @@ class AkmodsClonePinnedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             worktree = Path(temp_dir) / "akmods"
 
-            with patch.object(script, "AKMODS_WORKTREE", worktree):
-                with patch(
-                    "ci_tools.akmods_clone_pinned.run_cmd",
-                    side_effect=["", "", "", "", "abcdef123456\n"],
-                ) as run_cmd:
-                    script.clone_pinned("https://github.com/Danathar/akmods.git", "abcdef123456")
+            with patch.object(script, "AKMODS_WORKTREE", worktree), patch(
+                "ci_tools.akmods_clone_pinned.run_cmd",
+                side_effect=["", "", "", "", "abcdef123456\n"],
+            ) as run_cmd:
+                script.clone_pinned("https://github.com/Danathar/akmods.git", "abcdef123456")
 
         self.assertEqual(
             run_cmd.call_args_list,
@@ -44,13 +43,11 @@ class AkmodsClonePinnedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             worktree = Path(temp_dir) / "akmods"
 
-            with patch.object(script, "AKMODS_WORKTREE", worktree):
-                with patch(
-                    "ci_tools.akmods_clone_pinned.run_cmd",
-                    side_effect=["", "", "", "", "deadbeef\n"],
-                ):
-                    with self.assertRaisesRegex(CiToolError, "Akmods ref mismatch"):
-                        script.clone_pinned("https://github.com/Danathar/akmods.git", "abcdef123456")
+            with patch.object(script, "AKMODS_WORKTREE", worktree), patch(
+                "ci_tools.akmods_clone_pinned.run_cmd",
+                side_effect=["", "", "", "", "deadbeef\n"],
+            ), self.assertRaisesRegex(CiToolError, "Akmods ref mismatch"):
+                script.clone_pinned("https://github.com/Danathar/akmods.git", "abcdef123456")
 
     def test_clone_pinned_rejects_empty_inputs(self) -> None:
         with self.assertRaisesRegex(CiToolError, "upstream_repo"):
@@ -59,12 +56,14 @@ class AkmodsClonePinnedTests(unittest.TestCase):
             script.clone_pinned("https://github.com/Danathar/akmods.git", "")
 
     def test_main_forwards_env_defaults_to_clone_pinned(self) -> None:
-        with patch(
-            "ci_tools.akmods_clone_pinned.require_env_or_default",
-            side_effect=["https://github.com/Danathar/akmods.git", "abcdef123456"],
-        ) as require_env_or_default:
-            with patch("ci_tools.akmods_clone_pinned.clone_pinned") as clone_pinned:
-                script.main()
+        with (
+            patch(
+                "ci_tools.akmods_clone_pinned.require_env_or_default",
+                side_effect=["https://github.com/Danathar/akmods.git", "abcdef123456"],
+            ) as require_env_or_default,
+            patch("ci_tools.akmods_clone_pinned.clone_pinned") as clone_pinned,
+        ):
+            script.main()
 
         self.assertEqual(
             require_env_or_default.call_args_list,

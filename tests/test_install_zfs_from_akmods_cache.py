@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -77,9 +77,11 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             "--src-creds=actor:src-secret",
         ]
         result = subprocess.CompletedProcess(args, 1, stdout="", stderr="failed")
-        with patch.object(helper.subprocess, "run", return_value=result):
-            with self.assertRaises(RuntimeError) as context:
-                helper._run_cmd(args)
+        with (
+            patch.object(helper.subprocess, "run", return_value=result),
+            self.assertRaises(RuntimeError) as context,
+        ):
+            helper._run_cmd(args)
 
         message = str(context.exception)
         self.assertNotIn("token-secret", message)
@@ -271,24 +273,25 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
 
     def test_validate_installed_modules_accepts_compressed_module(self) -> None:
         for suffix in ("zfs.ko.xz", "zfs.ko.zst"):
-            with self.subTest(module=suffix):
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    modules_root = Path(temp_dir)
-                    module_dir = modules_root / "6.18.16-200.fc43.x86_64" / "extra" / "zfs"
-                    module_dir.mkdir(parents=True, exist_ok=True)
-                    (module_dir / suffix).touch()
+            with self.subTest(module=suffix), tempfile.TemporaryDirectory() as temp_dir:
+                modules_root = Path(temp_dir)
+                module_dir = modules_root / "6.18.16-200.fc43.x86_64" / "extra" / "zfs"
+                module_dir.mkdir(parents=True, exist_ok=True)
+                (module_dir / suffix).touch()
 
-                    depmod_calls: list[list[str]] = []
+                depmod_calls: list[list[str]] = []
 
-                    helper.validate_installed_modules(
-                        "6.18.16-200.fc43.x86_64",
-                        modules_root=modules_root,
-                        run_cmd=lambda args, **_kwargs: depmod_calls.append(args) or "",
-                    )
+                helper.validate_installed_modules(
+                    "6.18.16-200.fc43.x86_64",
+                    modules_root=modules_root,
+                    run_cmd=lambda args, depmod_calls=depmod_calls, **_kwargs: (
+                        depmod_calls.append(args) or ""
+                    ),
+                )
 
-                    self.assertEqual(
-                        depmod_calls, [["depmod", "-a", "6.18.16-200.fc43.x86_64"]]
-                    )
+                self.assertEqual(
+                    depmod_calls, [["depmod", "-a", "6.18.16-200.fc43.x86_64"]]
+                )
 
     def test_validate_installed_modules_rejects_when_no_module_present(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -311,7 +314,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
                     f"/lib/modules/6.18.16-200.fc43.x86_64/extra/zfs/{payload_name}\n"
                 )
                 original_run_cmd = helper._run_cmd
-                helper._run_cmd = lambda _args, **_kwargs: payload
+                helper._run_cmd = lambda _args, payload=payload, **_kwargs: payload
                 try:
                     kernel_release = helper.kmod_kernel_release(Path("/tmp/kmod-zfs.rpm"))
                 finally:

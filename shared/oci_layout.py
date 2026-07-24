@@ -11,8 +11,8 @@ Goal: Make OCI-layer inspection easier to read and maintain.
 from __future__ import annotations
 
 import json
-from pathlib import Path, PurePosixPath
 import tarfile
+from pathlib import Path, PurePosixPath
 
 
 def load_layer_files_from_oci_layout(layout_dir: Path) -> list[Path]:
@@ -54,10 +54,8 @@ def _is_safe_tar_member(member: tarfile.TarInfo) -> bool:
 
     if not _is_safe_tar_path(member.name):
         return False
-    if member.islnk() or member.issym():
-        if not _is_safe_tar_path(member.linkname):
-            return False
-    return True
+    is_link = member.islnk() or member.issym()
+    return not is_link or _is_safe_tar_path(member.linkname)
 
 
 def unpack_layer_tarballs(layer_files: list[Path], destination: Path) -> None:

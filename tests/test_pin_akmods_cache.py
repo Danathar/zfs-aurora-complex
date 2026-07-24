@@ -50,12 +50,11 @@ class PinAkmodsCacheTests(unittest.TestCase):
                 "AKMODS_REPO": "zfs-aurora-complex-akmods",
                 "GITHUB_OUTPUT": str(output_path),
             }
-            with patch.dict(os.environ, env, clear=False):
-                with patch(
-                    "ci_tools.pin_akmods_cache.skopeo_inspect_digest",
-                    return_value="sha256:abc123",
-                ):
-                    main()
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.pin_akmods_cache.skopeo_inspect_digest",
+                return_value="sha256:abc123",
+            ):
+                main()
 
             output = output_path.read_text(encoding="utf-8")
 

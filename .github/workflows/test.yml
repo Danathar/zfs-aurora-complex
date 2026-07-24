@@ -26,7 +26,7 @@ jobs:
 
       - name: Install test runner and linter
         shell: bash
-        run: pip install --quiet pytest "ruff==0.15.22"
+        run: pip install --quiet pytest "ruff==0.16.0"
 
       - name: Lint with ruff
         shell: bash
