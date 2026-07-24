@@ -39,9 +39,11 @@ def _patched_registry_inspect(side_effect):
     namespace. One side effect needs to be installed in both places so a
     single dispatcher function can answer both calls.
     """
-    with patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=side_effect):
-        with patch("ci_tools.common.skopeo_inspect_json", side_effect=side_effect):
-            yield
+    with (
+        patch("ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=side_effect),
+        patch("ci_tools.common.skopeo_inspect_json", side_effect=side_effect),
+    ):
+        yield
 
 
 def _stable_signal_inspect(digest: str = "sha256:stable") -> dict:
@@ -172,14 +174,13 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 raise CiToolError("unauthorized: authentication required")
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect):
-            with self.assertRaises(CiToolError) as context:
-                evaluate_stable_signal_gate(
-                    image_org="danathar",
-                    image_name="zfs-aurora-complex",
-                    stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
-                    creds="actor:token",
-                )
+        with _patched_registry_inspect(inspect), self.assertRaises(CiToolError) as context:
+            evaluate_stable_signal_gate(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                creds="actor:token",
+            )
 
         self.assertIn("unauthorized", str(context.exception))
 
@@ -188,14 +189,13 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             del image_ref, creds
             raise CiToolError("upstream inspect failed")
 
-        with _patched_registry_inspect(inspect):
-            with self.assertRaises(CiToolError) as context:
-                evaluate_stable_signal_gate(
-                    image_org="danathar",
-                    image_name="zfs-aurora-complex",
-                    stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
-                    creds="actor:token",
-                )
+        with _patched_registry_inspect(inspect), self.assertRaises(CiToolError) as context:
+            evaluate_stable_signal_gate(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                creds="actor:token",
+            )
 
         self.assertIn("upstream inspect failed", str(context.exception))
 
@@ -216,17 +216,16 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
                 },
                 clear=False,
+            ), patch(
+                "ci_tools.check_stable_signal.evaluate_stable_signal_gate",
+                return_value=StableSignalDecision(
+                    should_build=False,
+                    reason="stable-signal-unchanged",
+                    stable_signal_ref="ghcr.io/ublue-os/aurora-dx:stable",
+                    stable_signal_digest="sha256:same",
+                ),
             ):
-                with patch(
-                    "ci_tools.check_stable_signal.evaluate_stable_signal_gate",
-                    return_value=StableSignalDecision(
-                        should_build=False,
-                        reason="stable-signal-unchanged",
-                        stable_signal_ref="ghcr.io/ublue-os/aurora-dx:stable",
-                        stable_signal_digest="sha256:same",
-                    ),
-                ):
-                    main()
+                main()
 
             self.assertEqual(
                 parse_github_file(output_path),
@@ -250,13 +249,11 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
                 },
                 clear=False,
+            ), patch("ci_tools.check_stable_signal.evaluate_stable_signal_gate") as evaluate, patch(
+                "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+                return_value={"Digest": "sha256:push-time"},
             ):
-                with patch("ci_tools.check_stable_signal.evaluate_stable_signal_gate") as evaluate:
-                    with patch(
-                        "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
-                        return_value={"Digest": "sha256:push-time"},
-                    ):
-                        main()
+                main()
 
             evaluate.assert_not_called()
             self.assertEqual(

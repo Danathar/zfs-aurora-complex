@@ -9,11 +9,11 @@ Goal: Provide one reusable signing helper for candidate, branch, and stable tags
 from __future__ import annotations
 
 import os
-from typing import Callable
+from collections.abc import Callable
 
 from ci_tools.common import (
-    CiToolError,
     REPO_ROOT,
+    CiToolError,
     normalize_owner,
     require_env,
     run_cmd,

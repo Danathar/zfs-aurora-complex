@@ -8,16 +8,16 @@ Goal: Catch regressions in env validation, owner normalization, and yq command c
 
 from __future__ import annotations
 
-from contextlib import redirect_stdout
 import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from ci_tools.common import CiToolError
 import ci_tools.akmods_configure_zfs_target as script
+from ci_tools.common import CiToolError
 
 
 def _env() -> dict[str, str]:
@@ -33,10 +33,12 @@ class AkmodsConfigureZfsTargetTests(unittest.TestCase):
     def test_fails_when_images_yaml_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             images_yaml = Path(temp_dir) / "images.yaml"
-            with patch.object(script, "IMAGES_YAML", images_yaml):
-                with patch.dict(os.environ, _env(), clear=True):
-                    with self.assertRaises(CiToolError) as context:
-                        script.main()
+            with (
+                patch.object(script, "IMAGES_YAML", images_yaml),
+                patch.dict(os.environ, _env(), clear=True),
+                self.assertRaises(CiToolError) as context,
+            ):
+                script.main()
 
         self.assertIn(str(images_yaml), str(context.exception))
 
@@ -68,15 +70,17 @@ class AkmodsConfigureZfsTargetTests(unittest.TestCase):
                     return ""
                 return "org: danathar\nname: zfs-aurora-complex-akmods\n"
 
-            with patch.object(script, "IMAGES_YAML", images_yaml):
-                with patch.dict(os.environ, _env(), clear=True):
-                    with patch(
-                        "ci_tools.akmods_configure_zfs_target.run_cmd",
-                        side_effect=fake_run_cmd,
-                    ) as run_cmd:
-                        stdout = io.StringIO()
-                        with redirect_stdout(stdout):
-                            script.main()
+            with (
+                patch.object(script, "IMAGES_YAML", images_yaml),
+                patch.dict(os.environ, _env(), clear=True),
+                patch(
+                    "ci_tools.akmods_configure_zfs_target.run_cmd",
+                    side_effect=fake_run_cmd,
+                ) as run_cmd,
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    script.main()
 
             self.assertEqual(run_cmd.call_count, 2)
             first_args = run_cmd.call_args_list[0].args[0]

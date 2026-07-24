@@ -14,7 +14,6 @@ from pathlib import Path
 
 from ci_tools.common import require_env
 
-
 ARTIFACT_DIR = Path("artifacts")
 ARTIFACT_PATH = ARTIFACT_DIR / "build-inputs.json"
 

@@ -14,7 +14,6 @@ import re
 
 from ci_tools.common import normalize_owner, require_env, write_github_env, write_github_outputs
 
-
 UNSAFE_CHARS_RE = re.compile(r"[^a-z0-9._-]+")
 MAX_LENGTH = 120
 

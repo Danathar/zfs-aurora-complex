@@ -52,10 +52,12 @@ class WriteBuildInputsManifestTests(unittest.TestCase):
             artifact_dir = Path(temp_dir) / "artifacts"
             artifact_path = artifact_dir / "build-inputs.json"
 
-            with patch.object(script, "ARTIFACT_DIR", artifact_dir):
-                with patch.object(script, "ARTIFACT_PATH", artifact_path):
-                    with patch.dict(os.environ, _env(), clear=True):
-                        script.main()
+            with (
+                patch.object(script, "ARTIFACT_DIR", artifact_dir),
+                patch.object(script, "ARTIFACT_PATH", artifact_path),
+                patch.dict(os.environ, _env(), clear=True),
+            ):
+                script.main()
 
             document = json.loads(artifact_path.read_text(encoding="utf-8"))
 

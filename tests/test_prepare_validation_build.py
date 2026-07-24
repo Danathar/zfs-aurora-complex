@@ -19,7 +19,6 @@ from ci_tools.common import CiToolError
 from ci_tools.prepare_validation_build import main
 from ci_tools.resolve_build_inputs import BuildInputResolution, ResolvedBuildInputs
 
-
 _AKMODS_REPO_URL = "https://github.com/Danathar/akmods.git"
 
 
@@ -65,26 +64,23 @@ class PrepareValidationBuildTests(unittest.TestCase):
                     "AKMODS_UPSTREAM_REPO": _AKMODS_REPO_URL,
                 },
                 clear=False,
-            ):
-                with patch(
-                    "ci_tools.prepare_validation_build.resolve_build_inputs",
-                    return_value=resolution,
-                ):
-                    with patch(
-                        "ci_tools.prepare_validation_build.clone_pinned",
-                    ) as clone_pinned:
-                        with patch(
-                            "ci_tools.prepare_validation_build.inspect_akmods_cache",
-                            return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
-                                image_exists=True,
-                                source_image_pinned=(
-                                    "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123"
-                                ),
-                                missing_release="",
-                            ),
-                        ) as inspect_cache:
-                            main()
+            ), patch(
+                "ci_tools.prepare_validation_build.resolve_build_inputs",
+                return_value=resolution,
+            ), patch(
+                "ci_tools.prepare_validation_build.clone_pinned",
+            ) as clone_pinned, patch(
+                "ci_tools.prepare_validation_build.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    source_image_pinned=(
+                        "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123"
+                    ),
+                    missing_release="",
+                ),
+            ) as inspect_cache:
+                main()
 
             outputs = Path(output_path).read_text(encoding="utf-8")
             self.assertIn("version<<", outputs)
@@ -130,22 +126,18 @@ class PrepareValidationBuildTests(unittest.TestCase):
                     "AKMODS_UPSTREAM_REPO": _AKMODS_REPO_URL,
                 },
                 clear=False,
-            ):
-                with patch(
-                    "ci_tools.prepare_validation_build.resolve_build_inputs",
-                    return_value=resolution,
-                ):
-                    with patch("ci_tools.prepare_validation_build.clone_pinned") as clone_pinned:
-                        with patch(
-                            "ci_tools.prepare_validation_build.inspect_akmods_cache",
-                            return_value=AkmodsCacheStatus(
-                                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
-                                image_exists=True,
-                                missing_release="6.18.16-200.fc43.x86_64",
-                            ),
-                        ):
-                            with self.assertRaises(CiToolError) as context:
-                                main()
+            ), patch(
+                "ci_tools.prepare_validation_build.resolve_build_inputs",
+                return_value=resolution,
+            ), patch("ci_tools.prepare_validation_build.clone_pinned") as clone_pinned, patch(
+                "ci_tools.prepare_validation_build.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    missing_release="6.18.16-200.fc43.x86_64",
+                ),
+            ), self.assertRaises(CiToolError) as context:
+                main()
 
             self.assertIn(
                 "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",

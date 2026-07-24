@@ -9,8 +9,8 @@ Goal: Keep rebuild decisions fail-closed when the required primary-kernel RPM is
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 from unittest.mock import ANY, patch
 
 from ci_tools.check_akmods_cache import _has_kernel_matching_rpm, inspect_akmods_cache
@@ -55,25 +55,22 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             with patch(
                 "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
                 return_value={"Digest": "sha256:abc123"},
-            ) as inspect_json_optional:
-                with patch(
-                    "ci_tools.check_akmods_cache.skopeo_copy",
-                    side_effect=fake_copy,
-                ) as skopeo_copy:
-                    with patch(
-                        "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
-                        side_effect=fake_load_layers,
-                    ):
-                        with patch(
-                            "ci_tools.check_akmods_cache.unpack_layer_tarballs",
-                            side_effect=fake_unpack,
-                        ):
-                            status = inspect_akmods_cache(
-                                image_org="danathar",
-                                source_repo="zfs-aurora-complex-akmods",
-                                fedora_version="43",
-                                kernel_release="6.18.16-200.fc43.x86_64",
-                            )
+            ) as inspect_json_optional, patch(
+                "ci_tools.check_akmods_cache.skopeo_copy",
+                side_effect=fake_copy,
+            ) as skopeo_copy, patch(
+                "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
+                side_effect=fake_load_layers,
+            ), patch(
+                "ci_tools.check_akmods_cache.unpack_layer_tarballs",
+                side_effect=fake_unpack,
+            ):
+                status = inspect_akmods_cache(
+                    image_org="danathar",
+                    source_repo="zfs-aurora-complex-akmods",
+                    fedora_version="43",
+                    kernel_release="6.18.16-200.fc43.x86_64",
+                )
 
         self.assertTrue(status.reusable)
         self.assertEqual(
@@ -118,14 +115,13 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         with patch(
             "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
             side_effect=CiToolError("unauthorized: authentication required"),
-        ):
-            with self.assertRaises(CiToolError) as context:
-                inspect_akmods_cache(
-                    image_org="danathar",
-                    source_repo="zfs-aurora-complex-akmods",
-                    fedora_version="43",
-                    kernel_release="6.18.16-200.fc43.x86_64",
-                )
+        ), self.assertRaises(CiToolError) as context:
+            inspect_akmods_cache(
+                image_org="danathar",
+                source_repo="zfs-aurora-complex-akmods",
+                fedora_version="43",
+                kernel_release="6.18.16-200.fc43.x86_64",
+            )
 
         self.assertIn("unauthorized", str(context.exception))
 
@@ -133,19 +129,16 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         with patch(
             "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
             return_value={"Digest": "sha256:abc123"},
-        ):
-            with patch("ci_tools.check_akmods_cache.skopeo_copy"):
-                with patch(
-                    "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
-                    side_effect=RuntimeError("No layers found in OCI layout"),
-                ):
-                    with self.assertRaises(CiToolError) as context:
-                        inspect_akmods_cache(
-                            image_org="danathar",
-                            source_repo="zfs-aurora-complex-akmods",
-                            fedora_version="43",
-                            kernel_release="6.18.16-200.fc43.x86_64",
-                        )
+        ), patch("ci_tools.check_akmods_cache.skopeo_copy"), patch(
+            "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
+            side_effect=RuntimeError("No layers found in OCI layout"),
+        ), self.assertRaises(CiToolError) as context:
+            inspect_akmods_cache(
+                image_org="danathar",
+                source_repo="zfs-aurora-complex-akmods",
+                fedora_version="43",
+                kernel_release="6.18.16-200.fc43.x86_64",
+            )
 
         self.assertIn("No layers found in OCI layout", str(context.exception))
 

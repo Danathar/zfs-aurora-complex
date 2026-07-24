@@ -34,9 +34,8 @@ class PromoteStableTests(unittest.TestCase):
             with patch(
                 "ci_tools.promote_stable.skopeo_inspect_digest",
                 return_value="sha256:abc",
-            ) as digest_lookup:
-                with patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy:
-                    main()
+            ) as digest_lookup, patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy:
+                main()
 
             digest_lookup.assert_any_call(
                 "docker://ghcr.io/danathar/zfs-aurora-complex:candidate-deadbee-43",
@@ -70,27 +69,31 @@ class PromoteStableTests(unittest.TestCase):
             del creds
             raise CiToolError(f"Missing digest in skopeo inspect output for {image_ref}")
 
-        with patch.dict(os.environ, _env(), clear=True):
-            with patch(
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch(
                 "ci_tools.promote_stable.skopeo_inspect_digest",
                 side_effect=fail_digest_lookup,
-            ):
-                with patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy:
-                    with self.assertRaises(CiToolError) as context:
-                        main()
+            ),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
 
         self.assertIn("candidate-deadbee-43", str(context.exception))
         skopeo_copy.assert_not_called()
 
     def test_fails_when_audit_copy_fails_before_latest_copy(self) -> None:
-        with patch.dict(os.environ, _env(), clear=True):
-            with patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"):
-                with patch(
-                    "ci_tools.promote_stable.skopeo_copy",
-                    side_effect=CiToolError("copy audit failed"),
-                ) as skopeo_copy:
-                    with self.assertRaises(CiToolError) as context:
-                        main()
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch(
+                "ci_tools.promote_stable.skopeo_copy",
+                side_effect=CiToolError("copy audit failed"),
+            ) as skopeo_copy,
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
 
         self.assertIn("copy audit failed", str(context.exception))
         self.assertEqual(skopeo_copy.call_count, 1)
@@ -103,14 +106,16 @@ class PromoteStableTests(unittest.TestCase):
         )
 
     def test_fails_when_latest_copy_fails_after_audit_copy(self) -> None:
-        with patch.dict(os.environ, _env(), clear=True):
-            with patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"):
-                with patch(
-                    "ci_tools.promote_stable.skopeo_copy",
-                    side_effect=[None, CiToolError("copy latest failed")],
-                ) as skopeo_copy:
-                    with self.assertRaises(CiToolError) as context:
-                        main()
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch(
+                "ci_tools.promote_stable.skopeo_copy",
+                side_effect=[None, CiToolError("copy latest failed")],
+            ) as skopeo_copy,
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
 
         self.assertIn("copy latest failed", str(context.exception))
         self.assertEqual(skopeo_copy.call_count, 2)
@@ -123,16 +128,18 @@ class PromoteStableTests(unittest.TestCase):
         )
 
     def test_fails_when_destination_digest_does_not_match_candidate(self) -> None:
-        with patch.dict(os.environ, _env(), clear=True):
-            with patch(
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch(
                 "ci_tools.promote_stable.skopeo_inspect_digest",
                 # First call resolves the candidate digest; second call (the
                 # post-audit-copy verification) returns a different digest.
                 side_effect=["sha256:abc", "sha256:different"],
-            ):
-                with patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy:
-                    with self.assertRaises(CiToolError) as context:
-                        main()
+            ),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
 
         self.assertIn("Promoted digest mismatch", str(context.exception))
         self.assertIn("sha256:different", str(context.exception))

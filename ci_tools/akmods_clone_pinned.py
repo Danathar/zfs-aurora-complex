@@ -13,7 +13,6 @@ from pathlib import Path
 
 from ci_tools.common import CiToolError, require_env_or_default, run_cmd
 
-
 AKMODS_WORKTREE = Path("/tmp/akmods")
 
 

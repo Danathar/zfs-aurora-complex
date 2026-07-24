@@ -11,11 +11,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent

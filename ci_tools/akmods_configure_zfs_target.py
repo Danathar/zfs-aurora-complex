@@ -13,7 +13,6 @@ from pathlib import Path
 
 from ci_tools.common import CiToolError, normalize_owner, require_env, run_cmd
 
-
 AKMODS_WORKTREE = Path("/tmp/akmods")
 IMAGES_YAML = AKMODS_WORKTREE / "images.yaml"
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script: containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 What: Install ZFS RPMs (Red Hat Package Manager package files) from the self-hosted akmods cache into the image build root.
@@ -9,14 +8,13 @@ Goal: Keep the image build logic explicit while reducing the older multi-kernel 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
-
+from dataclasses import dataclass
+from pathlib import Path
 
 # The build copies repo helper modules into `/shared`, but Python started with
 # `python3 /containerfiles/.../install_zfs_from_akmods_cache.py` only adds the
@@ -28,7 +26,6 @@ if str(IMAGE_ROOT) not in sys.path:
 
 from shared.kernel_release import kernel_release_sort_key
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
-
 
 LAYOUT_DIR = Path("/tmp/akmods-zfs")
 EXTRACT_ROOT = Path("/tmp")
@@ -272,7 +269,7 @@ def build_install_plan(
             )
         kmod_rpm_by_kernel[kernel_release] = rpm_path
 
-    supported_kernel_release = sorted(image_kernels, key=kernel_release_sort_key)[-1]
+    supported_kernel_release = max(image_kernels, key=kernel_release_sort_key)
     supported_kmod_rpm = kmod_rpm_by_kernel.get(supported_kernel_release)
     if supported_kmod_rpm is None:
         raise RuntimeError(
@@ -345,7 +342,7 @@ def main() -> None:
             "Detected multiple kernels in the base image: "
             + " ".join(image_kernels)
             + ". This repo intentionally supports only the primary kernel "
-            f"{sorted(image_kernels, key=kernel_release_sort_key)[-1]}; recovery from a bad image should use image rollback."
+            f"{max(image_kernels, key=kernel_release_sort_key)}; recovery from a bad image should use image rollback."
         )
     copy_oci_layout_from_registry(image_ref)
     layer_files = load_layer_files_from_oci_layout(LAYOUT_DIR)
