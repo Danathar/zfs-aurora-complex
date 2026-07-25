@@ -89,49 +89,20 @@ This is not a legal opinion and nothing in this repository is legal advice. Oper
 
 ## Safety Model
 
-Stable users should only see tested outputs.
-
-Scheduled runs first check whether there is anything new to build. The
-`preflight` job compares the digest of the upstream `STABLE_SIGNAL_IMAGE`
-(`ghcr.io/ublue-os/aurora-dx:stable` by default, see
-[`ci/defaults.json`](./ci/defaults.json)) against the stable-signal digest
-recorded as an OCI label on this repo's own current `:latest` image. If Aurora
-stable has not advanced since the last promoted image, the scheduled run skips
-the rest of the workflow instead of spending build time on a rebuild that
-would produce the same result. Push and manual (`workflow_dispatch`) runs
-always build regardless of this check; only the daily `schedule` trigger is
-gated. Any registry error while checking (auth failure, rate limit, missing
-`:latest`, missing labels) fails open toward building rather than silently
-skipping, so an unknown state never masks a real update. See
-["Scheduled-Build Gate"](docs/architecture-overview.md) in the architecture
-overview for the full skip/build decision table.
-
-Once a run decides to build, the `main` GitHub Actions workflow does this:
-
-1. resolve and pin the exact base image, detected kernel list, primary boot kernel, builder image, and ZFS line for the run
-2. reuse or rebuild the shared akmods cache image for that primary kernel
-3. build a candidate image tag in the same repository
-4. sign that candidate digest
-5. promote the tested candidate digest to an immutable audit tag, then to `latest`
-6. rely on the candidate digest signature after promotion, because `latest` resolves to the same digest
-
-The audit tag is promoted before `latest` on purpose: `main` cancels
-in-progress runs when a newer push arrives (see `concurrency` in
-[`.github/workflows/build.yml`](./.github/workflows/build.yml)), so if
-promotion is cancelled between the two copies, an audit record with no
-`latest` move is safer than a moved `latest` with no audit record. Each
-promotion copy also verifies that the destination tag resolves to the exact
-candidate digest before moving on, so a future manifest-list image or a
-change in `skopeo`'s copy behavior cannot silently move `latest` to something
-other than what was signed.
-
-If candidate fails, `latest` does not move.
+Stable users should only see tested outputs. Scheduled runs first check
+whether Aurora stable has advanced since the last promoted image and skip the
+rest of the workflow if not; push and manual runs always build. Once a run
+does build, it resolves and pins its inputs, reuses or rebuilds the shared
+akmods cache, builds and signs a candidate image, and only then promotes that
+candidate digest to an audit tag and `latest`. If candidate fails, `latest`
+does not move. See ["Scheduled-Build Gate"](docs/architecture-overview.md#0-scheduled-build-gate)
+and ["Promotion And Signing"](docs/architecture-overview.md#5-promotion-and-signing) in the
+architecture overview for the full decision tables and promotion ordering.
 
 Published images must be signed, matching the Universal Blue image-template
 model. The repository commits only `cosign.pub`; the matching private key must
 be stored as the GitHub Actions secret `SIGNING_SECRET`. The publish action
-refuses to push an image when that secret is missing, because booted systems
-use the committed public key to verify future updates.
+refuses to push an image when that secret is missing.
 
 Initial signing setup:
 
@@ -143,13 +114,8 @@ git commit -m "Configure image signing key"
 git push
 ```
 
-Never commit `cosign.key`. If the keypair is rotated after a machine has already
-booted this image, install the new public key on that machine before expecting it
-to verify newly signed updates:
-
-```bash
-sudo install -m 0644 cosign.pub /etc/pki/containers/zfs-aurora-complex.pub
-```
+Never commit `cosign.key`. For key rotation and the full signing model, see
+[`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
 
 ## Assumptions And Recovery Policy
 
@@ -177,87 +143,25 @@ Operator rule:
 
 ## What Gets Published
 
-All of these tags are stored in GitHub Container Registry (GHCR), which is the container-image registry behind `ghcr.io`.
-
-OS image tags in one repository:
-
-- candidate image: `ghcr.io/danathar/zfs-aurora-complex:candidate-<sha>-<fedora>`
-- stable image: `ghcr.io/danathar/zfs-aurora-complex:latest`
-- stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
-- branch test image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
-  - bot-authored branch runs validate locally but intentionally do not push this tag
-
-Each of those pushed tags is preceded by a short-lived `<tag>-unsigned-<run_id>`
-tag: the publish action pushes that transient tag first, signs and verifies
-its digest, then copies the signed digest onto the requested tag (see
-[`.github/actions/publish-native-image/action.yml`](./.github/actions/publish-native-image/action.yml)).
-These transient tags are left in the registry rather than deleted. GHCR does
-not support deleting one tag in isolation; deleting the underlying package
-version would also delete every other tag pointing at that same digest,
-including the promoted `latest`/audit/branch tag. Since the transient tag
-points at the same signed digest as the tag it preceded, it is harmless to
-leave in place.
-
-Shared akmods cache image:
-
-- `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
-- architecture-specific inspection tag: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>-x86_64`
-- CI resolves the shared `main-<fedora>` tag to `ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:<digest>` before building the final OS image
-
-The important simplification is this:
-
-- there is no separate `*-candidate` image repository anymore
-- there is no branch-scoped public akmods alias repo anymore
-- there is no host repair script for stable-vs-candidate trust drift anymore
+Everything lives in two GitHub Container Registry (GHCR) repositories: the OS
+image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
+`stable-*` audit, and `br-*` branch tags) and the shared akmods cache image
+(`ghcr.io/danathar/zfs-aurora-complex-akmods`). There is no separate
+candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
+repair script to keep in sync. For the full tag list and how transient
+`*-unsigned-<run_id>` tags fit into publishing, see
+["Outputs"](docs/architecture-overview.md#outputs) in the architecture overview.
 
 ## How Akmods Source Is Chosen
 
-This repository uses the configured akmods fork:
-
-- `https://github.com/Danathar/akmods.git`
-
-By default it follows the configured tracking ref, but each workflow run resolves
-that ref to one exact commit SHA before building anything.
-
-The selection order is:
-
-1. an explicit `AKMODS_UPSTREAM_REF` or `DEFAULT_AKMODS_REF` environment
-   override, if one is set
-2. the `AKMODS_UPSTREAM_REF` pin in [`ci/defaults.json`](./ci/defaults.json),
-   if that field is non-empty
-3. otherwise, `AKMODS_UPSTREAM_TRACK` from [`ci/defaults.json`](./ci/defaults.json),
-   currently `main`, resolved with `git ls-remote`
-
-Right now [`ci/defaults.json`](./ci/defaults.json) contains the fork URL, the
-tracking ref, an empty pin field, image names, image defaults, and the OpenZFS
-minor line. Because `AKMODS_UPSTREAM_REF` is empty, floating tracking is the
-active default.
-
-What that means in practice:
-
-1. a GitHub Actions workflow run (usually shortened to CI, for continuous
-   integration) resolves `Danathar/akmods@main` to one commit SHA at the start
-   of the run
-2. it makes a temporary clone of that fork into `/tmp/akmods`
-3. it verifies that Git checked out the resolved commit
-4. it uses that temporary checkout for the rest of the akmods build
-
-What it does **not** mean:
-
-1. the workflow run is not creating a new long-lived clone anywhere in the GitHub
-   account that owns the fork
-2. the workflow run is not ignoring the configured fork
-3. the workflow run is not following a moving branch while the build is already
-   in progress
-
-If the fork is updated after upstream changes:
-
-1. under the floating default, the next run resolves the tracking ref again and
-   can pick up the new commit automatically
-2. when you need to freeze or debug a specific commit, set `AKMODS_UPSTREAM_REF`
-   in [`ci/defaults.json`](./ci/defaults.json)
-3. clear `AKMODS_UPSTREAM_REF` back to `""` when the temporary pin is no longer
-   needed so floating tracking resumes
+This repository builds from the configured akmods fork
+(`https://github.com/Danathar/akmods.git`). By default it floats on the
+`AKMODS_UPSTREAM_TRACK` ref in [`ci/defaults.json`](./ci/defaults.json)
+(currently `main`), resolved to one exact commit SHA at the start of each
+workflow run — an explicit `AKMODS_UPSTREAM_REF` pin, if set, overrides that
+float. For the full selection order, how to freeze or debug a specific
+commit, and how to clear a temporary pin, see
+[`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md).
 
 ## Repository Layout
 
@@ -295,71 +199,20 @@ Docs-only changes do not trigger image builds.
 
 ## Native Build Flow
 
-At a high level, the final image build now works like this:
-
-1. `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx`
-2. Aurora DX already includes Homebrew; the optional `ghcr.io/ublue-os/brew:latest` stage can be uncommented if `BASE_IMAGE` is changed to a base without brew, such as Fedora Atomic
-3. `build_files/build-image.sh` enables the brew services/timers, keeps Distrobox from the upstream Aurora DX image, installs ZFS RPMs (Red Hat Package Manager package files) from the shared akmods cache image, and writes signing policy
-4. `bootc container lint` validates the final image
-5. the workflow re-layers the built image into content-addressed chunks with [Chunkah](https://github.com/coreos/chunkah) before pushing and signing it (see "Content-Based Layering With Chunkah" below)
-
-Three workflow-side simplifications now support that image build:
-
-1. `ci/defaults.json` is the one checked-in source of truth for default image refs, image names, and akmods source-selection settings
-2. cache checks now inspect the shared akmods cache image directly, which removes the extra sidecar image and keeps the reuse rule easier to follow
-3. small repo-owned Python helpers now handle registry-context export, candidate-tag generation, branch-tag composition, and signing-policy file generation instead of leaving that logic inline in workflow or shell snippets
-
-One Fedora-version detail matters here:
-
-1. GitHub Actions usually passes a digest-pinned `AKMODS_IMAGE` reference for the detected Fedora major version
-2. local builds do not need a hard-coded Fedora major version in `Containerfile`
-3. when `AKMODS_IMAGE` is not passed, the install helper renders `AKMODS_IMAGE_TEMPLATE`
-   with the Fedora major version detected from the chosen base image itself
-
-The ZFS install step follows the repo policy above:
-
-1. inspect every detected kernel under `/lib/modules`
-2. choose the newest detected kernel as the supported primary kernel
-3. require a matching `kmod-zfs` RPM for that kernel
-4. install only that kernel's `kmod-zfs` package through `dnf5`
-5. run `depmod` for that supported kernel
-
-If the base image carries older bundled kernels too, those older kernels are not treated as supported ZFS targets inside the same image. The recovery path for a bad image is rollback to the previous image, not booting an older bundled kernel from the current one.
-
-That logic lives in:
-
-- [`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](./containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py)
-
-## Content-Based Layering With Chunkah
-
-After `bootc container lint` passes, the candidate, branch, and pull-request
-validation workflows re-layer the locally built image with
-[Chunkah](https://github.com/coreos/chunkah) before anything is pushed or
-signed. Chunkah splits the same filesystem content into content-addressed
-layers instead of the layers buildah produced, so future `bootc upgrade` pulls
-can reuse layers whose content has not changed instead of re-downloading
-whole files that happen to share a layer with something that did change. It
-does not add, remove, or modify any file inside the image.
-
-This step needs two things a default GitHub-hosted runner does not provide,
-handled by [`.github/actions/prepare-rechunk-host`](./.github/actions/prepare-rechunk-host/action.yml)
-before the build starts:
-
-1. a podman version `>= 5`, because older podman drops Chunkah's layer
-   annotations when pushing, which would defeat the whole point of rechunking
-2. container storage relocated onto the runner's larger `/mnt` disk, because
-   rechunking briefly needs two unpacked copies of the image at once
-
-The rechunk step itself lives in
-[`.github/actions/rechunk-native-image`](./.github/actions/rechunk-native-image/action.yml).
-It rechunks the local image and re-tags the result back onto the same local
-tag, so [`publish-native-image`](./.github/actions/publish-native-image/action.yml)
-needs no changes to push and sign the rechunked content.
-
-The Chunkah container image version is pinned in that action's
-`chunkah_image` input default and tracked by a Renovate custom manager (see
-[`renovate.json`](./renovate.json)). Renovate also owns every other version
-bump in this repo, including GitHub Actions commit-SHA pins.
+At a high level, `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx`,
+`build_files/build-image.sh` installs ZFS RPMs (Red Hat Package Manager
+package files) from the shared akmods cache image and writes signing policy,
+`bootc container lint` validates the result, and the image is then re-layered
+into content-addressed chunks with [Chunkah](https://github.com/coreos/chunkah)
+before it is pushed and signed. The ZFS install step inspects every detected
+kernel, treats only the newest as the supported primary kernel, and installs
+just that kernel's `kmod-zfs` package — older bundled kernels are not treated
+as supported ZFS targets, matching the recovery policy above. For the full
+build steps, the Fedora-version detection details, and the Chunkah rechunk
+mechanics, see ["Input Resolution"](docs/architecture-overview.md#1-input-resolution) through
+["Content-Based Layering With Chunkah"](docs/architecture-overview.md#content-based-layering-with-chunkah) in the
+architecture overview. The install logic itself lives in
+[`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](./containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py).
 
 ## Local Build
 
@@ -438,20 +291,11 @@ cosign verify \
   ghcr.io/danathar/zfs-aurora-complex:latest
 ```
 
-The verification key is also installed into the image at
-`/etc/pki/containers/zfs-aurora-complex.pub`, and the image writes a container
-signature policy for `ghcr.io/danathar/zfs-aurora-complex`. After booting this
-image family, `bootc upgrade` expects future `latest` digests to carry a matching
-cosign signature.
-
-The `--new-bundle-format=false` flag is intentional. This repo signs with
-legacy cosign registry attachments so Fedora/Aurora's current bootc signature
-policy path can discover the signature through `use-sigstore-attachments`.
-Default cosign v3 verification can find newer OCI-referrer bundle signatures
-that the bootc policy path used here may not accept.
-
-For the full signing model, read
-[`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
+`--new-bundle-format=false` is required: this repo signs with legacy cosign
+registry attachments so Fedora/Aurora's bootc signature policy path can
+discover them via `use-sigstore-attachments`, which default cosign v3
+verification does not use. For the full signing model, key rotation, and the
+in-image trust policy, read [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
 
 ## Reading Order
 
