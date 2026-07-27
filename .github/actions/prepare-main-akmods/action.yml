@@ -65,6 +65,9 @@ outputs:
   zfs_minor_version:
     description: OpenZFS minor line used for this run.
     value: ${{ steps.resolve.outputs.zfs_minor_version }}
+  zfs_version:
+    description: Exact OpenZFS patch version resolved on that line for this run.
+    value: ${{ steps.resolve.outputs.zfs_version }}
   akmods_upstream_ref:
     description: Resolved akmods source commit used for this run.
     value: ${{ steps.resolve.outputs.akmods_upstream_ref }}
@@ -117,6 +120,11 @@ runs:
         USE_INPUT_LOCK: ${{ inputs.use_input_lock }}
         LOCK_FILE: ${{ inputs.lock_file }}
         BUILD_CONTAINER_REF: ${{ inputs.build_container_ref }}
+        # Authenticates the OpenZFS release lookup in ci_tools/zfs_release.py.
+        # Unauthenticated api.github.com calls are limited per IP, and hosted
+        # runners share IPs, so without this the ZFS version resolution can
+        # fail for reasons unrelated to this repository.
+        GITHUB_TOKEN: ${{ inputs.registry_token }}
       run: |
         python3 -m ci_tools.cli resolve-build-inputs
 
@@ -140,6 +148,7 @@ runs:
         BUILD_CONTAINER_PINNED: ${{ steps.resolve.outputs.build_container_pinned }}
         BUILD_CONTAINER_DIGEST: ${{ steps.resolve.outputs.build_container_digest }}
         ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         AKMODS_UPSTREAM_REF: ${{ steps.resolve.outputs.akmods_upstream_ref }}
       run: |
         python3 -m ci_tools.cli write-build-inputs-manifest
@@ -156,9 +165,10 @@ runs:
 
     # Reuse the shared akmods cache only when it already contains a matching
     # module build for the primary kernel this image is expected to boot with,
-    # built against the ZFS minor line this run resolved. Without the ZFS line
-    # in the reuse check, changing ZFS_MINOR_VERSION would silently keep
-    # shipping the previously cached ZFS build.
+    # built against the exact ZFS patch version this run resolved. Matching
+    # only the minor line here used to let a cache holding an older patch on
+    # the same line (e.g. 2.4.3) silently satisfy a newer one (e.g. 2.4.4), so
+    # a new OpenZFS patch never actually reached the image.
     - id: cache
       name: Check for existing shared akmods cache
       shell: bash
@@ -166,7 +176,7 @@ runs:
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
-        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 
@@ -210,7 +220,24 @@ runs:
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         AKMODS_TARGET: zfs
-        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        # Deliberately the exact resolved patch version (e.g. "2.4.4"), not the
+        # line (e.g. "2.4"), despite the variable's name. The fork's
+        # build_files/zfs/build-kmod-zfs.sh uses this value only as a prefix:
+        #   select(.tag_name | startswith("zfs-" + $ZMV))][0]
+        # so passing "2.4" makes it choose the newest release on the line
+        # itself, independently of what this repo resolved. Those two lookups
+        # can disagree -- a release published between them, or the fork reading
+        # only the API's first page while this repo paginates -- and the image
+        # would then carry an org.zfs-aurora-complex.zfs-version label that
+        # does not match the module it ships. Passing the exact version makes
+        # the fork select precisely what this repo resolved, and if that
+        # release is not visible to the fork it exits nonzero with a clear
+        # message rather than quietly building something else.
+        #
+        # The "Verify the rebuilt cache" step below still checks the result,
+        # because this narrows the mismatch window rather than closing it: the
+        # prefix match would also accept a hypothetical "2.4.44" for "2.4.4".
+        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         CI: "1"
         REGISTRY_ACTOR: ${{ inputs.registry_actor }}
         REGISTRY_TOKEN: ${{ inputs.registry_token }}
@@ -266,3 +293,31 @@ runs:
         AKMODS_REPO: ${{ inputs.akmods_repo }}
       run: |
         python3 -m ci_tools.cli pin-akmods-cache
+
+    # Prove the cache this run just published actually contains the ZFS version
+    # this run resolved, instead of assuming it.
+    #
+    # This repo and the akmods fork resolve the OpenZFS patch version
+    # independently: this repo picks the highest patch on the configured line,
+    # while the fork's build-kmod-zfs.sh takes the most recently published
+    # release whose tag starts with that line. Those normally agree, but a
+    # release published between the two lookups makes them disagree -- and
+    # nothing downstream would notice. The final image would carry
+    # org.zfs-aurora-complex.zfs-version=<what we resolved> while shipping the
+    # module the fork actually built, and the scheduled gate compares against
+    # that same label, so it would see "unchanged" and never rebuild. The label
+    # would stay wrong indefinitely.
+    #
+    # Only runs on the rebuild path. The reuse path already proved this, since
+    # that is exactly what the earlier check step tests for.
+    - name: Verify the rebuilt cache matches the resolved ZFS version
+      if: success() && (inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true')
+      shell: bash
+      env:
+        FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+        KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+        AKMODS_REPO: ${{ inputs.akmods_repo }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
+        REQUIRE_MATCH: "true"
+      run: |
+        python3 -m ci_tools.cli check-akmods-cache

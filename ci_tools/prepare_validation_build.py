@@ -40,7 +40,7 @@ def main() -> None:
         source_repo=source_repo,
         fedora_version=inputs.version,
         kernel_release=inputs.kernel_release,
-        zfs_minor_version=inputs.zfs_minor_version,
+        zfs_version=inputs.zfs_version,
     )
     if not status.reusable:
         # Branch/PR paths intentionally do not rebuild the shared akmods tag;
@@ -56,7 +56,7 @@ def main() -> None:
         elif status.missing_release:
             reason = (
                 f"does not cover the supported primary kernel {status.missing_release} "
-                f"on the ZFS {inputs.zfs_minor_version} line"
+                f"at ZFS version {inputs.zfs_version}"
             )
         else:
             reason = (

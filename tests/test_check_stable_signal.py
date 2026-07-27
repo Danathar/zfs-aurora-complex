@@ -18,6 +18,7 @@ from unittest.mock import patch
 from ci_tools.check_stable_signal import (
     STABLE_SIGNAL_DIGEST_LABEL,
     STABLE_SIGNAL_IMAGE_LABEL,
+    ZFS_VERSION_LABEL,
     StableSignalDecision,
     _bypass_decision,
     evaluate_stable_signal_gate,
@@ -54,14 +55,19 @@ def _stable_signal_inspect(digest: str = "sha256:stable") -> dict:
     }
 
 
-def _current_latest_inspect(*, signal_image: str, signal_digest: str) -> dict:
+def _current_latest_inspect(
+    *, signal_image: str, signal_digest: str, zfs_version: str = "2.4.3"
+) -> dict:
+    labels = {
+        STABLE_SIGNAL_IMAGE_LABEL: signal_image,
+        STABLE_SIGNAL_DIGEST_LABEL: signal_digest,
+    }
+    if zfs_version:
+        labels[ZFS_VERSION_LABEL] = zfs_version
     return {
         "Name": "ghcr.io/danathar/zfs-aurora-complex",
         "Digest": "sha256:repo-latest",
-        "Labels": {
-            STABLE_SIGNAL_IMAGE_LABEL: signal_image,
-            STABLE_SIGNAL_DIGEST_LABEL: signal_digest,
-        },
+        "Labels": labels,
     }
 
 
@@ -76,14 +82,19 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 return _current_latest_inspect(
                     signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     signal_digest="sha256:same",
+                    zfs_version="2.4.3",
                 )
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect):
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
@@ -94,6 +105,7 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             "ghcr.io/ublue-os/aurora-dx:stable",
         )
         self.assertEqual(decision.stable_signal_digest, "sha256:same")
+        self.assertEqual(decision.zfs_version, "2.4.3")
 
     def test_changed_signal_builds(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
@@ -104,19 +116,87 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 return _current_latest_inspect(
                     signal_image="ghcr.io/ublue-os/aurora-dx:stable",
                     signal_digest="sha256:old",
+                    zfs_version="2.4.3",
                 )
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect):
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "stable-signal-advanced")
+
+    def test_zfs_version_advanced_builds_even_when_stable_signal_unchanged(self) -> None:
+        # This is the fix: a new OpenZFS patch on the configured line must
+        # force a build even when Aurora stable has not moved at all.
+        def inspect(image_ref: str, *, creds: str | None = None) -> dict:
+            del creds
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
+                return _stable_signal_inspect("sha256:same")
+            if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
+                return _current_latest_inspect(
+                    signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                    signal_digest="sha256:same",
+                    zfs_version="2.4.3",
+                )
+            raise AssertionError(image_ref)
+
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.4",
+        ):
+            decision = evaluate_stable_signal_gate(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
+                creds="actor:token",
+            )
+
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.reason, "zfs-version-advanced")
+        self.assertEqual(decision.zfs_version, "2.4.4")
+
+    def test_missing_zfs_version_label_builds(self) -> None:
+        # :latest predates this label (or was built by a run before this
+        # feature existed). Treat that the same as "we don't know", not "no
+        # change".
+        def inspect(image_ref: str, *, creds: str | None = None) -> dict:
+            del creds
+            if image_ref == "docker://ghcr.io/ublue-os/aurora-dx:stable":
+                return _stable_signal_inspect("sha256:same")
+            if image_ref == "docker://ghcr.io/danathar/zfs-aurora-complex:latest":
+                return _current_latest_inspect(
+                    signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                    signal_digest="sha256:same",
+                    zfs_version="",
+                )
+            raise AssertionError(image_ref)
+
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ):
+            decision = evaluate_stable_signal_gate(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
+                creds="actor:token",
+            )
+
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.reason, "current-latest-missing-zfs-version-label")
+        self.assertEqual(decision.zfs_version, "2.4.3")
 
     def test_missing_previous_image_builds(self) -> None:
         def inspect(image_ref: str, *, creds: str | None = None) -> dict:
@@ -127,11 +207,15 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 raise CiToolError("Command failed: skopeo inspect\nmanifest unknown")
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect):
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
@@ -151,11 +235,15 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 }
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect):
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ):
             decision = evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
@@ -174,11 +262,15 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
                 raise CiToolError("unauthorized: authentication required")
             raise AssertionError(image_ref)
 
-        with _patched_registry_inspect(inspect), self.assertRaises(CiToolError) as context:
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ), self.assertRaises(CiToolError) as context:
             evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
@@ -189,11 +281,15 @@ class EvaluateStableSignalGateTests(unittest.TestCase):
             del image_ref, creds
             raise CiToolError("upstream inspect failed")
 
-        with _patched_registry_inspect(inspect), self.assertRaises(CiToolError) as context:
+        with _patched_registry_inspect(inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ), self.assertRaises(CiToolError) as context:
             evaluate_stable_signal_gate(
                 image_org="danathar",
                 image_name="zfs-aurora-complex",
                 stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
                 creds="actor:token",
             )
 
@@ -214,6 +310,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "REGISTRY_TOKEN": "token",
                     "IMAGE_NAME": "zfs-aurora-complex",
                     "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
+                    "DEFAULT_ZFS_MINOR_VERSION": "2.4",
                 },
                 clear=False,
             ), patch(
@@ -223,10 +320,18 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     reason="stable-signal-unchanged",
                     stable_signal_ref="ghcr.io/ublue-os/aurora-dx:stable",
                     stable_signal_digest="sha256:same",
+                    zfs_version="2.4.3",
                 ),
-            ):
+            ) as evaluate:
                 main()
 
+            evaluate.assert_called_once_with(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
+                creds="actor:token",
+            )
             self.assertEqual(
                 parse_github_file(output_path),
                 {
@@ -234,6 +339,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "reason": "stable-signal-unchanged",
                     "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx:stable",
                     "stable_signal_digest": "sha256:same",
+                    "zfs_version": "2.4.3",
                 },
             )
 
@@ -263,6 +369,7 @@ class CheckStableSignalMainTests(unittest.TestCase):
                     "reason": "not-schedule-event",
                     "stable_signal_ref": "ghcr.io/ublue-os/aurora-dx:stable",
                     "stable_signal_digest": "sha256:push-time",
+                    "zfs_version": "",
                 },
             )
 
@@ -280,6 +387,7 @@ class BypassDecisionTests(unittest.TestCase):
         self.assertEqual(decision.reason, "not-schedule-event")
         self.assertEqual(decision.stable_signal_ref, "ghcr.io/ublue-os/aurora-dx:stable")
         self.assertEqual(decision.stable_signal_digest, "sha256:push-time")
+        self.assertEqual(decision.zfs_version, "")
 
     def test_leaves_digest_empty_when_signal_image_missing(self) -> None:
         with patch(
@@ -301,6 +409,21 @@ class BypassDecisionTests(unittest.TestCase):
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "not-schedule-event")
         self.assertEqual(decision.stable_signal_digest, "")
+
+    def test_never_resolves_zfs_version_for_non_schedule_events(self) -> None:
+        # The actual `zfs-version` image label for push/manual builds is
+        # sourced from the real build's own resolution in `build-zfs-akmods`,
+        # not from this gate, so the bypass path must not make a redundant
+        # network call to the OpenZFS releases API for a value nothing reads.
+        with patch(
+            "ci_tools.check_stable_signal.skopeo_inspect_json_optional",
+            return_value={"Digest": "sha256:push-time"},
+        ), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version"
+        ) as resolve_zfs:
+            _bypass_decision("ghcr.io/ublue-os/aurora-dx:stable")
+
+        resolve_zfs.assert_not_called()
 
 
 if __name__ == "__main__":

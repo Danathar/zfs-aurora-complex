@@ -65,6 +65,7 @@ jobs:
       reason: ${{ steps.gate.outputs.reason }}
       stable_signal_ref: ${{ steps.gate.outputs.stable_signal_ref }}
       stable_signal_digest: ${{ steps.gate.outputs.stable_signal_digest }}
+      zfs_version: ${{ steps.gate.outputs.zfs_version }}
     permissions:
       contents: read
       packages: read
@@ -82,6 +83,10 @@ jobs:
         env:
           REGISTRY_ACTOR: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ github.token }}
+          # The gate resolves the current OpenZFS release to decide whether a
+          # new ZFS patch alone should trigger a build. Authenticate that
+          # lookup; see ci_tools/zfs_release.py.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -m ci_tools.cli check-stable-signal
 
@@ -103,6 +108,7 @@ jobs:
       build_container_pinned: ${{ steps.prepare.outputs.build_container_pinned }}
       build_container_digest: ${{ steps.prepare.outputs.build_container_digest }}
       zfs_minor_version: ${{ steps.prepare.outputs.zfs_minor_version }}
+      zfs_version: ${{ steps.prepare.outputs.zfs_version }}
       akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
       use_input_lock: ${{ steps.prepare.outputs.use_input_lock }}
       lock_file_path: ${{ steps.prepare.outputs.lock_file_path }}
@@ -117,11 +123,20 @@ jobs:
     container:
       # The akmods job runs inside a privileged build container because it needs
       # the kernel-module build tooling and container storage access expected by
-      # the upstream akmods workflow we are reusing.
+      # the upstream akmods workflow we are reusing. It is digest-pinned, not
+      # `:latest`, because this job runs `--privileged` with `/` bind-mounted as
+      # `/host-sys`, container storage mounted, and a package-write token: a
+      # moved `:latest` tag would mean GitHub could start the job from an image
+      # nobody reviewed, before this repo's own input-resolution or digest
+      # checks ever run. Renovate's built-in `github-actions` manager already
+      # tracks `container:`/`services:` image digests in workflow files (see
+      # its `extractContainer()` in `github-actions/extract.js`), so this pin
+      # gets kept current the same way GitHub Actions SHA pins do -- no custom
+      # manager needed.
       # This fallback must match DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json;
       # a job's `container:` block cannot read step outputs, so it cannot read the
       # checked-in default and this literal must be kept in sync manually.
-      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
+      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca' }}
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -295,6 +310,7 @@ jobs:
           akmods_upstream_ref: ${{ needs.build-zfs-akmods.outputs.akmods_upstream_ref }}
           stable_signal_image: ${{ needs.preflight.outputs.stable_signal_ref }}
           stable_signal_digest: ${{ needs.preflight.outputs.stable_signal_digest }}
+          zfs_version: ${{ needs.build-zfs-akmods.outputs.zfs_version }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

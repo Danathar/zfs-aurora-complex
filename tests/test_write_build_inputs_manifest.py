@@ -42,6 +42,7 @@ def _env() -> dict[str, str]:
         "BUILD_CONTAINER_PINNED": "ghcr.io/ublue-os/devcontainer@sha256:build",
         "BUILD_CONTAINER_DIGEST": "sha256:build",
         "ZFS_MINOR_VERSION": "2.4",
+        "ZFS_VERSION": "2.4.3",
         "AKMODS_UPSTREAM_REF": "abcdef1234567890abcdef1234567890abcdef12",
     }
 
@@ -93,6 +94,7 @@ class WriteBuildInputsManifestTests(unittest.TestCase):
                 "build_container_pinned",
                 "build_container_digest",
                 "zfs_minor_version",
+                "zfs_version",
                 "akmods_upstream_ref",
             },
         )
@@ -102,6 +104,8 @@ class WriteBuildInputsManifestTests(unittest.TestCase):
             ["6.18.13-200.fc43.x86_64", "6.18.16-200.fc43.x86_64"],
         )
         self.assertEqual(document["inputs"]["base_image_digest"], "sha256:base")
+        self.assertEqual(document["inputs"]["zfs_minor_version"], "2.4")
+        self.assertEqual(document["inputs"]["zfs_version"], "2.4.3")
         self.assertEqual(
             document["inputs"]["akmods_upstream_ref"],
             "abcdef1234567890abcdef1234567890abcdef12",

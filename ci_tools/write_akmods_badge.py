@@ -19,7 +19,9 @@ from ci_tools.common import optional_env, write_github_outputs
 BADGE_LABEL = "openzfs/kernel"
 
 
-def build_badge_payload(*, conclusion: str, failure_payload: dict | None) -> dict | None:
+def build_badge_payload(
+    *, conclusion: str, failure_payload: dict | None, build_ran: bool
+) -> dict | None:
     """
     Return a shields.io endpoint-badge payload, or None when the badge should be left alone.
 
@@ -27,8 +29,19 @@ def build_badge_payload(*, conclusion: str, failure_payload: dict | None) -> dic
     specific versions involved), and a successful build (green). Any other conclusion
     (unclassified failure, cancelled run, etc.) is not this badge's concern, since it does not
     tell us anything new about OpenZFS/kernel compatibility.
+
+    `build_ran` distinguishes a real build from a scheduled run the stable-signal gate skipped.
+    A skipped run still reports conclusion "success", but it never touched OpenZFS or the
+    kernel, so it must not overwrite a previously red badge with "in sync" -- that would hide
+    a real, still-unfixed incompatibility behind a run that proved nothing. The failure branch
+    below does not need its own `build_ran` check: a classified failure payload can only exist
+    if the akmods build step actually ran, which the workflow always uploads the
+    `build-inputs-<run_id>` artifact for earlier in the same job, so `build_ran` is already
+    true whenever `failure_payload` is present.
     """
     if conclusion == "success":
+        if not build_ran:
+            return None
         return {
             "schemaVersion": 1,
             "label": BADGE_LABEL,
@@ -65,18 +78,27 @@ def main() -> None:
     conclusion = optional_env("WORKFLOW_CONCLUSION")
     failure_payload_path = optional_env("FAILURE_PAYLOAD_PATH")
     badge_output_path = optional_env("BADGE_OUTPUT_PATH") or "artifacts/akmods-badge.json"
+    build_ran = optional_env("BUILD_RAN", "false").lower() == "true"
 
     failure_payload: dict | None = None
     if failure_payload_path and Path(failure_payload_path).exists():
         failure_payload = json.loads(Path(failure_payload_path).read_text(encoding="utf-8"))
 
-    badge = build_badge_payload(conclusion=conclusion, failure_payload=failure_payload)
+    badge = build_badge_payload(
+        conclusion=conclusion, failure_payload=failure_payload, build_ran=build_ran
+    )
 
     if badge is None:
         write_github_outputs({"updated": "false"})
-        print(
-            f"Conclusion {conclusion!r} does not change the OpenZFS/kernel badge; leaving it as-is."
-        )
+        if conclusion == "success" and not build_ran:
+            print(
+                "Successful run did not actually build (gate-skipped schedule run); "
+                "leaving the OpenZFS/kernel badge as-is."
+            )
+        else:
+            print(
+                f"Conclusion {conclusion!r} does not change the OpenZFS/kernel badge; leaving it as-is."
+            )
         return
 
     out_path = Path(badge_output_path)

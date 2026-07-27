@@ -40,6 +40,7 @@ def _resolved_inputs() -> BuildInputResolution:
             build_container_pinned="ghcr.io/ublue-os/devcontainer@sha256:build",
             build_container_digest="sha256:build",
             zfs_minor_version="2.4",
+            zfs_version="2.4.4",
             akmods_upstream_ref="abcdef123456",
             use_input_lock=False,
             lock_file_path="ci/inputs.lock.json",
@@ -110,7 +111,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
-                zfs_minor_version="2.4",
+                zfs_version="2.4.4",
             )
             clone_pinned.assert_called_once_with(_AKMODS_REPO_URL, "abcdef123456")
 
@@ -145,6 +146,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
                 str(context.exception),
             )
+            self.assertIn("ZFS version 2.4.4", str(context.exception))
             self.assertIn("rebuild_akmods=true", str(context.exception))
             self.assertIn("6.18.16-200.fc43.x86_64", str(context.exception))
             clone_pinned.assert_called_once_with(_AKMODS_REPO_URL, "abcdef123456")

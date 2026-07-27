@@ -8,7 +8,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `CD`: continuous delivery or continuous deployment. In this repo, the publishing and promotion steps in the `main` workflow are the closest thing to CD.
 - `candidate`: test tag built first on `main` before promotion moves `latest`.
 - `stable`: the normal user-facing tag, `latest`.
-- `stable signal` / `stable-signal image`: the upstream image (`ghcr.io/ublue-os/aurora-dx:stable` by default) used as the cadence signal for scheduled builds. When its digest has not changed since the last promoted image, the scheduled workflow run skips instead of rebuilding. It should always name the same image as `DEFAULT_BASE_IMAGE`, so the gate watches the image the build actually consumes.
+- `stable signal` / `stable-signal image`: the upstream image (`ghcr.io/ublue-os/aurora-dx:stable` by default) used as one of two cadence signals for scheduled builds. When its digest, and the current resolved `zfs_version`, both match what is recorded on the last promoted image, the scheduled workflow run skips instead of rebuilding; if either has moved, it builds. It should always name the same image as `DEFAULT_BASE_IMAGE`, so the gate watches the image the build actually consumes.
 - `audit tag`: immutable stable tag written during promotion so one published snapshot can be referenced later.
 - `artifact`: a saved output file from a workflow run that you can inspect or reuse later.
 - `manifest`: a structured data file that records what a run produced or which exact inputs it used.
@@ -81,7 +81,8 @@ This page defines terms used across this repository's docs and workflow comments
 - `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
 - `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
 - `DEFAULT_AKMODS_REF`: process-level environment override that can force one akmods source ref for a run; it is not wired as a formal workflow-dispatch input.
-- `ZFS_MINOR_VERSION`: OpenZFS minor line passed into the akmods build.
+- `ZFS_MINOR_VERSION`: OpenZFS minor line (for example `2.4`) passed into the akmods build.
+- `zfs_version`: the exact OpenZFS patch version (for example `2.4.3`) resolved on that line for one run, via [`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py). The scheduled-build gate and the akmods cache-reuse check both compare on this exact value, not the minor line, so a new patch release forces a rebuild instead of being masked by a cache that only matches the line.
 - `AKMODS_KERNEL`: kernel flavor value passed to upstream akmods tooling; this repo uses `main`.
 - `AKMODS_TARGET`: akmods target name; this repo uses `zfs`.
 - `AKMODS_VERSION`: Fedora major version value passed to upstream akmods tooling.

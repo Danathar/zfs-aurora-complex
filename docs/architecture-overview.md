@@ -99,37 +99,60 @@ kernel line, revisiting `:latest` is reasonable — but only once ZFS builds
 against it without disabling the gate.
 
 This repo's own `:latest` image only carries provenance: every
-build writes two OCI labels onto the candidate (and promotion carries them
+build writes three OCI labels onto the candidate (and promotion carries them
 onto `:latest`):
 
 - `org.zfs-aurora-complex.stable-signal-image`: which upstream image was used as the signal
 - `org.zfs-aurora-complex.stable-signal-digest`: that image's digest at build time
+- `org.zfs-aurora-complex.zfs-version`: the exact OpenZFS patch version this build resolved and installed
 
-On a scheduled run, the gate compares the current upstream digest against the
-digest recorded in those labels on `:latest` and returns one of:
+The gate compares the current upstream digest against the base-image signal
+labels, AND independently compares the newest release on the configured ZFS
+minor line (see [`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py)) against
+the `zfs-version` label, so a scheduled run builds when *either* one has moved.
+Without the second check, a new OpenZFS patch release -- including a security
+fix -- could sit unbuilt indefinitely as long as the Aurora base image itself
+did not change, because the base-image digest is all the gate used to compare.
+It returns one of:
 
 | Reason | Meaning | Builds? |
 |---|---|---|
-| `stable-signal-unchanged` | current `:latest` already reflects this exact upstream digest | no |
+| `stable-signal-unchanged` | current `:latest` already reflects this exact upstream digest AND ZFS version | no |
 | `stable-signal-advanced` | upstream digest moved since the last promoted image | yes |
+| `zfs-version-advanced` | a newer OpenZFS release exists on the configured minor line | yes |
 | `stable-signal-image-changed` | `STABLE_SIGNAL_IMAGE` itself was reconfigured since the last promotion | yes |
 | `current-latest-missing` | no `:latest` has ever been published | yes |
 | `current-latest-missing-stable-signal-labels` | `:latest` exists but predates this gate, or was built by a non-schedule event before provenance was recorded | yes |
+| `current-latest-missing-zfs-version-label` | `:latest` exists but predates the `zfs-version` label | yes |
 | `not-schedule-event` | push or manual run; the gate is bypassed entirely | yes |
+
+The `zfs-version` label baked onto the image is *not* sourced from this gate's
+own resolution, unlike the stable-signal labels. It comes from the real
+`build-zfs-akmods` job's own resolution -- the same value the akmods
+cache-reuse check validated against and the same one actually installed --
+so the label can never claim a version different from what the image really
+carries.
 
 The gate is fail-closed on unknown state: a registry error while checking the
 upstream signal image always raises and fails the job. A registry error while
 checking the repo's own `:latest` (auth failure, rate limit, network blip) is
 treated the same way, *except* for a genuine "tag does not exist" response,
 which is a normal `current-latest-missing` build reason. The point is that
-"we couldn't tell" must never be silently treated as "nothing changed."
+"we couldn't tell" must never be silently treated as "nothing changed." The
+same applies to the OpenZFS releases API call: a network failure or an
+unparseable response raises and fails the job rather than silently falling
+back to "no ZFS change detected."
 
 Push and manual runs still resolve and record the current upstream
 stable-signal digest (best-effort; a registry hiccup does not fail the build)
 so the *next* scheduled run has fresh provenance to compare against. Without
 this, a push build would leave the label empty, and the following scheduled
 run would always see `current-latest-missing-stable-signal-labels` and do a
-full rebuild even when the upstream base image had not moved.
+full rebuild even when the upstream base image had not moved. The `zfs-version`
+label does not need this same bootstrapping step: it is always written by the
+real `build-zfs-akmods` job for every event type, schedule included, so it is
+never left empty by a push or manual run the way an unresolved stable-signal
+digest would be.
 
 The `akmods-failure-triage.yml` workflow (see "Operational Model" below)
 checks for a `build-inputs-<run_id>` artifact before treating a run as a real
@@ -166,21 +189,27 @@ That action does five things in one place:
 ### 2. Shared Akmods Cache Reuse Or Rebuild
 
 The workflow checks whether the shared cache image already contains a matching
-`kmod-zfs-<kernel_release>-...rpm` for the supported primary kernel, **and**
-that the cache is signed by this repo's own cosign key.
+`kmod-zfs-<kernel_release>-<zfs_version>-...rpm` for the supported primary
+kernel **and** the exact OpenZFS patch version resolved for this run (see
+[`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py)), **and** that the
+cache is signed by this repo's own cosign key. Matching on the minor line
+alone (for example any `2.4.*`) used to let a cache built for an older patch
+on that line silently satisfy a newer one, so a new OpenZFS patch release
+never actually forced a rebuild as long as the kernel and line stayed the
+same.
 
 The repo's policy is:
 
 1. detect every installed kernel in the base image for visibility
 2. choose the newest detected kernel as the supported primary kernel
-3. require ZFS support only for that supported primary kernel
+3. require ZFS support only for that supported primary kernel, at the exact resolved patch version
 4. use image rollback, not older bundled kernels in the same image, as the recovery path
 
 That check now does one direct inspection path:
 
 1. copy the shared cache image into a local Open Container Initiative (OCI) layout
 2. unpack its filesystem layers
-3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel
+3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel at the exact resolved ZFS version
 4. only once that matches, verify the cache image's cosign signature against
    the committed `cosign.pub` (see
    [`ci_tools/check_akmods_cache.py`](../ci_tools/check_akmods_cache.py)'s
@@ -343,13 +372,18 @@ signed:
    `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
    `--preserve-digests` for the same reason.
 
-The Chunkah container image version (currently `v0.6.0`) is pinned as the
-`chunkah_image` input default inside `rechunk-native-image/action.yml` and
-tracked by a Renovate custom manager in the root
-[`renovate.json`](../renovate.json). Renovate owns essentially every other
-version bump in this repo, including the GitHub Actions commit-SHA pins used
-throughout `.github/actions/` and `.github/workflows/`, the `ruff` version
-pinned for CI linting, and the OpenZFS minor release line in
+The Chunkah container image (currently `v0.6.0`) is both version- and
+digest-pinned as the `chunkah_image` input default inside
+`rechunk-native-image/action.yml`, tracked by a Renovate custom manager in the
+root [`renovate.json`](../renovate.json) whose regex captures both
+`currentValue` and `currentDigest`. It is digest-pinned, not just
+version-pinned, because this step rewrites the locally built image
+immediately before it is pushed and signed -- a moved tag under the same
+`v0.6.0` version would let unreviewed content in right before this repo's own
+key signs it. Renovate owns essentially every other version bump in this
+repo, including the GitHub Actions commit-SHA pins used throughout
+`.github/actions/` and `.github/workflows/`, the `ruff` version pinned for CI
+linting, and the OpenZFS minor release line in
 [`ci/defaults.json`](../ci/defaults.json).
 
 There is one deliberate exception. `ublue-os/remove-unwanted-software` in

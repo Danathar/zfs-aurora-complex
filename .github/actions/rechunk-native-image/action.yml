@@ -11,11 +11,15 @@ inputs:
     required: true
   chunkah_image:
     description: >-
-      Chunkah container image reference. The default below is the value
-      Renovate's custom manager tracks; see the "Track stable Chunkah
-      container releases" entry in renovate.json.
+      Chunkah container image reference. Digest-pinned because this step
+      rewrites the locally built image immediately before it is pushed and
+      signed, so a moved tag would let unreviewed content in right before
+      this repo's own key signs it. See the "Track stable Chunkah container
+      releases" entry in renovate.json for how the version part of this pin
+      stays current; the digest part is tracked by Renovate's built-in
+      digest-pinning support for the `docker` datasource.
     required: false
-    default: quay.io/coreos/chunkah:v0.6.0
+    default: quay.io/coreos/chunkah:v0.6.0@sha256:ff8b8b466a942ec6000445d4001fc661e2fc5a952ad9ee29b4de9ab09d1d1708
 
 runs:
   # Chunkah re-layers an already-built local image into content-addressed

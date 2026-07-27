@@ -104,8 +104,10 @@ This is not a legal opinion and nothing in this repository is legal advice. Oper
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
-whether the upstream Aurora base image has advanced since the last promoted image and skip the
-rest of the workflow if not; push and manual runs always build. Once a run
+whether the upstream Aurora base image has advanced, or a newer OpenZFS patch
+is available on the configured minor line, since the last promoted image, and
+skip the rest of the workflow only if neither has changed; push and manual
+runs always build. Once a run
 does build, it resolves and pins its inputs, reuses or rebuilds the shared
 akmods cache, builds and signs a candidate image, and only then promotes that
 candidate digest to an audit tag and `latest`. If candidate fails, `latest`
@@ -253,7 +255,13 @@ For reproducing a specific published image exactly, prefer the CI workflow with 
 ## Install And Rebase
 
 > [!WARNING]
-> This is an experimental image stream.
+> This is a single-maintainer image stream. It is production for its author —
+> daily-driven on real hardware with real ZFS pools — but that means the bar it
+> has cleared is "safe enough for one person's own machines," not a vendor
+> support commitment to anyone else. The pipeline builds, signs, and promotes
+> automatically (see "Safety Model" above), but nothing in it currently boots
+> the image or imports a pool before `:latest` moves. Switching a machine you
+> depend on onto this image means trusting that bar, not a guarantee.
 
 Fresh stock Aurora DX can switch to the published image after the GitHub workflow
 has produced a signed `latest` tag:
