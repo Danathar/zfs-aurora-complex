@@ -270,6 +270,16 @@ jobs:
       - name: Install skopeo and cosign
         uses: ./.github/actions/install-signing-tools
 
+      # `promote-stable` re-verifies the candidate signature before moving any
+      # tag. The skopeo calls in that helper pass explicit credentials, but
+      # `cosign verify` reads the Docker config file instead, so authenticate
+      # here rather than depending on the package staying publicly readable.
+      - uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       # Promotion copies the already-tested candidate image digest to `latest`
       # and records audit tags. The candidate signature carries over because
       # both tags resolve to the same digest.

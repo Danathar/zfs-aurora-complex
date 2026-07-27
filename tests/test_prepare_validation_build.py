@@ -109,6 +109,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
+                zfs_minor_version="2.4",
             )
             clone_pinned.assert_called_once_with(_AKMODS_REPO_URL, "abcdef123456")
 
