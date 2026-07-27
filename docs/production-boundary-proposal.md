@@ -102,11 +102,19 @@ switched to under enforced policy.
 
 Options, not mutually exclusive:
 
-1. **Accept the loss.** Test branch images with plain `bootc switch` (no
-   `--enforce-container-sigpolicy`), which records an unverified-origin deployment. Weaker
-   trust, but this is already how a *first* switch from stock Aurora into any zfs-aurora-complex
-   image works before the in-image policy exists yet -- not an unfamiliar posture, just used more
-   often.
+1. **Accept the loss, but this needs an actual workflow change, not just removing the
+   secret.** `publish-native-image`'s "Require signing key before publication" step
+   (`.github/actions/publish-native-image/action.yml:34-39`) exits before any push when the key
+   is empty, so simply cutting branch access to `SIGNING_SECRET` does not degrade to "push
+   unsigned" -- it makes `build-branch.yml`'s "Push and sign branch image" step fail outright,
+   with no branch image published at all. Getting back to a pushed-but-unsigned test image would
+   require changing that step to add an explicit unsigned-publish path for branches. Testing that
+   image with plain `bootc switch` (no `--enforce-container-sigpolicy`) would also be a *new*,
+   weaker posture, not the existing one: `README.md:44-55` and `docs/signing-and-bootc.md:20-25`
+   currently require `--enforce-container-sigpolicy` on every first switch, and
+   `README.md:268-269` tells anyone who switched without it to switch again with it. Adopting this
+   option means updating those docs to describe a deliberately weaker branch-testing path, not
+   just skipping a flag.
 2. **A separate, lower-privilege test-signing key.** A second cosign keypair, scoped to an
    environment that *does* allow branch refs, used only for `br-*` tags. The production
    `cosign.pub` embedded in real images would not trust it, so a compromised branch push could
@@ -146,9 +154,17 @@ Recommend a repository ruleset (the current GitHub mechanism; the classic "branc
 rules" API is being superseded by this) targeting `main`, requiring:
 
 - a pull request before merging
-- these status checks to pass first (both already run on every PR today, confirmed via
-  `gh pr checks`): **Python Unit Tests**, **Build PR Image (No Push)**
+- this status check to pass first: **Python Unit Tests** (`test.yml`; confirmed via its `on:`
+  trigger to run on every PR unconditionally, with no path filters)
 - no force pushes
+
+**Do not also require `Build PR Image (No Push)`**, even though it runs on most PRs today: read
+the current `build-pr.yml` and its `paths-ignore` excludes `README.md`, `docs/**`, and all
+Markdown files. A docs-only PR -- including this one -- never triggers that workflow, so it never
+produces that check, and a *required* check that never runs blocks the PR from merging forever.
+If the owner wants image-build validation to gate every merge, including documentation changes,
+`build-pr.yml`'s path filters would need to be removed first as a separate change, before adding
+it to the ruleset.
 
 **Do not require PR approvals (reviewer count) beyond zero.** This is a solo-maintainer
 repository; GitHub blocks self-approval by default, so requiring even one approval would either
