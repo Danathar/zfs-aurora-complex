@@ -183,12 +183,23 @@ jobs:
       # a classified upstream-compat failure (has_payload is only 'true' when
       # the akmods build step actually ran and failed) or a clean success. Any
       # other conclusion leaves the previous badge state untouched.
+      #
+      # A gate-skipped scheduled run also reports conclusion 'success' without
+      # building anything (see steps.download.outputs.build_ran above), so the
+      # 'success' half of this condition requires build_ran too -- otherwise a
+      # skipped run could overwrite a real red badge with green. The 'failure'
+      # half does not need it: has_payload can only be 'true' when the akmods
+      # build step actually ran, which build_ran already implies.
+      # write-akmods-badge enforces this same rule internally (see
+      # ci_tools/write_akmods_badge.py) so it stays correct even if this
+      # condition is ever loosened by mistake.
       - name: Build OpenZFS/kernel badge payload
         id: badge
-        if: steps.download.outputs.has_payload == 'true' || github.event.workflow_run.conclusion == 'success'
+        if: steps.download.outputs.has_payload == 'true' || (github.event.workflow_run.conclusion == 'success' && steps.download.outputs.build_ran == 'true')
         shell: bash
         env:
           WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BUILD_RAN: ${{ steps.download.outputs.build_ran }}
           FAILURE_PAYLOAD_PATH: artifacts/akmods-failure.json
           BADGE_OUTPUT_PATH: artifacts/akmods-badge.json
         run: |

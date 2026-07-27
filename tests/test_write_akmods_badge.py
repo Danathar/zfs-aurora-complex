@@ -1,8 +1,10 @@
 """
 Script: tests/test_write_akmods_badge.py
 What: Tests for the shields.io badge payload built from build workflow conclusions.
-Doing: Feeds representative conclusion/failure-payload combinations through build_badge_payload.
-Why: Guards the README badge contract so it only speaks to OpenZFS/kernel compat state.
+Doing: Feeds representative conclusion/failure-payload/build_ran combinations through
+build_badge_payload.
+Why: Guards the README badge contract so it only speaks to OpenZFS/kernel compat state,
+and so a gate-skipped scheduled run can never overwrite a real red state with green.
 Goal: Keep the badge accurate without it drifting into a general CI-health indicator.
 """
 
@@ -16,9 +18,16 @@ from ci_tools.write_akmods_badge import build_badge_payload
 
 class BuildBadgePayloadTests(unittest.TestCase):
     def test_success_conclusion_is_green_in_sync(self) -> None:
-        badge = build_badge_payload(conclusion="success", failure_payload=None)
+        badge = build_badge_payload(conclusion="success", failure_payload=None, build_ran=True)
         self.assertEqual(badge["message"], "in sync")
         self.assertEqual(badge["color"], "brightgreen")
+
+    def test_gate_skipped_success_does_not_touch_badge(self) -> None:
+        # This is the bug: a scheduled run the stable-signal gate skipped still
+        # reports conclusion "success" but never built anything, so it must not
+        # overwrite a previously red badge with "in sync".
+        badge = build_badge_payload(conclusion="success", failure_payload=None, build_ran=False)
+        self.assertIsNone(badge)
 
     def test_upstream_compat_failure_names_the_specific_versions(self) -> None:
         badge = build_badge_payload(
@@ -29,6 +38,7 @@ class BuildBadgePayloadTests(unittest.TestCase):
                 "zfs_version": "2.4.3",
                 "max_kernel": "7.0",
             },
+            build_ran=True,
         )
         self.assertEqual(badge["color"], "red")
         self.assertIn("OpenZFS 2.4.3", badge["message"])
@@ -39,6 +49,7 @@ class BuildBadgePayloadTests(unittest.TestCase):
         badge = build_badge_payload(
             conclusion="failure",
             failure_payload={"failure_kind": FAILURE_KIND_UPSTREAM_COMPAT, "kernel_release": "x"},
+            build_ran=True,
         )
         self.assertEqual(badge["color"], "red")
         self.assertIn("known upstream ZFS/kernel incompatibility", badge["message"])
@@ -47,15 +58,16 @@ class BuildBadgePayloadTests(unittest.TestCase):
         badge = build_badge_payload(
             conclusion="failure",
             failure_payload={"failure_kind": FAILURE_KIND_UNKNOWN},
+            build_ran=True,
         )
         self.assertIsNone(badge)
 
     def test_failure_without_payload_does_not_touch_badge(self) -> None:
-        badge = build_badge_payload(conclusion="failure", failure_payload=None)
+        badge = build_badge_payload(conclusion="failure", failure_payload=None, build_ran=True)
         self.assertIsNone(badge)
 
     def test_other_conclusions_do_not_touch_badge(self) -> None:
-        badge = build_badge_payload(conclusion="cancelled", failure_payload=None)
+        badge = build_badge_payload(conclusion="cancelled", failure_payload=None, build_ran=True)
         self.assertIsNone(badge)
 
 
