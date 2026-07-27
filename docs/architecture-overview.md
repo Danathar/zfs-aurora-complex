@@ -330,10 +330,19 @@ There is one deliberate exception. `ublue-os/remove-unwanted-software` in
 is pinned to a commit that upstream has not tagged (it merges their "v10" work,
 but their tags still stop at `v9`), so there is no released version for
 Renovate to anchor to and it does not appear in the dependency dashboard.
-Do not "fix" this by adding a `# v10` comment: no such tag exists, and
-Renovate would then compare against a tag list topping out at `v9` and offer a
-downgrade. The pin is an immutable SHA, so nothing drifts; the only cost is
-not being told when upstream finally tags a release. Revisit when they do.
+Do not "fix" this by adding a `# v10` comment. No such tag exists, so Renovate
+would not find the declared version in the registry at all. It would not
+propose anything: rolling back to `v9` in that situation requires
+`rollbackPrs`, which defaults to `false` and is not enabled by this repo's
+presets, and there is no version above `v10` to offer either. The annotation
+would therefore be silently inert *and* untrue — strictly worse than the
+current honest absence, because a future reader would see a version comment
+and reasonably assume the pin is tracked.
+
+The pin is an immutable SHA, so nothing drifts; the only cost is not being told
+when upstream finally tags a release. Revisit when they do — at that point the
+correct fix is to repin to the tagged commit and add the matching comment,
+not to annotate the existing SHA.
 
 ### 4. Primary-Kernel ZFS Install Logic
 
