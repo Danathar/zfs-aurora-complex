@@ -3,7 +3,7 @@
 # This repository intentionally avoids BlueBuild. The build is expressed as a
 # standard bootc-style Containerfile so CI can control tags directly.
 
-ARG BASE_IMAGE="ghcr.io/ublue-os/aurora-dx:latest"
+ARG BASE_IMAGE="ghcr.io/ublue-os/aurora-dx:stable"
 # Aurora already includes the Universal Blue brew payload. If BASE_IMAGE is
 # changed to a base that does not include brew, such as Fedora Atomic, uncomment
 # BREW_IMAGE, the brew stage, and the COPY --from=brew line below.
@@ -45,5 +45,11 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,target=/var/log \
     --mount=type=tmpfs,target=/tmp \
     /ctx/build-image.sh
+
+# Aurora sets `quay.expires-after=4w` on its own images. That label is inert on
+# GitHub Container Registry (GHCR), but it rides along into this image, and any
+# mirror of this image to a Quay-backed registry would start self-deleting after
+# four weeks. This image is meant to be a durable update target, so clear it.
+LABEL quay.expires-after=
 
 RUN bootc container lint

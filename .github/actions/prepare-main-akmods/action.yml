@@ -139,7 +139,10 @@ runs:
         retention-days: 30
 
     # Reuse the shared akmods cache only when it already contains a matching
-    # module build for the primary kernel this image is expected to boot with.
+    # module build for the primary kernel this image is expected to boot with,
+    # built against the ZFS minor line this run resolved. Without the ZFS line
+    # in the reuse check, changing ZFS_MINOR_VERSION would silently keep
+    # shipping the previously cached ZFS build.
     - id: cache
       name: Check for existing shared akmods cache
       shell: bash
@@ -147,6 +150,7 @@ runs:
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
+        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 

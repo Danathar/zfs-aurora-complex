@@ -8,14 +8,53 @@ Goal: Update stable tags without rebuilding the image a second time.
 
 from __future__ import annotations
 
+import os
+
 from ci_tools.common import (
+    REPO_ROOT,
     CiToolError,
     normalize_owner,
     require_env,
+    run_cmd,
     skopeo_copy,
     skopeo_inspect_digest,
 )
 from ci_tools.tagging_context import build_candidate_tag
+
+
+def verify_candidate_signature(*, image_org: str, image_name: str, candidate_digest: str) -> None:
+    """
+    Re-verify the candidate signature in this job before promoting it.
+
+    The candidate was already signed and verified when it was published, but
+    that happened in a different job on a different runner. Promotion is the
+    step that actually points `latest` at a digest, so it should be able to
+    prove locally -- not infer from an earlier job -- that the digest it is
+    about to promote carries a valid signature from this repo's committed key.
+
+    Verification uses the same committed `cosign.pub` that is baked into the
+    image and that booted systems enforce, so a key mismatch fails here rather
+    than on a user's machine at `bootc upgrade` time.
+    """
+
+    verification_key = os.environ.get("COSIGN_PUBLIC_KEY_PATH", "").strip() or str(
+        REPO_ROOT / "cosign.pub"
+    )
+    if not os.path.exists(verification_key):
+        raise CiToolError(f"Missing required verification key file: {verification_key}")
+
+    digest_ref = f"ghcr.io/{image_org}/{image_name}@{candidate_digest}"
+    run_cmd(
+        [
+            "cosign",
+            "verify",
+            "--new-bundle-format=false",
+            "--key",
+            verification_key,
+            digest_ref,
+        ]
+    )
+    print(f"Verified candidate signature before promotion: {digest_ref}")
 
 
 def _copy_and_verify_digest(*, source_digest: str, source_ref: str, destination_ref: str, creds: str) -> None:
@@ -55,6 +94,12 @@ def main() -> None:
     creds = f"{registry_actor}:{registry_token}"
     candidate_digest = skopeo_inspect_digest(candidate_by_tag, creds=creds)
     candidate_ref = f"docker://ghcr.io/{image_org}/{image_name}@{candidate_digest}"
+
+    # Fail closed before any tag moves: never promote a digest we cannot prove
+    # is signed by this repo's committed key.
+    verify_candidate_signature(
+        image_org=image_org, image_name=image_name, candidate_digest=candidate_digest
+    )
 
     stable_ref = f"docker://ghcr.io/{image_org}/{image_name}:latest"
     audit_ref = f"docker://ghcr.io/{image_org}/{image_name}:stable-{run_number}-{sha_short}"

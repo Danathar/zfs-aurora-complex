@@ -73,8 +73,32 @@ lives in [`ci_tools/check_stable_signal.py`](../ci_tools/check_stable_signal.py)
 
 The upstream `STABLE_SIGNAL_IMAGE` (`ghcr.io/ublue-os/aurora-dx:stable` by
 default; see [`ci/defaults.json`](../ci/defaults.json)) is treated as the
-authoritative cadence signal for "has Aurora stable moved since we last
-published?" This repo's own `:latest` image only carries provenance: every
+authoritative cadence signal for "has the upstream base image moved since we
+last published?"
+
+`STABLE_SIGNAL_IMAGE` should name the same upstream image as
+`DEFAULT_BASE_IMAGE`. The gate is only meaningful when the image it watches is
+the image the build actually consumes: if the signal tracked
+`aurora-dx:stable` while the build resolved `aurora-dx:latest`, scheduled runs
+would skip on days the base image had genuinely moved, and then, when the
+signal finally advanced, rebuild against whatever unrelated state `:latest`
+had reached in the meantime. Keep these two values pointed at the same tag.
+
+Both default to `aurora-dx:stable` rather than `:latest`, deliberately. Aurora's
+`:latest` tracks the Fedora `main` kernel, which runs ahead of what OpenZFS
+supports — in July 2026 that meant `:latest` carried kernel 7.1.x while OpenZFS
+2.4.3 refused to configure against anything newer than 7.0, so ZFS could only be
+built by passing `--enable-linux-experimental` and disabling upstream's own
+compatibility gate. `:stable` carried 7.0.12, inside the supported range, and
+builds cleanly without that override.
+
+That tradeoff is the point: this image exists to carry ZFS, and a ZFS module
+built against a kernel OpenZFS declines to support is a worse outcome than
+running a slightly older base. If a future OpenZFS release supports the newer
+kernel line, revisiting `:latest` is reasonable — but only once ZFS builds
+against it without disabling the gate.
+
+This repo's own `:latest` image only carries provenance: every
 build writes two OCI labels onto the candidate (and promotion carries them
 onto `:latest`):
 
@@ -105,7 +129,7 @@ stable-signal digest (best-effort; a registry hiccup does not fail the build)
 so the *next* scheduled run has fresh provenance to compare against. Without
 this, a push build would leave the label empty, and the following scheduled
 run would always see `current-latest-missing-stable-signal-labels` and do a
-full rebuild even when Aurora stable had not moved.
+full rebuild even when the upstream base image had not moved.
 
 The `akmods-failure-triage.yml` workflow (see "Operational Model" below)
 checks for a `build-inputs-<run_id>` artifact before treating a run as a real
@@ -372,8 +396,18 @@ Promotion is a separate job.
 It:
 
 1. resolves the candidate tag digest
-2. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
-3. copies that digest to `latest`
+2. re-verifies that digest's cosign signature against the committed `cosign.pub`
+3. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
+4. copies that digest to `latest`
+
+Step 2 is deliberately redundant with the signing that already happened during
+candidate publication. Promotion runs as a separate job on a fresh runner, and
+it is the step that actually points `latest` at a digest, so it verifies
+locally rather than inferring from an earlier job that the digest it is about
+to promote is signed. It verifies with the same committed public key that is
+baked into the image and enforced by booted systems, so a key mismatch or a
+missing signature fails in CI instead of at a user's next `bootc upgrade`. If
+verification fails, neither tag moves.
 
 Audit-before-`latest` is deliberate: `build.yml` cancels an in-progress
 promotion when a newer push starts a fresh run (see the workflow's
@@ -405,7 +439,7 @@ model and the cosign v3 compatibility flags.
 1. `build.yml`: candidate-first build and promotion
    - the workflow now uses small Python helpers for registry-context export and
      candidate-tag generation instead of inline shell snippets
-   - scheduled runs are gated on Aurora stable advancing; see "0. Scheduled-Build
+   - scheduled runs are gated on the upstream base image advancing; see "0. Scheduled-Build
      Gate" above. Push and manual runs always build
 2. `build-branch.yml`: branch-tagged push with shared-cache reuse or rebuild when required
    - bot-authored branch runs still build locally but intentionally skip push and signing

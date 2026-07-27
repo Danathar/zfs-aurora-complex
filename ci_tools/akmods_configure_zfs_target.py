@@ -46,10 +46,17 @@ def main() -> None:
     os.environ["AKMODS_DESCRIPTION"] = akmods_description
 
     # This updates one target block in images.yaml:
-    # images.<fedora>.main.zfs = {...}
+    # images.<fedora>.main.zfs *= {...}
     # The goal is to tell akmods exactly where to publish the ZFS cache image.
+    #
+    # `*=` merges rather than `=` replacing. Upstream builds that node from YAML
+    # merge anchors (`!!merge <<: [*akmods-base, *akmods-zfs, ...]`); a plain
+    # assignment would silently discard any key those anchors provide that is
+    # not re-stated below, so a new upstream key would go missing on the next
+    # sync. Merging overrides exactly the publication fields we own and leaves
+    # everything else inherited.
     yq_expression = """
-      .images[strenv(FEDORA_VERSION)].main.zfs = {
+      .images[strenv(FEDORA_VERSION)].main.zfs *= {
         "org": strenv(IMAGE_ORG),
         "registry": "ghcr.io",
         "repo": "akmods",

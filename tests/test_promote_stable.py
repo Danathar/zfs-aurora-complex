@@ -34,7 +34,9 @@ class PromoteStableTests(unittest.TestCase):
             with patch(
                 "ci_tools.promote_stable.skopeo_inspect_digest",
                 return_value="sha256:abc",
-            ) as digest_lookup, patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy:
+            ) as digest_lookup, patch(
+                "ci_tools.promote_stable.skopeo_copy"
+            ) as skopeo_copy, patch("ci_tools.promote_stable.run_cmd"):
                 main()
 
             digest_lookup.assert_any_call(
@@ -87,6 +89,7 @@ class PromoteStableTests(unittest.TestCase):
         with (
             patch.dict(os.environ, _env(), clear=True),
             patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.run_cmd"),
             patch(
                 "ci_tools.promote_stable.skopeo_copy",
                 side_effect=CiToolError("copy audit failed"),
@@ -109,6 +112,7 @@ class PromoteStableTests(unittest.TestCase):
         with (
             patch.dict(os.environ, _env(), clear=True),
             patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.run_cmd"),
             patch(
                 "ci_tools.promote_stable.skopeo_copy",
                 side_effect=[None, CiToolError("copy latest failed")],
@@ -136,6 +140,7 @@ class PromoteStableTests(unittest.TestCase):
                 # post-audit-copy verification) returns a different digest.
                 side_effect=["sha256:abc", "sha256:different"],
             ),
+            patch("ci_tools.promote_stable.run_cmd"),
             patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
             self.assertRaises(CiToolError) as context,
         ):
@@ -145,6 +150,44 @@ class PromoteStableTests(unittest.TestCase):
         self.assertIn("sha256:different", str(context.exception))
         self.assertIn("sha256:abc", str(context.exception))
         skopeo_copy.assert_called_once()
+
+    def test_verifies_candidate_signature_by_digest_before_any_tag_moves(self) -> None:
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch("ci_tools.promote_stable.run_cmd") as run_cmd,
+        ):
+            main()
+
+        run_cmd.assert_called_once()
+        verify_args = run_cmd.call_args.args[0]
+        self.assertEqual(verify_args[0], "cosign")
+        self.assertEqual(verify_args[1], "verify")
+        # Verification must name the immutable digest, never a movable tag.
+        self.assertEqual(
+            verify_args[-1], "ghcr.io/danathar/zfs-aurora-complex@sha256:abc"
+        )
+        self.assertIn("--new-bundle-format=false", verify_args)
+        self.assertEqual(skopeo_copy.call_count, 2)
+
+    def test_unsigned_candidate_is_never_promoted(self) -> None:
+        # If the candidate digest cannot be verified against the committed
+        # public key, `latest` and the audit tag must both stay where they are.
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch(
+                "ci_tools.promote_stable.run_cmd",
+                side_effect=CiToolError("no matching signatures"),
+            ),
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
+
+        self.assertIn("no matching signatures", str(context.exception))
+        skopeo_copy.assert_not_called()
 
 
 if __name__ == "__main__":

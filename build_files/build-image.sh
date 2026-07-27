@@ -82,6 +82,19 @@ find /run/systemd -mindepth 1 \
 find /run/systemd -depth -type d -empty -delete 2>/dev/null || true
 rm -rf /var/lib/containers
 
+# Drop the cache and lock state `dnf5` leaves behind after the ZFS install
+# above. Both currently show up as `bootc container lint` warnings:
+# - `/run/dnf` trips `nonempty-run-tmp`. `/run` is a tmpfs on a booted system,
+#   so anything baked in here is masked at boot and is pure image weight.
+# - `/var/lib/dnf` trips `var-tmpfiles`. Content baked into `/var` is only
+#   applied at initial install and is never refreshed by a later
+#   `bootc upgrade`, so build-time cache has no business being there: every
+#   machine installed from the image would carry this run's stale copy forever.
+# Neither path holds anything the booted system needs. Installed-package state
+# lives in the rpm database under `/usr`, and dnf's versionlock configuration
+# lives in `/etc/dnf`; dnf recreates its own cache directories on demand.
+rm -rf /run/dnf /var/lib/dnf
+
 # No explicit `ostree container commit` here: `bootc container lint` (run next,
 # in the Containerfile) already performs the equivalent validation/finalization.
 # Universal Blue dropped the explicit commit step from their own templates for
