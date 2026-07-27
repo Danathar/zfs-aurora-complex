@@ -16,6 +16,7 @@ trustworthy answer to "what is the newest release on this line right now".
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.request
 from collections.abc import Callable
@@ -26,20 +27,58 @@ OPENZFS_RELEASES_URL = "https://api.github.com/repos/openzfs/zfs/releases"
 MINOR_VERSION_RE = re.compile(r"^(\d+)\.(\d+)$")
 RELEASE_TAG_RE = re.compile(r"^zfs-(\d+)\.(\d+)\.(\d+)$")
 
+# The API caps `per_page` at 100. Five pages covers OpenZFS's entire release
+# history several times over, and bounds this to at most five requests.
+RELEASES_PER_PAGE = 100
+MAX_RELEASE_PAGES = 5
+
 
 def fetch_openzfs_releases() -> list[dict]:
-    """Fetch the OpenZFS releases list from the public GitHub API."""
-    request = urllib.request.Request(
-        OPENZFS_RELEASES_URL,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "zfs-aurora-complex"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read())
-    except (OSError, ValueError) as exc:
-        raise CiToolError(
-            f"Failed to fetch OpenZFS releases from {OPENZFS_RELEASES_URL}: {exc}"
-        ) from exc
+    """
+    Fetch the OpenZFS releases list from the GitHub API.
+
+    Paginates rather than reading only the API's default first page. One page
+    is 30 releases, and OpenZFS publishes maintenance releases for several
+    minor lines at once, so a line that is not the newest can have its most
+    recent release pushed past a single page by newer releases on other lines.
+    Reading one page would then either find nothing for that line or -- worse --
+    silently settle for an older patch that happened to fall inside the window.
+
+    Sends the GitHub token when one is available. Unauthenticated calls to
+    api.github.com are limited to 60 per hour *per IP address*, and hosted
+    runners share IPs, so an unauthenticated call here can fail for reasons
+    that have nothing to do with this repository. Authenticated calls get a
+    far higher per-repository limit. The token is optional: local runs without
+    one still work, they just use the lower shared limit.
+    """
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "zfs-aurora-complex",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    releases: list[dict] = []
+    for page in range(1, MAX_RELEASE_PAGES + 1):
+        url = f"{OPENZFS_RELEASES_URL}?per_page={RELEASES_PER_PAGE}&page={page}"
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                page_items = json.loads(response.read())
+        except (OSError, ValueError) as exc:
+            raise CiToolError(f"Failed to fetch OpenZFS releases from {url}: {exc}") from exc
+
+        if not isinstance(page_items, list):
+            raise CiToolError(f"Unexpected OpenZFS releases payload from {url}")
+
+        releases.extend(page_items)
+        # A short page is the last page.
+        if len(page_items) < RELEASES_PER_PAGE:
+            break
+
+    return releases
 
 
 def resolve_latest_zfs_version(

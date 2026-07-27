@@ -104,6 +104,11 @@ runs:
         USE_INPUT_LOCK: ${{ inputs.use_input_lock }}
         LOCK_FILE: ${{ inputs.lock_file }}
         BUILD_CONTAINER_REF: ${{ inputs.build_container_ref }}
+        # Authenticates the OpenZFS release lookup in ci_tools/zfs_release.py.
+        # Unauthenticated api.github.com calls are limited per IP, and hosted
+        # runners share IPs, so without this the ZFS version resolution can
+        # fail for reasons unrelated to this repository.
+        GITHUB_TOKEN: ${{ inputs.registry_token }}
       run: |
         python3 -m ci_tools.cli resolve-build-inputs
 
@@ -250,3 +255,31 @@ runs:
         AKMODS_REPO: ${{ inputs.akmods_repo }}
       run: |
         python3 -m ci_tools.cli pin-akmods-cache
+
+    # Prove the cache this run just published actually contains the ZFS version
+    # this run resolved, instead of assuming it.
+    #
+    # This repo and the akmods fork resolve the OpenZFS patch version
+    # independently: this repo picks the highest patch on the configured line,
+    # while the fork's build-kmod-zfs.sh takes the most recently published
+    # release whose tag starts with that line. Those normally agree, but a
+    # release published between the two lookups makes them disagree -- and
+    # nothing downstream would notice. The final image would carry
+    # org.zfs-aurora-complex.zfs-version=<what we resolved> while shipping the
+    # module the fork actually built, and the scheduled gate compares against
+    # that same label, so it would see "unchanged" and never rebuild. The label
+    # would stay wrong indefinitely.
+    #
+    # Only runs on the rebuild path. The reuse path already proved this, since
+    # that is exactly what the earlier check step tests for.
+    - name: Verify the rebuilt cache matches the resolved ZFS version
+      if: success() && (inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true')
+      shell: bash
+      env:
+        FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
+        KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
+        AKMODS_REPO: ${{ inputs.akmods_repo }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
+        REQUIRE_MATCH: "true"
+      run: |
+        python3 -m ci_tools.cli check-akmods-cache

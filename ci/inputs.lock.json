@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "description": "Pinned inputs for workflow_dispatch replay mode. Replace the placeholder values below with fields from a build-inputs artifact before enabling use_input_lock=true. The akmods upstream ref is intentionally not stored here; it comes from ci/defaults.json so there is one source of truth.",
+  "description": "Pinned inputs for workflow_dispatch replay mode. Replace the placeholder values below with fields from a build-inputs artifact before enabling use_input_lock=true. The akmods upstream ref is intentionally not stored here; it comes from ci/defaults.json so there is one source of truth. Set zfs_version to the exact patch the run being replayed used (the build-inputs artifact records it); leaving it empty re-resolves the newest release on zfs_minor_version instead, which means the replay will not reproduce the original ZFS version once a newer patch exists.",
   "base_image": "REPLACE_ME",
   "build_container": "REPLACE_ME",
-  "zfs_minor_version": "2.4"
+  "zfs_minor_version": "2.4",
+  "zfs_version": ""
 }

@@ -83,6 +83,10 @@ jobs:
         env:
           REGISTRY_ACTOR: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ github.token }}
+          # The gate resolves the current OpenZFS release to decide whether a
+          # new ZFS patch alone should trigger a build. Authenticate that
+          # lookup; see ci_tools/zfs_release.py.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -m ci_tools.cli check-stable-signal
 

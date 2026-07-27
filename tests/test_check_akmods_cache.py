@@ -8,12 +8,19 @@ Goal: Keep rebuild decisions fail-closed when the required primary-kernel RPM is
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import ANY, patch
 
-from ci_tools.check_akmods_cache import _has_kernel_matching_rpm, inspect_akmods_cache
+from ci_tools.check_akmods_cache import (
+    AkmodsCacheStatus,
+    _has_kernel_matching_rpm,
+    inspect_akmods_cache,
+    main,
+)
 from ci_tools.common import CiToolError
 
 
@@ -247,6 +254,79 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             )
 
         self.assertIn("No layers found in OCI layout", str(context.exception))
+
+
+class RequireMatchModeTests(unittest.TestCase):
+    """
+    Covers the strict mode used to verify a cache this run just rebuilt.
+
+    The akmods fork resolves its own OpenZFS patch version independently of
+    this repo, so a rebuild can publish a cache that does not contain the
+    version this run resolved and is about to record as an image label. In
+    normal mode that is just "rebuild required"; after a rebuild it is a
+    failure, because there is nothing left to retry and the label would lie.
+    """
+
+    _ENV: ClassVar[dict[str, str]] = {
+        "GITHUB_REPOSITORY_OWNER": "Danathar",
+        "FEDORA_VERSION": "43",
+        "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
+        "AKMODS_REPO": "zfs-aurora-complex-akmods",
+        "ZFS_VERSION": "2.4.4",
+    }
+
+    def test_require_match_raises_when_the_rebuilt_cache_does_not_match(self) -> None:
+        mismatched = AkmodsCacheStatus(
+            source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+            image_exists=True,
+            source_image_pinned="ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc",
+            missing_release="6.18.16-200.fc43.x86_64",
+            required_zfs_version="2.4.4",
+        )
+        env = {**self._ENV, "REQUIRE_MATCH": "true"}
+        with patch.dict(os.environ, env, clear=False), patch(
+            "ci_tools.check_akmods_cache.inspect_akmods_cache", return_value=mismatched
+        ), self.assertRaises(CiToolError) as context:
+            main()
+
+        self.assertIn("2.4.4", str(context.exception))
+        self.assertIn("even after a rebuild", str(context.exception))
+
+    def test_require_match_is_silent_when_the_rebuilt_cache_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            matched = AkmodsCacheStatus(
+                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                image_exists=True,
+                source_image_pinned="ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc",
+                missing_release="",
+                required_zfs_version="2.4.4",
+            )
+            env = {**self._ENV, "REQUIRE_MATCH": "true", "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache", return_value=matched
+            ):
+                main()
+
+    def test_default_mode_still_reports_a_mismatch_without_raising(self) -> None:
+        # The pre-rebuild check must keep treating "no usable cache" as a
+        # normal answer that triggers a rebuild, not as a failure.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            mismatched = AkmodsCacheStatus(
+                source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                image_exists=True,
+                source_image_pinned="ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc",
+                missing_release="6.18.16-200.fc43.x86_64",
+                required_zfs_version="2.4.4",
+            )
+            env = {**self._ENV, "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache", return_value=mismatched
+            ):
+                main()
+
+            self.assertIn("exists<<", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

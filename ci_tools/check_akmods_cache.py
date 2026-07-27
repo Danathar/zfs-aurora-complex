@@ -15,6 +15,7 @@ from pathlib import Path
 from ci_tools.common import (
     CiToolError,
     normalize_owner,
+    optional_env,
     require_env,
     skopeo_copy,
     skopeo_inspect_json_optional,
@@ -129,6 +130,12 @@ def main() -> None:
     kernel_release = require_env("KERNEL_RELEASE")
     source_repo = require_env("AKMODS_REPO")
     zfs_version = require_env("ZFS_VERSION")
+    # Strict mode is used after a rebuild, where "no reusable cache" is not a
+    # normal answer but a failure: it means the cache this run just published
+    # does not contain the ZFS version this run resolved and is about to label
+    # the image with. See the "Verify the rebuilt cache" step in
+    # .github/actions/prepare-main-akmods/action.yml.
+    require_match = optional_env("REQUIRE_MATCH").lower() == "true"
 
     status = inspect_akmods_cache(
         image_org=image_org,
@@ -137,6 +144,16 @@ def main() -> None:
         kernel_release=kernel_release,
         zfs_version=zfs_version,
     )
+
+    if require_match and not status.reusable:
+        raise CiToolError(
+            f"Shared akmods cache {status.source_image} does not provide a kmod-zfs for "
+            f"primary kernel {kernel_release} at ZFS version {zfs_version} even after a "
+            "rebuild. The akmods build resolves its own OpenZFS version independently of "
+            "this repo, so the two can disagree. Refusing to continue: the image would be "
+            f"labelled org.zfs-aurora-complex.zfs-version={zfs_version} while actually "
+            "shipping whatever the cache really contains."
+        )
 
     if not status.image_exists:
         write_github_outputs({"exists": "false"})
