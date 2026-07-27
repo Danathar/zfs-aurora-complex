@@ -75,11 +75,13 @@ jobs:
     container:
       # Reuse the same privileged akmods-build environment as the main
       # workflow. The upstream akmods tooling depends on `just`, container
-      # storage access, and the build packages included in this image.
+      # storage access, and the build packages included in this image. It is
+      # digest-pinned for the same reason as build.yml's build-zfs-akmods job:
+      # see the comment there for why a mutable tag here is unacceptable.
       # This fallback must match DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json;
       # a job's `container:` block cannot read step outputs, so it cannot read the
       # checked-in default and this literal must be kept in sync manually.
-      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer:latest' }}
+      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca' }}
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

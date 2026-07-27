@@ -316,13 +316,18 @@ signed:
    `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
    `--preserve-digests` for the same reason.
 
-The Chunkah container image version (currently `v0.6.0`) is pinned as the
-`chunkah_image` input default inside `rechunk-native-image/action.yml` and
-tracked by a Renovate custom manager in the root
-[`renovate.json`](../renovate.json). Renovate owns essentially every other
-version bump in this repo, including the GitHub Actions commit-SHA pins used
-throughout `.github/actions/` and `.github/workflows/`, the `ruff` version
-pinned for CI linting, and the OpenZFS minor release line in
+The Chunkah container image (currently `v0.6.0`) is both version- and
+digest-pinned as the `chunkah_image` input default inside
+`rechunk-native-image/action.yml`, tracked by a Renovate custom manager in the
+root [`renovate.json`](../renovate.json) whose regex captures both
+`currentValue` and `currentDigest`. It is digest-pinned, not just
+version-pinned, because this step rewrites the locally built image
+immediately before it is pushed and signed -- a moved tag under the same
+`v0.6.0` version would let unreviewed content in right before this repo's own
+key signs it. Renovate owns essentially every other version bump in this
+repo, including the GitHub Actions commit-SHA pins used throughout
+`.github/actions/` and `.github/workflows/`, the `ruff` version pinned for CI
+linting, and the OpenZFS minor release line in
 [`ci/defaults.json`](../ci/defaults.json).
 
 There is one deliberate exception. `ublue-os/remove-unwanted-software` in
