@@ -104,8 +104,10 @@ This is not a legal opinion and nothing in this repository is legal advice. Oper
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
-whether the upstream Aurora base image has advanced since the last promoted image and skip the
-rest of the workflow if not; push and manual runs always build. Once a run
+whether the upstream Aurora base image has advanced, or a newer OpenZFS patch
+is available on the configured minor line, since the last promoted image, and
+skip the rest of the workflow only if neither has changed; push and manual
+runs always build. Once a run
 does build, it resolves and pins its inputs, reuses or rebuilds the shared
 akmods cache, builds and signs a candidate image, and only then promotes that
 candidate digest to an audit tag and `latest`. If candidate fails, `latest`

@@ -63,6 +63,7 @@ jobs:
       build_container_pinned: ${{ steps.prepare.outputs.build_container_pinned }}
       build_container_digest: ${{ steps.prepare.outputs.build_container_digest }}
       zfs_minor_version: ${{ steps.prepare.outputs.zfs_minor_version }}
+      zfs_version: ${{ steps.prepare.outputs.zfs_version }}
       akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
       use_input_lock: ${{ steps.prepare.outputs.use_input_lock }}
       lock_file_path: ${{ steps.prepare.outputs.lock_file_path }}
@@ -161,6 +162,7 @@ jobs:
           base_image: ${{ needs.build-branch-akmods.outputs.base_image_pinned }}
           akmods_image: ${{ needs.build-branch-akmods.outputs.akmods_image_pinned }}
           akmods_upstream_ref: ${{ needs.build-branch-akmods.outputs.akmods_upstream_ref }}
+          zfs_version: ${{ needs.build-branch-akmods.outputs.zfs_version }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

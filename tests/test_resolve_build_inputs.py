@@ -326,6 +326,46 @@ class LockFileAkmodsRefInvariantTests(unittest.TestCase):
         self.assertEqual(configured.zfs_minor_version, "2.4")
         self.assertEqual(configured.akmods_upstream_ref, "a" * 40)
 
+    def test_lock_replay_pins_the_exact_zfs_patch_version(self) -> None:
+        # Replay must reuse the locked patch version. Re-resolving it live
+        # would make a replay build a different ZFS than the run it reproduces,
+        # because the cache check now requires an exact version match.
+        lock_payload = {
+            "version": 1,
+            "base_image": "ghcr.io/example/base@sha256:deadbeef",
+            "build_container": "ghcr.io/example/build@sha256:cafef00d",
+            "zfs_minor_version": "2.4",
+            "zfs_version": "2.4.1",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "inputs.lock.json"
+            lock_path.write_text(json.dumps(lock_payload), encoding="utf-8")
+            env = {
+                "USE_INPUT_LOCK": "true",
+                "LOCK_FILE": str(lock_path),
+                "BUILD_CONTAINER_REF": "ghcr.io/example/build@sha256:cafef00d",
+                "DEFAULT_AKMODS_REF": "a" * 40,
+            }
+            with patch.dict(os.environ, env, clear=False):
+                configured = resolve_configured_inputs()
+
+        self.assertEqual(configured.locked_zfs_version, "2.4.1")
+
+    def test_non_lock_runs_do_not_pin_a_zfs_patch_version(self) -> None:
+        env = {
+            "USE_INPUT_LOCK": "false",
+            "LOCK_FILE": "ci/inputs.lock.json",
+            "BUILD_CONTAINER_REF": "ghcr.io/example/build@sha256:cafef00d",
+            "DEFAULT_AKMODS_REF": "a" * 40,
+            "DEFAULT_ZFS_MINOR_VERSION": "2.4",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            configured = resolve_configured_inputs()
+
+        # Empty means "resolve the newest patch live", which is what a normal
+        # (non-replay) build should do.
+        self.assertEqual(configured.locked_zfs_version, "")
+
 
 if __name__ == "__main__":
     unittest.main()
