@@ -23,6 +23,20 @@
     },
     {
       "customType": "regex",
+      "description": "Track the OpenZFS minor release line so a new line (for example 2.4 -> 2.5) surfaces as a reviewable PR instead of having to be noticed by hand. Patch releases inside the configured line are already picked up automatically at build time by the akmods resolver, so only the line itself needs tracking here. This deliberately does not resolve the newest release across all lines: OpenZFS ships maintenance releases for several lines in one batch, and a resolver that took the most recently published tag could move the image backwards onto an older line. Renovate compares versions semantically, so it can only ever propose moving forward.",
+      "managerFilePatterns": [
+        "/^ci/defaults\\.json$/"
+      ],
+      "matchStrings": [
+        "\"DEFAULT_ZFS_MINOR_VERSION\":\\s*\"(?<currentValue>\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "openzfs/zfs",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^zfs-(?<version>\\d+\\.\\d+)",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
       "description": "Track the ruff version pinned for CI linting, so a new release surfaces as a reviewable PR (with its own lint-diff CI run) instead of silently changing default lint rules on an unrelated PR.",
       "managerFilePatterns": [
         "/^\\.github/workflows/test\\.yml$/"
@@ -50,6 +64,11 @@
       "description": "Containerfile base-image ARGs are resolved at build time by this repo's own CI input resolution (ci_tools/resolve_build_inputs.py), not hand-pinned versions Renovate should track.",
       "enabled": false,
       "matchManagers": ["dockerfile"]
+    },
+    {
+      "description": "Never automerge an OpenZFS minor-line bump. A new minor line can introduce new on-disk pool feature flags, and once those are activated on a pool the previous image can no longer import it -- which would break this repo's rollback-to-previous-image recovery path. Adopting a new line must stay a deliberate decision.",
+      "automerge": false,
+      "matchPackageNames": ["openzfs/zfs"]
     }
   ]
 }
