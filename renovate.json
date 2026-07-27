@@ -15,7 +15,7 @@
         "/^\\.github/actions/rechunk-native-image/action\\.ya?ml$/"
       ],
       "matchStrings": [
-        "default:\\s+\"?quay\\.io/coreos/chunkah:(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"?"
+        "default:\\s+\"?quay\\.io/coreos/chunkah:(?<currentValue>v\\d+\\.\\d+\\.\\d+)(?:@(?<currentDigest>sha256:[0-9a-f]{64}))?\"?"
       ],
       "depNameTemplate": "quay.io/coreos/chunkah",
       "datasourceTemplate": "docker",
@@ -53,12 +53,6 @@
     {
       "automerge": true,
       "matchUpdateTypes": ["pin", "pinDigest"]
-    },
-    {
-      "description": "Track the Chunkah version tag only; this repo intentionally does not pin a digest for it.",
-      "enabled": false,
-      "matchUpdateTypes": ["digest", "pinDigest", "pin"],
-      "matchPackageNames": ["quay.io/coreos/chunkah"]
     },
     {
       "description": "Containerfile base-image ARGs are resolved at build time by this repo's own CI input resolution (ci_tools/resolve_build_inputs.py), not hand-pinned versions Renovate should track.",
