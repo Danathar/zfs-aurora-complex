@@ -71,7 +71,7 @@ a scheduled run should build at all. Push and manual (`workflow_dispatch`)
 runs always build; only the daily `schedule` trigger is gated. This logic
 lives in [`ci_tools/check_stable_signal.py`](../ci_tools/check_stable_signal.py).
 
-The upstream `STABLE_SIGNAL_IMAGE` (`ghcr.io/ublue-os/aurora-dx:latest` by
+The upstream `STABLE_SIGNAL_IMAGE` (`ghcr.io/ublue-os/aurora-dx:stable` by
 default; see [`ci/defaults.json`](../ci/defaults.json)) is treated as the
 authoritative cadence signal for "has the upstream base image moved since we
 last published?"
@@ -83,6 +83,20 @@ the image the build actually consumes: if the signal tracked
 would skip on days the base image had genuinely moved, and then, when the
 signal finally advanced, rebuild against whatever unrelated state `:latest`
 had reached in the meantime. Keep these two values pointed at the same tag.
+
+Both default to `aurora-dx:stable` rather than `:latest`, deliberately. Aurora's
+`:latest` tracks the Fedora `main` kernel, which runs ahead of what OpenZFS
+supports — in July 2026 that meant `:latest` carried kernel 7.1.x while OpenZFS
+2.4.3 refused to configure against anything newer than 7.0, so ZFS could only be
+built by passing `--enable-linux-experimental` and disabling upstream's own
+compatibility gate. `:stable` carried 7.0.12, inside the supported range, and
+builds cleanly without that override.
+
+That tradeoff is the point: this image exists to carry ZFS, and a ZFS module
+built against a kernel OpenZFS declines to support is a worse outcome than
+running a slightly older base. If a future OpenZFS release supports the newer
+kernel line, revisiting `:latest` is reasonable — but only once ZFS builds
+against it without disabling the gate.
 
 This repo's own `:latest` image only carries provenance: every
 build writes two OCI labels onto the candidate (and promotion carries them

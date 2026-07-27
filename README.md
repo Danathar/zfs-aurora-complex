@@ -234,7 +234,7 @@ CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-im
 
 ```bash
 podman build \
-    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora-dx:latest \
+    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora-dx:stable \
     --build-arg AKMODS_IMAGE=ghcr.io/danathar/zfs-aurora-complex-akmods:main-44 \
     -t zfs-aurora-complex:local \
     .
