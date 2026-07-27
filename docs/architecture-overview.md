@@ -319,9 +319,21 @@ signed:
 The Chunkah container image version (currently `v0.6.0`) is pinned as the
 `chunkah_image` input default inside `rechunk-native-image/action.yml` and
 tracked by a Renovate custom manager in the root
-[`renovate.json`](../renovate.json). Renovate also owns every other version
-bump in this repo, including the GitHub Actions commit-SHA pins used
-throughout `.github/actions/` and `.github/workflows/`.
+[`renovate.json`](../renovate.json). Renovate owns essentially every other
+version bump in this repo, including the GitHub Actions commit-SHA pins used
+throughout `.github/actions/` and `.github/workflows/`, the `ruff` version
+pinned for CI linting, and the OpenZFS minor release line in
+[`ci/defaults.json`](../ci/defaults.json).
+
+There is one deliberate exception. `ublue-os/remove-unwanted-software` in
+[`prepare-rechunk-host/action.yml`](../.github/actions/prepare-rechunk-host/action.yml)
+is pinned to a commit that upstream has not tagged (it merges their "v10" work,
+but their tags still stop at `v9`), so there is no released version for
+Renovate to anchor to and it does not appear in the dependency dashboard.
+Do not "fix" this by adding a `# v10` comment: no such tag exists, and
+Renovate would then compare against a tag list topping out at `v9` and offer a
+downgrade. The pin is an immutable SHA, so nothing drifts; the only cost is
+not being told when upstream finally tags a release. Revisit when they do.
 
 ### 4. Primary-Kernel ZFS Install Logic
 
