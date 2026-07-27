@@ -65,6 +65,9 @@ outputs:
   zfs_minor_version:
     description: OpenZFS minor line used for this run.
     value: ${{ steps.resolve.outputs.zfs_minor_version }}
+  zfs_version:
+    description: Exact OpenZFS patch version resolved on that line for this run.
+    value: ${{ steps.resolve.outputs.zfs_version }}
   akmods_upstream_ref:
     description: Resolved akmods source commit used for this run.
     value: ${{ steps.resolve.outputs.akmods_upstream_ref }}
@@ -124,6 +127,7 @@ runs:
         BUILD_CONTAINER_PINNED: ${{ steps.resolve.outputs.build_container_pinned }}
         BUILD_CONTAINER_DIGEST: ${{ steps.resolve.outputs.build_container_digest }}
         ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         AKMODS_UPSTREAM_REF: ${{ steps.resolve.outputs.akmods_upstream_ref }}
       run: |
         python3 -m ci_tools.cli write-build-inputs-manifest
@@ -140,9 +144,10 @@ runs:
 
     # Reuse the shared akmods cache only when it already contains a matching
     # module build for the primary kernel this image is expected to boot with,
-    # built against the ZFS minor line this run resolved. Without the ZFS line
-    # in the reuse check, changing ZFS_MINOR_VERSION would silently keep
-    # shipping the previously cached ZFS build.
+    # built against the exact ZFS patch version this run resolved. Matching
+    # only the minor line here used to let a cache holding an older patch on
+    # the same line (e.g. 2.4.3) silently satisfy a newer one (e.g. 2.4.4), so
+    # a new OpenZFS patch never actually reached the image.
     - id: cache
       name: Check for existing shared akmods cache
       shell: bash
@@ -150,7 +155,7 @@ runs:
         FEDORA_VERSION: ${{ steps.resolve.outputs.version }}
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
-        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 

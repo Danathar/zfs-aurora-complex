@@ -49,6 +49,7 @@ def main() -> None:
             "build_container_pinned": require_env("BUILD_CONTAINER_PINNED"),
             "build_container_digest": require_env("BUILD_CONTAINER_DIGEST"),
             "zfs_minor_version": require_env("ZFS_MINOR_VERSION"),
+            "zfs_version": require_env("ZFS_VERSION"),
             "akmods_upstream_ref": require_env("AKMODS_UPSTREAM_REF"),
         },
     }

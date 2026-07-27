@@ -27,6 +27,10 @@ inputs:
     description: Upstream stable-signal digest recorded as OCI image provenance.
     required: false
     default: ""
+  zfs_version:
+    description: Exact resolved OpenZFS patch version installed by this build. Recorded as an OCI image label for provenance.
+    required: false
+    default: ""
   image_repo:
     description: Public image repository path used by in-image signing policy.
     required: true
@@ -67,6 +71,7 @@ runs:
         AKMODS_UPSTREAM_REF: ${{ inputs.akmods_upstream_ref }}
         STABLE_SIGNAL_IMAGE: ${{ inputs.stable_signal_image }}
         STABLE_SIGNAL_DIGEST: ${{ inputs.stable_signal_digest }}
+        ZFS_VERSION: ${{ inputs.zfs_version }}
       run: |
         set -euo pipefail
         # --format docker (rather than buildah's oci default) uses Docker v2s2
@@ -88,5 +93,6 @@ runs:
           --label "org.zfs-aurora-complex.base-image=${BASE_IMAGE}" \
           --label "org.zfs-aurora-complex.stable-signal-image=${STABLE_SIGNAL_IMAGE}" \
           --label "org.zfs-aurora-complex.stable-signal-digest=${STABLE_SIGNAL_DIGEST}" \
+          --label "org.zfs-aurora-complex.zfs-version=${ZFS_VERSION}" \
           -t "${IMAGE_NAME}:${IMAGE_TAG}" \
           .

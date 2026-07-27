@@ -1,9 +1,15 @@
 """
 Script: ci_tools/check_stable_signal.py
 What: Decides whether the scheduled production workflow should build.
-Doing: Compares the current upstream stable-signal digest to the digest recorded on this repo's latest promoted image.
-Why: Scheduled runs should only spend build time when Aurora stable has advanced.
-Goal: Fail closed on unknown upstream state and skip only unchanged scheduled runs.
+Doing: Compares the current upstream stable-signal digest, and the current
+resolved ZFS patch version, against what is recorded on this repo's latest
+promoted image.
+Why: Scheduled runs should only spend build time when Aurora stable has
+advanced OR a new OpenZFS patch is available on the configured minor line --
+otherwise a patch release (including a security fix) could sit unbuilt
+indefinitely while the base image itself stayed still.
+Goal: Fail closed on unknown upstream state and skip only truly unchanged
+scheduled runs.
 """
 
 from __future__ import annotations
@@ -20,19 +26,31 @@ from ci_tools.common import (
     skopeo_inspect_json_optional,
     write_github_outputs,
 )
+from ci_tools.zfs_release import resolve_latest_zfs_version
 
 STABLE_SIGNAL_IMAGE_LABEL = "org.zfs-aurora-complex.stable-signal-image"
 STABLE_SIGNAL_DIGEST_LABEL = "org.zfs-aurora-complex.stable-signal-digest"
+ZFS_VERSION_LABEL = "org.zfs-aurora-complex.zfs-version"
 
 
 @dataclass(frozen=True)
 class StableSignalDecision:
-    """Resolved decision and metadata for the scheduled-build gate."""
+    """
+    Resolved decision and metadata for the scheduled-build gate.
+
+    `zfs_version` is the current newest release the gate resolved on the
+    configured minor line. It is only meaningful for the schedule-event path:
+    non-schedule events leave it "" because the actual `zfs-version` image
+    label is sourced from the real build's own resolution (see
+    `build-zfs-akmods` in `build.yml`), not from this gate, so resolving it
+    here a second time would just be a wasted network call.
+    """
 
     should_build: bool
     reason: str
     stable_signal_ref: str
     stable_signal_digest: str
+    zfs_version: str
 
 
 def _bypass_decision(stable_signal_image: str) -> StableSignalDecision:
@@ -59,6 +77,7 @@ def _bypass_decision(stable_signal_image: str) -> StableSignalDecision:
         reason="not-schedule-event",
         stable_signal_ref=stable_signal_image,
         stable_signal_digest=stable_signal_digest,
+        zfs_version="",
     )
 
 
@@ -74,14 +93,22 @@ def evaluate_stable_signal_gate(
     image_org: str,
     image_name: str,
     stable_signal_image: str,
+    zfs_minor_version: str,
     creds: str,
 ) -> StableSignalDecision:
     """
-    Compare upstream stable-signal state against the last promoted image labels.
+    Compare upstream stable-signal state, AND the current resolved ZFS patch
+    version, against the last promoted image's labels.
 
-    The upstream stable-signal image is authoritative for cadence. The repo's
-    own `:latest` image is only a provenance source for the last promoted
-    stable-signal digest.
+    The upstream stable-signal image is authoritative for base-image cadence.
+    Independently, the newest release on the configured ZFS minor line is
+    authoritative for ZFS cadence: a scheduled run must build when either one
+    has moved, not just when the base image has. Without the ZFS check, a new
+    OpenZFS patch (including a security fix) could sit unbuilt indefinitely as
+    long as Aurora stable itself did not move.
+
+    The repo's own `:latest` image is only a provenance source for the last
+    promoted values of both signals.
     """
     stable_signal_inspect = skopeo_inspect_json(_docker_ref(stable_signal_image))
     stable_signal_digest = str(stable_signal_inspect.get("Digest") or "")
@@ -89,6 +116,8 @@ def evaluate_stable_signal_gate(
         raise CiToolError(
             f"Missing digest in skopeo inspect output for {_docker_ref(stable_signal_image)}"
         )
+
+    current_zfs_version = resolve_latest_zfs_version(zfs_minor_version)
 
     current_latest = f"ghcr.io/{image_org}/{image_name}:latest"
     current_latest_inspect = skopeo_inspect_json_optional(_docker_ref(current_latest), creds=creds)
@@ -98,17 +127,29 @@ def evaluate_stable_signal_gate(
             reason="current-latest-missing",
             stable_signal_ref=stable_signal_image,
             stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
         )
 
     labels = current_latest_inspect.get("Labels") or {}
     previous_signal_image = str(labels.get(STABLE_SIGNAL_IMAGE_LABEL) or "")
     previous_signal_digest = str(labels.get(STABLE_SIGNAL_DIGEST_LABEL) or "")
+    previous_zfs_version = str(labels.get(ZFS_VERSION_LABEL) or "")
     if not previous_signal_image or not previous_signal_digest:
         return StableSignalDecision(
             should_build=True,
             reason="current-latest-missing-stable-signal-labels",
             stable_signal_ref=stable_signal_image,
             stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
+        )
+
+    if not previous_zfs_version:
+        return StableSignalDecision(
+            should_build=True,
+            reason="current-latest-missing-zfs-version-label",
+            stable_signal_ref=stable_signal_image,
+            stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
         )
 
     if previous_signal_image != stable_signal_image:
@@ -117,6 +158,16 @@ def evaluate_stable_signal_gate(
             reason="stable-signal-image-changed",
             stable_signal_ref=stable_signal_image,
             stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
+        )
+
+    if previous_zfs_version != current_zfs_version:
+        return StableSignalDecision(
+            should_build=True,
+            reason="zfs-version-advanced",
+            stable_signal_ref=stable_signal_image,
+            stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
         )
 
     if previous_signal_digest == stable_signal_digest:
@@ -125,6 +176,7 @@ def evaluate_stable_signal_gate(
             reason="stable-signal-unchanged",
             stable_signal_ref=stable_signal_image,
             stable_signal_digest=stable_signal_digest,
+            zfs_version=current_zfs_version,
         )
 
     return StableSignalDecision(
@@ -132,6 +184,7 @@ def evaluate_stable_signal_gate(
         reason="stable-signal-advanced",
         stable_signal_ref=stable_signal_image,
         stable_signal_digest=stable_signal_digest,
+        zfs_version=current_zfs_version,
     )
 
 
@@ -147,11 +200,13 @@ def main() -> None:
         registry_actor = require_env("REGISTRY_ACTOR")
         registry_token = require_env("REGISTRY_TOKEN")
         creds = f"{registry_actor}:{registry_token}"
+        zfs_minor_version = require_env_or_default("DEFAULT_ZFS_MINOR_VERSION")
 
         decision = evaluate_stable_signal_gate(
             image_org=image_org,
             image_name=image_name,
             stable_signal_image=stable_signal_image,
+            zfs_minor_version=zfs_minor_version,
             creds=creds,
         )
 
@@ -161,6 +216,7 @@ def main() -> None:
             "reason": decision.reason,
             "stable_signal_ref": decision.stable_signal_ref,
             "stable_signal_digest": decision.stable_signal_digest,
+            "zfs_version": decision.zfs_version,
         }
     )
 
@@ -169,7 +225,8 @@ def main() -> None:
         f"should_build={decision.should_build} "
         f"reason={decision.reason} "
         f"stable_signal_ref={decision.stable_signal_ref} "
-        f"stable_signal_digest={decision.stable_signal_digest}"
+        f"stable_signal_digest={decision.stable_signal_digest} "
+        f"zfs_version={decision.zfs_version}"
     )
 
 

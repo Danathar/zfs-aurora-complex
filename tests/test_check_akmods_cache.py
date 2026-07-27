@@ -26,13 +26,13 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             (rpm_dir / "kmod-zfs-6.18.13-200.fc43.x86_64-2.4.1-1.fc43.x86_64.rpm").touch()
 
             self.assertFalse(
-                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4")
+                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4.1")
             )
 
     def test_rejects_cache_built_against_a_different_zfs_minor_line(self) -> None:
         # The cache holds the right kernel but the wrong ZFS line. Reusing it
         # would publish an image whose ZFS version silently disagrees with the
-        # resolved ZFS_MINOR_VERSION for the run.
+        # resolved ZFS version for the run.
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             rpm_dir = root / "rpms" / "kmods" / "zfs"
@@ -42,24 +42,43 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             ).touch()
 
             self.assertFalse(
-                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4")
+                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4.1")
             )
             self.assertTrue(
-                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.3")
+                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.3.8")
             )
 
-    def test_minor_line_match_does_not_match_a_longer_numeric_prefix(self) -> None:
-        # `2.4` must not be satisfied by a hypothetical `2.41` release.
+    def test_rejects_cache_built_against_an_older_patch_on_the_same_line(self) -> None:
+        # This is the bug the exact-version match fixes: a cache holding 2.4.3
+        # must MISS when the run resolved 2.4.4, even though both are on the
+        # 2.4 line, so a new OpenZFS patch actually triggers a rebuild.
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             rpm_dir = root / "rpms" / "kmods" / "zfs"
             rpm_dir.mkdir(parents=True, exist_ok=True)
             (
-                rpm_dir / "kmod-zfs-6.18.16-200.fc43.x86_64-2.41.0-1.fc43.x86_64.rpm"
+                rpm_dir / "kmod-zfs-7.0.12-201.fc44.x86_64-2.4.3-1.fc44.x86_64.rpm"
             ).touch()
 
             self.assertFalse(
-                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4")
+                _has_kernel_matching_rpm(root, "7.0.12-201.fc44.x86_64", "2.4.4")
+            )
+            self.assertTrue(
+                _has_kernel_matching_rpm(root, "7.0.12-201.fc44.x86_64", "2.4.3")
+            )
+
+    def test_exact_version_match_does_not_match_a_longer_numeric_patch(self) -> None:
+        # `2.4.3` must not be satisfied by a hypothetical `2.4.30` release.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            rpm_dir = root / "rpms" / "kmods" / "zfs"
+            rpm_dir.mkdir(parents=True, exist_ok=True)
+            (
+                rpm_dir / "kmod-zfs-6.18.16-200.fc43.x86_64-2.4.30-1.fc43.x86_64.rpm"
+            ).touch()
+
+            self.assertFalse(
+                _has_kernel_matching_rpm(root, "6.18.16-200.fc43.x86_64", "2.4.3")
             )
 
     def test_inspect_akmods_cache_reads_shared_cache_image(self) -> None:
@@ -103,7 +122,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                     source_repo="zfs-aurora-complex-akmods",
                     fedora_version="43",
                     kernel_release="6.18.16-200.fc43.x86_64",
-                    zfs_minor_version="2.4",
+                    zfs_version="2.4.1",
                 )
 
         self.assertTrue(status.reusable)
@@ -120,6 +139,56 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             ANY,
         )
 
+    def test_inspect_akmods_cache_misses_when_cache_holds_an_older_patch(self) -> None:
+        # End-to-end version of the same bug: a real cache image whose only
+        # kmod-zfs is 2.4.3 must be rejected when the run resolved 2.4.4.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            def fake_copy(_source: str, destination: str) -> None:
+                image_dir = Path(destination.removeprefix("dir:"))
+                image_dir.mkdir(parents=True, exist_ok=True)
+                (image_dir / "manifest.json").write_text(
+                    "{\"layers\": [{\"digest\": \"sha256:layer\"}]}",
+                    encoding="utf-8",
+                )
+                (image_dir / "layer").write_text("", encoding="utf-8")
+
+            def fake_load_layers(_image_dir: Path) -> list[Path]:
+                return [root / "layer.tar"]
+
+            def fake_unpack(_layer_files: list[Path], destination: Path) -> None:
+                rpm_dir = destination / "rpms" / "kmods" / "zfs"
+                rpm_dir.mkdir(parents=True, exist_ok=True)
+                (
+                    rpm_dir / "kmod-zfs-7.0.12-201.fc44.x86_64-2.4.3-1.fc44.x86_64.rpm"
+                ).touch()
+
+            with patch(
+                "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+                return_value={"Digest": "sha256:abc123"},
+            ), patch(
+                "ci_tools.check_akmods_cache.skopeo_copy",
+                side_effect=fake_copy,
+            ), patch(
+                "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
+                side_effect=fake_load_layers,
+            ), patch(
+                "ci_tools.check_akmods_cache.unpack_layer_tarballs",
+                side_effect=fake_unpack,
+            ):
+                status = inspect_akmods_cache(
+                    image_org="danathar",
+                    source_repo="zfs-aurora-complex-akmods",
+                    fedora_version="44",
+                    kernel_release="7.0.12-201.fc44.x86_64",
+                    zfs_version="2.4.4",
+                )
+
+        self.assertFalse(status.reusable)
+        self.assertEqual(status.missing_release, "7.0.12-201.fc44.x86_64")
+        self.assertEqual(status.required_zfs_version, "2.4.4")
+
     def test_inspect_akmods_cache_reports_missing_image_when_tag_does_not_exist(self) -> None:
         with patch(
             "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
@@ -130,7 +199,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
-                zfs_minor_version="2.4",
+                zfs_version="2.4.1",
             )
 
         self.assertFalse(status.reusable)
@@ -156,7 +225,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
-                zfs_minor_version="2.4",
+                zfs_version="2.4.1",
             )
 
         self.assertIn("unauthorized", str(context.exception))
@@ -174,7 +243,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 source_repo="zfs-aurora-complex-akmods",
                 fedora_version="43",
                 kernel_release="6.18.16-200.fc43.x86_64",
-                zfs_minor_version="2.4",
+                zfs_version="2.4.1",
             )
 
         self.assertIn("No layers found in OCI layout", str(context.exception))

@@ -65,6 +65,7 @@ jobs:
       reason: ${{ steps.gate.outputs.reason }}
       stable_signal_ref: ${{ steps.gate.outputs.stable_signal_ref }}
       stable_signal_digest: ${{ steps.gate.outputs.stable_signal_digest }}
+      zfs_version: ${{ steps.gate.outputs.zfs_version }}
     permissions:
       contents: read
       packages: read
@@ -103,6 +104,7 @@ jobs:
       build_container_pinned: ${{ steps.prepare.outputs.build_container_pinned }}
       build_container_digest: ${{ steps.prepare.outputs.build_container_digest }}
       zfs_minor_version: ${{ steps.prepare.outputs.zfs_minor_version }}
+      zfs_version: ${{ steps.prepare.outputs.zfs_version }}
       akmods_upstream_ref: ${{ steps.prepare.outputs.akmods_upstream_ref }}
       use_input_lock: ${{ steps.prepare.outputs.use_input_lock }}
       lock_file_path: ${{ steps.prepare.outputs.lock_file_path }}
@@ -211,6 +213,7 @@ jobs:
           akmods_upstream_ref: ${{ needs.build-zfs-akmods.outputs.akmods_upstream_ref }}
           stable_signal_image: ${{ needs.preflight.outputs.stable_signal_ref }}
           stable_signal_digest: ${{ needs.preflight.outputs.stable_signal_digest }}
+          zfs_version: ${{ needs.build-zfs-akmods.outputs.zfs_version }}
           image_repo: ghcr.io/${{ steps.registry.outputs.image_org }}/${{ steps.defaults.outputs.image_name }}
           signing_key_filename: ${{ steps.defaults.outputs.image_name }}.pub
 

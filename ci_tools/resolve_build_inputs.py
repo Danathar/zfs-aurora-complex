@@ -28,6 +28,7 @@ from ci_tools.common import (
     sort_kernel_releases,
     write_github_outputs,
 )
+from ci_tools.zfs_release import resolve_latest_zfs_version
 
 TAG_FROM_REF_RE = re.compile(r"^[^@]+:([^/:@]+)$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -50,6 +51,11 @@ class ResolvedBuildInputs:
     Important policy note:
     - `detected_kernel_releases` records every detected kernel directory in the base image
     - `kernel_release` is the supported primary kernel this repo builds and validates against
+    - `zfs_minor_version` is the configured line (for example `2.4`); `zfs_version` is the
+      exact patch resolved on that line right now (for example `2.4.3`). The cache-reuse
+      check and the scheduled-build gate compare on `zfs_version`, not the line, so a new
+      OpenZFS patch on an unchanged line still forces a rebuild instead of being masked by
+      a cache that only matches the line.
     """
 
     version: str
@@ -64,6 +70,7 @@ class ResolvedBuildInputs:
     build_container_pinned: str
     build_container_digest: str
     zfs_minor_version: str
+    zfs_version: str
     akmods_upstream_ref: str
     use_input_lock: bool
     lock_file_path: str
@@ -247,6 +254,7 @@ def write_resolved_build_outputs(inputs: ResolvedBuildInputs) -> None:
             "build_container_pinned": inputs.build_container_pinned,
             "build_container_digest": inputs.build_container_digest,
             "zfs_minor_version": inputs.zfs_minor_version,
+            "zfs_version": inputs.zfs_version,
             "akmods_upstream_ref": inputs.akmods_upstream_ref,
             "use_input_lock": "true" if inputs.use_input_lock else "false",
             "lock_file_path": inputs.lock_file_path,
@@ -354,6 +362,7 @@ def resolve_build_inputs() -> BuildInputResolution:
     build_container_ref = configured.build_container_ref
     base_image_ref = configured.base_image_ref
     zfs_minor_version = configured.zfs_minor_version
+    zfs_version = resolve_latest_zfs_version(zfs_minor_version)
     akmods_upstream_ref = configured.akmods_upstream_ref
 
     # Read base image metadata from registry.
@@ -417,6 +426,7 @@ def resolve_build_inputs() -> BuildInputResolution:
             build_container_pinned=build_container_pinned,
             build_container_digest=build_container_digest,
             zfs_minor_version=zfs_minor_version,
+            zfs_version=zfs_version,
             akmods_upstream_ref=akmods_upstream_ref,
             use_input_lock=use_input_lock,
             lock_file_path=lock_file_path,
@@ -448,6 +458,7 @@ def main() -> None:
     )
     print(f"Fedora version: {inputs.version}")
     print(f"ZFS minor version: {inputs.zfs_minor_version}")
+    print(f"Resolved ZFS version: {inputs.zfs_version}")
 
     # Helpful for debugging: shows exactly which tags were considered.
     if resolution.candidate_tags:
