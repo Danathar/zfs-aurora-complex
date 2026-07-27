@@ -37,6 +37,19 @@
     },
     {
       "customType": "regex",
+      "description": "Track the digest of the privileged akmods build container recorded in ci/defaults.json. Renovate's built-in github-actions manager already tracks the same digest where it is repeated as a `container:` image in build.yml and build-branch.yml, but it does not read this JSON file. Without this manager Renovate would bump the two workflow literals and silently leave this one behind -- and this is the copy that feeds ci_tools/resolve_build_inputs.py, so the build-inputs manifest would start recording a different container than the job actually ran in. There is no version tag to track here because the pin is digest-only; currentValueTemplate names the tag whose digest is followed, which is the `latest` tag this pin replaced.",
+      "managerFilePatterns": [
+        "/^ci/defaults\\.json$/"
+      ],
+      "matchStrings": [
+        "\"DEFAULT_BUILD_CONTAINER_IMAGE\":\\s*\"ghcr\\.io/ublue-os/devcontainer@(?<currentDigest>sha256:[0-9a-f]{64})\""
+      ],
+      "depNameTemplate": "ghcr.io/ublue-os/devcontainer",
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    },
+    {
+      "customType": "regex",
       "description": "Track the ruff version pinned for CI linting, so a new release surfaces as a reviewable PR (with its own lint-diff CI run) instead of silently changing default lint rules on an unrelated PR.",
       "managerFilePatterns": [
         "/^\\.github/workflows/test\\.yml$/"
