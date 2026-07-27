@@ -8,6 +8,39 @@ Intent: make goals, constraints, and verification explicit so the model stays pr
 
 **Tradeoff:** These guidelines bias toward correctness and explicitness over speed. For trivial tasks, use judgment.
 
+## 0. This repository is in production
+
+This is not a sandbox. The maintainer daily-drives the image this repo publishes, on real
+hardware, with multi-terabyte ZFS pools attached. A bad image reaching `:latest` gets
+pulled by `bootc upgrade` onto a machine someone depends on — there is no staging tier in
+between. The bar for changes here is higher than "tests pass," and these constraints
+override sections 1-5 below when they conflict:
+
+- **Never weaken a fail-closed check to make something pass.** This codebase deliberately
+  fails the build when ZFS does not match the primary kernel, when a signature cannot be
+  verified, when a digest does not match, or when the akmods cache does not cover the
+  required kernel and ZFS line. Fix the underlying cause or stop and report it — do not
+  relax the check, add a fallback, or make it best-effort.
+- **Treat the build, promotion, and signing path as safety-critical**: `build.yml`,
+  `.github/actions/publish-native-image`, `ci_tools/sign_image.py`,
+  `ci_tools/promote_stable.py`, `ci_tools/check_akmods_cache.py`,
+  `containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`, and
+  `files/scripts/configure_signing_policy.py`. State explicitly what could reach a booted
+  machine if a change to one of these is wrong.
+- **Verify claims against reality, not memory or docs.** Docs here have drifted from the
+  code before. Read the code, check a real CI run's log, or inspect the actual published
+  artifact before asserting how something behaves. If you cannot verify a claim, say so.
+- **A green pipeline is not a safe image.** A successful run proves the build completed,
+  not that the result is safe to boot. State which one you actually checked.
+- **ZFS changes carry data-loss risk.** Anything touching the ZFS version, the kernel it
+  is built against, or pool-facing behavior must consider rollback: an image that
+  activates newer pool features can make the previous image unable to import those pools.
+  Surface that risk; never quietly bump a ZFS line.
+- **Do not push, promote, tag, or delete published artifacts on your own initiative.**
+  Registry tags and git history here are outward-facing. Propose; let the maintainer decide.
+- **When unsure whether something is risky, stop and ask.** An interrupted task is cheap
+  here; a bad published image is not.
+
 ## Preferred Task Shape
 
 For non-trivial work, anchor the response around this structure:

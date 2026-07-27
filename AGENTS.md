@@ -8,7 +8,59 @@ Source inspiration: https://github.com/forrestchang/andrej-karpathy-skills
 
 ---
 
-## 0. Before you start
+## 0. This repository is in production — read this before anything else
+
+**This is not a sandbox or a teaching demo.** The maintainer daily-drives the image this
+repo publishes, on real hardware, with multi-terabyte ZFS pools attached. There is no
+staging tier between this repo and that machine.
+
+Concretely:
+
+- A bad image that reaches `:latest` gets pulled by `bootc upgrade` onto a machine
+  someone works on.
+- A ZFS module that builds but misbehaves sits between the user and pooled data.
+  "It compiled" is not evidence that it is safe — GPT-family models in particular tend to
+  treat a green CI run as proof of correctness. It is not; see rule 4 below.
+- A broken promotion or signing path can strand a machine on an unverifiable update, or
+  move `:latest` to something untested.
+
+The bar for changes here is higher than "tests pass." These rules override the general
+guidance in sections 1–7 below when they conflict:
+
+1. **Never weaken a fail-closed check to make something pass.** This codebase
+   deliberately fails the build when ZFS does not match the primary kernel, when a
+   signature cannot be verified, when a digest does not match, or when the akmods cache
+   does not cover the required kernel and ZFS line. If one of these fires, fix the
+   underlying cause or stop and report it. Do not relax the check, add a fallback, or make
+   it best-effort — this is exactly the kind of "helpful" robustness section 3 (Simplicity
+   First) tells you to resist, and it is more important here than usual.
+2. **Treat the build, promotion, and signing path as safety-critical.** That is:
+   `build.yml`, `.github/actions/publish-native-image`, `ci_tools/sign_image.py`,
+   `ci_tools/promote_stable.py`, `ci_tools/check_akmods_cache.py`,
+   `containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`, and
+   `files/scripts/configure_signing_policy.py`. Changes to these need an explicit
+   statement of what could reach a booted machine if the change is wrong — add this to
+   the confirmation you already give in section 1 below.
+3. **Verify claims against reality, not memory or docs.** Docs in this repo have drifted
+   from the code before. Before asserting how something behaves, read the code, check a
+   real CI run's logs, or inspect the actual published artifact. Mark it `[unverified]`
+   per section 1's assumption-marking convention if you have not.
+4. **Distinguish "the pipeline is green" from "the image is good."** A successful run
+   proves the build completed, not that the result is safe to boot. When reporting on a
+   run, say which one you actually checked.
+5. **Data-loss awareness for ZFS changes.** Anything touching the ZFS version, the kernel
+   it is built against, or pool-facing behavior must consider rollback: an image that
+   activates newer pool features can make the previous image unable to import those
+   pools. Surface that risk explicitly. Never quietly bump a ZFS line.
+6. **Do not push, promote, tag, or delete published artifacts on your own initiative.**
+   Registry tags and git history here are outward-facing. Propose; let the maintainer
+   decide.
+7. **When you are unsure whether something is risky, stop and ask.** An interrupted task
+   is cheap here. A bad published image is not.
+
+---
+
+## 1. Before you start (general task confirmation)
 
 Confirm the following out loud, in one paragraph, before writing any code:
 
@@ -21,7 +73,7 @@ If any item is `[unverified]`, do the verification step before continuing — do
 
 ---
 
-## 1. Think before coding
+## 2. Think before coding
 
 **Do not assume. Do not hide confusion. Surface tradeoffs.**
 
@@ -34,7 +86,7 @@ If any item is `[unverified]`, do the verification step before continuing — do
 
 ---
 
-## 2. Simplicity first
+## 3. Simplicity first
 
 **Minimum code that solves the problem. Nothing speculative.**
 
@@ -50,7 +102,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 
 ---
 
-## 3. Surgical changes
+## 4. Surgical changes
 
 **Touch only what you must. Clean up only your own mess.**
 
@@ -68,7 +120,7 @@ When your changes create orphans:
 
 ---
 
-## 4. Goal-driven execution
+## 5. Goal-driven execution
 
 **Define success criteria up front. Loop until verified.**
 
@@ -91,7 +143,7 @@ After each step, run the verification before moving on. If verification fails, s
 
 ---
 
-## 5. Tooling discipline (this repo)
+## 6. Tooling discipline (this repo)
 
 - Python CI logic lives in [ci_tools/](ci_tools/) and is invoked through [ci_tools/cli.py](ci_tools/cli.py). Add new commands by registering them there and writing a paired test under [tests/](tests/).
 - Workflow YAML lives in [.github/workflows/](.github/workflows/); reusable pieces go in [.github/actions/](.github/actions/) as composite actions.
@@ -101,7 +153,7 @@ After each step, run the verification before moving on. If verification fails, s
 
 ---
 
-## 6. Reporting back
+## 7. Reporting back
 
 When finished:
 1. List the files you changed (paths only).
