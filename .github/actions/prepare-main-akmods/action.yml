@@ -204,7 +204,24 @@ runs:
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         AKMODS_TARGET: zfs
-        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_minor_version }}
+        # Deliberately the exact resolved patch version (e.g. "2.4.4"), not the
+        # line (e.g. "2.4"), despite the variable's name. The fork's
+        # build_files/zfs/build-kmod-zfs.sh uses this value only as a prefix:
+        #   select(.tag_name | startswith("zfs-" + $ZMV))][0]
+        # so passing "2.4" makes it choose the newest release on the line
+        # itself, independently of what this repo resolved. Those two lookups
+        # can disagree -- a release published between them, or the fork reading
+        # only the API's first page while this repo paginates -- and the image
+        # would then carry an org.zfs-aurora-complex.zfs-version label that
+        # does not match the module it ships. Passing the exact version makes
+        # the fork select precisely what this repo resolved, and if that
+        # release is not visible to the fork it exits nonzero with a clear
+        # message rather than quietly building something else.
+        #
+        # The "Verify the rebuilt cache" step below still checks the result,
+        # because this narrows the mismatch window rather than closing it: the
+        # prefix match would also accept a hypothetical "2.4.44" for "2.4.4".
+        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         CI: "1"
         REGISTRY_ACTOR: ${{ inputs.registry_actor }}
         REGISTRY_TOKEN: ${{ inputs.registry_token }}
