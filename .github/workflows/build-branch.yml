@@ -69,6 +69,7 @@ jobs:
       akmods_cache_exists: ${{ steps.prepare.outputs.akmods_cache_exists }}
       akmods_image: ${{ steps.prepare.outputs.akmods_image }}
       akmods_image_pinned: ${{ steps.prepare.outputs.akmods_image_pinned }}
+      rebuilt: ${{ steps.prepare.outputs.rebuilt }}
     permissions:
       contents: read
       packages: write
@@ -105,6 +106,53 @@ jobs:
           rebuild_akmods: "false"
           registry_actor: ${{ github.actor }}
           registry_token: ${{ github.token }}
+
+  sign-branch-akmods-cache:
+    name: Sign Shared ZFS Akmods Cache
+    needs: build-branch-akmods
+    # Same reasoning as build.yml's sign-akmods-cache: only sign when this
+    # run actually rebuilt and republished the shared cache tag. Branch
+    # builds can rebuild that same shared tag too, so this closes the same
+    # gap here that it does on main.
+    if: needs.build-branch-akmods.outputs.rebuilt == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: defaults
+        name: Load repository defaults
+        uses: ./.github/actions/load-ci-defaults
+
+      - id: registry
+        name: Prepare registry context
+        uses: ./.github/actions/prepare-registry-context
+
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
+      - name: Require signing secret for akmods cache signing
+        if: env.HAS_SIGNING_SECRET != 'true'
+        shell: bash
+        run: |
+          echo "SIGNING_SECRET is not configured. Refusing to leave a freshly rebuilt akmods cache unsigned: a later run's cache-reuse check refuses to trust an unsigned cache, so an unsigned rebuild here just forces every future run to rebuild again." >&2
+          exit 1
+
+      - name: Sign shared akmods cache image
+        shell: bash
+        env:
+          IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
+          IMAGE_NAME: ${{ steps.defaults.outputs.akmods_repo }}
+          IMAGE_TAG: main-${{ needs.build-branch-akmods.outputs.fedora_version }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          python3 -m ci_tools.cli sign-image
 
   build-branch-image:
     name: Build Branch Image

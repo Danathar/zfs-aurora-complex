@@ -1,9 +1,12 @@
 """
 Script: tests/test_check_akmods_cache.py
 What: Tests for shared akmods cache validation helpers.
-Doing: Creates temporary RPM trees and checks primary-kernel cache detection.
-Why: Protects the simplified cache check that now follows only the supported primary kernel.
-Goal: Keep rebuild decisions fail-closed when the required primary-kernel RPM is absent.
+Doing: Creates temporary RPM trees and checks primary-kernel cache detection,
+plus the cosign signature check that gates reuse.
+Why: Protects the simplified cache check that now follows only the supported primary kernel
+and only trusts a cache signed by this repo's own key.
+Goal: Keep rebuild decisions fail-closed when the required primary-kernel RPM is absent, or
+when the cache cannot be verified as this repo's own signed output.
 """
 
 from __future__ import annotations
@@ -97,7 +100,9 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             ), patch(
                 "ci_tools.check_akmods_cache.unpack_layer_tarballs",
                 side_effect=fake_unpack,
-            ):
+            ), patch(
+                "ci_tools.check_akmods_cache.cosign_verify"
+            ) as cosign_verify:
                 status = inspect_akmods_cache(
                     image_org="danathar",
                     source_repo="zfs-aurora-complex-akmods",
@@ -107,6 +112,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                 )
 
         self.assertTrue(status.reusable)
+        self.assertTrue(status.signature_verified)
         self.assertEqual(
             status.source_image_pinned,
             "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
@@ -119,6 +125,66 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             "docker://ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
             ANY,
         )
+        cosign_verify.assert_called_once_with(
+            "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
+            key_path=ANY,
+        )
+
+    def test_inspect_akmods_cache_rejects_reuse_when_signature_verification_fails(self) -> None:
+        # The cache has the right kmod-zfs RPM but is not signed by this
+        # repo's key (or is not signed at all) -- reuse must be refused even
+        # though the RPM content looks correct. This is the actual fix: a
+        # matching filename alone is not proof of who produced the content.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            def fake_copy(_source: str, destination: str) -> None:
+                image_dir = Path(destination.removeprefix("dir:"))
+                image_dir.mkdir(parents=True, exist_ok=True)
+                (image_dir / "manifest.json").write_text(
+                    "{\"layers\": [{\"digest\": \"sha256:layer\"}]}",
+                    encoding="utf-8",
+                )
+                (image_dir / "layer").write_text("", encoding="utf-8")
+
+            def fake_load_layers(_image_dir: Path) -> list[Path]:
+                return [root / "layer.tar"]
+
+            def fake_unpack(_layer_files: list[Path], destination: Path) -> None:
+                rpm_dir = destination / "rpms" / "kmods" / "zfs"
+                rpm_dir.mkdir(parents=True, exist_ok=True)
+                (
+                    rpm_dir / "kmod-zfs-6.18.16-200.fc43.x86_64-2.4.1-1.fc43.x86_64.rpm"
+                ).touch()
+
+            with patch(
+                "ci_tools.check_akmods_cache.skopeo_inspect_json_optional",
+                return_value={"Digest": "sha256:abc123"},
+            ), patch(
+                "ci_tools.check_akmods_cache.skopeo_copy",
+                side_effect=fake_copy,
+            ), patch(
+                "ci_tools.check_akmods_cache.load_layer_files_from_oci_layout",
+                side_effect=fake_load_layers,
+            ), patch(
+                "ci_tools.check_akmods_cache.unpack_layer_tarballs",
+                side_effect=fake_unpack,
+            ), patch(
+                "ci_tools.check_akmods_cache.cosign_verify",
+                side_effect=CiToolError("no signatures found"),
+            ):
+                status = inspect_akmods_cache(
+                    image_org="danathar",
+                    source_repo="zfs-aurora-complex-akmods",
+                    fedora_version="43",
+                    kernel_release="6.18.16-200.fc43.x86_64",
+                    zfs_minor_version="2.4",
+                )
+
+        self.assertFalse(status.reusable)
+        self.assertFalse(status.signature_verified)
+        # The RPM content itself was fine; only the signature check failed.
+        self.assertEqual(status.missing_release, "")
 
     def test_inspect_akmods_cache_reports_missing_image_when_tag_does_not_exist(self) -> None:
         with patch(

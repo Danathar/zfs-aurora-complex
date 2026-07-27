@@ -83,6 +83,12 @@ outputs:
   akmods_image_pinned:
     description: Digest-pinned shared akmods cache image ref for the final image build.
     value: ${{ steps.pin_akmods.outputs.akmods_image_pinned || steps.cache.outputs.akmods_image_pinned }}
+  rebuilt:
+    description: >-
+      Whether this run actually rebuilt and republished the shared akmods
+      cache image, as opposed to reusing an existing one. Callers use this to
+      decide whether the freshly published cache needs signing this run.
+    value: ${{ inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true' }}
 
 runs:
   # This composite action is the "front half" of the main workflow. It decides

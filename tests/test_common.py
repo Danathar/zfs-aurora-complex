@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from ci_tools.common import (
     CiToolError,
+    cosign_verify,
     git_ls_remote_resolve,
     is_missing_image_error,
     run_cmd,
@@ -152,6 +153,30 @@ class CommonTests(unittest.TestCase):
         args = run_cmd_mock.call_args.args[0]
         self.assertIn("--preserve-digests", args)
         self.assertIn("--multi-arch=all", args)
+
+    def test_cosign_verify_does_not_pass_new_bundle_format_flag(self) -> None:
+        # cosign v2.4.1 (preinstalled in the akmods build container) does not
+        # recognize --new-bundle-format at all, and v3.1.2 verifies this
+        # repo's legacy-format signatures fine without it -- verified against
+        # both real binaries against a real signed image. This call must work
+        # unmodified in either environment.
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            cosign_verify("ghcr.io/example/image@sha256:abc", key_path="/tmp/cosign.pub")
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertEqual(
+            args, ["cosign", "verify", "--key", "/tmp/cosign.pub", "ghcr.io/example/image@sha256:abc"]
+        )
+        self.assertNotIn("--new-bundle-format=false", args)
+
+    def test_cosign_verify_propagates_failure(self) -> None:
+        with patch(
+            "ci_tools.common.run_cmd",
+            side_effect=CiToolError("no signatures found"),
+        ), self.assertRaises(CiToolError) as context:
+            cosign_verify("ghcr.io/example/image@sha256:abc", key_path="/tmp/cosign.pub")
+
+        self.assertIn("no signatures found", str(context.exception))
 
     def test_run_cmd_redacts_secret_args_in_failure_message(self) -> None:
         args = [

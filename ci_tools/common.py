@@ -333,6 +333,30 @@ def skopeo_copy(
     run_cmd(command, capture_output=False)
 
 
+def cosign_verify(image_ref: str, *, key_path: str) -> None:
+    """
+    Verify a cosign signature on one image reference against a public key file.
+
+    Raises `CiToolError` (via `run_cmd`) if verification fails for any reason:
+    no signature found, wrong key, or a registry/network error. Callers that
+    want "not signed" to mean "treat as unusable, do not consume" should catch
+    `CiToolError` around this call rather than letting it propagate.
+
+    Deliberately does not pass `--new-bundle-format=false`, unlike
+    `sign_image.py`'s sign step. This function runs in more than one
+    environment -- including cosign v2.4.1, preinstalled in the
+    `ghcr.io/ublue-os/devcontainer` akmods build container, which does not
+    recognize that flag at all -- so it must work the same way everywhere.
+    Verified directly: both cosign v2.4.1 and v3.1.2 correctly verify this
+    repo's actual signed images (produced by `sign_image.py` with
+    `--new-bundle-format=false --use-signing-config=false
+    --registry-referrers-mode=legacy`) using a bare `cosign verify --key ...`
+    with no format flag, and both correctly fail (nonzero exit, "no signatures
+    found") against an actually-unsigned image.
+    """
+    run_cmd(["cosign", "verify", "--key", key_path, image_ref])
+
+
 def sort_kernel_releases(kernel_releases: Sequence[str]) -> list[str]:
     """Return unique kernel release strings in stable natural-sort order."""
     return sorted(dict.fromkeys(kernel_releases), key=kernel_release_sort_key)

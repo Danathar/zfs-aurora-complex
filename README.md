@@ -162,7 +162,9 @@ image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
 `stable-*` audit, and `br-*` branch tags) and the shared akmods cache image
 (`ghcr.io/danathar/zfs-aurora-complex-akmods`). There is no separate
 candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
-repair script to keep in sync. For the full tag list and how transient
+repair script to keep in sync. The akmods cache is signed the same way the OS
+image is, and a cache that fails signature verification is treated as a
+rebuild, not reused. For the full tag list and how transient
 `*-unsigned-<run_id>` tags fit into publishing, see
 ["Outputs"](docs/architecture-overview.md#outputs) in the architecture overview.
 

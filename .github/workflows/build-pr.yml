@@ -44,6 +44,15 @@ jobs:
         name: Prepare registry context
         uses: ./.github/actions/prepare-registry-context
 
+      # prepare-validation-build's cache check now verifies the akmods cache's
+      # cosign signature (ci_tools/check_akmods_cache.py), and this job never
+      # rebuilds that cache -- so it always takes the verify path and needs
+      # cosign available. Unlike build.yml/build-branch.yml's akmods jobs,
+      # this job does not run inside the devcontainer container (which ships
+      # cosign preinstalled), so it needs it installed explicitly here.
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
       # Reuse the same input-resolution and cache-verification logic as the
       # production workflow so a green pull request actually means something.
       - name: Resolve inputs and verify shared akmods cache

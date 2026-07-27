@@ -78,6 +78,7 @@ class PrepareValidationBuildTests(unittest.TestCase):
                         "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123"
                     ),
                     missing_release="",
+                    signature_verified=True,
                 ),
             ) as inspect_cache:
                 main()
