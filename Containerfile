@@ -46,4 +46,10 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,target=/tmp \
     /ctx/build-image.sh
 
+# Aurora sets `quay.expires-after=4w` on its own images. That label is inert on
+# GitHub Container Registry (GHCR), but it rides along into this image, and any
+# mirror of this image to a Quay-backed registry would start self-deleting after
+# four weeks. This image is meant to be a durable update target, so clear it.
+LABEL quay.expires-after=
+
 RUN bootc container lint

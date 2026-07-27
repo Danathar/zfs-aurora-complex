@@ -59,10 +59,24 @@ GitHub Actions workflow: `build.yml`
 > sudo bootc upgrade
 > ```
 
-> [!NOTE]
-> This repository was developed with significant AI assistance and serves as a **reference implementation** demonstrating production-grade CI/CD patterns for building bootable container images with ZFS support. It covers candidate-first promotion, input pinning, digest resolution, shared akmods caching, image signing, and comprehensive unit testing.
+> [!IMPORTANT]
+> **This is now a production system, not a demonstration.** The author runs this
+> image as a daily driver on real hardware with real ZFS pools — this repo eats
+> its own dog food. Changes here can break a booted machine and can put pooled
+> data at risk, so they are held to a production standard: understand the
+> blast radius before changing the build, promotion, or signing path.
 >
-> For a simpler, more direct approach to the same problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple). That repo is the lightweight daily driver; this one exists to show what a fuller safety and automation pipeline looks like.
+> If you are an AI agent working in this repository, read
+> [`CLAUDE.md`](./CLAUDE.md) before making changes. It describes the
+> production-safety rules that apply here.
+
+> [!NOTE]
+> This repository was developed with significant AI assistance. It demonstrates
+> production-grade CI/CD patterns for building bootable container images with ZFS
+> support: candidate-first promotion, input pinning, digest resolution, shared
+> akmods caching, image signing, and comprehensive unit testing.
+>
+> For a simpler, more direct approach to the same problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple). That repo is the minimal expression of the same idea; this one carries the fuller safety and automation pipeline.
 >
 > The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
@@ -90,7 +104,7 @@ This is not a legal opinion and nothing in this repository is legal advice. Oper
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
-whether Aurora stable has advanced since the last promoted image and skip the
+whether the upstream Aurora base image has advanced since the last promoted image and skip the
 rest of the workflow if not; push and manual runs always build. Once a run
 does build, it resolves and pins its inputs, reuses or rebuilds the shared
 akmods cache, builds and signs a candidate image, and only then promotes that
@@ -184,7 +198,7 @@ docs/                                 teaching-style documentation
 - `.github/workflows/build.yml`
   - main push/schedule/manual workflow
   - candidate-first build and promotion
-  - scheduled runs skip when Aurora stable has not advanced since the last promoted image (see "Safety Model" above)
+  - scheduled runs skip when the upstream Aurora base image has not advanced since the last promoted image (see "Safety Model" above)
 - `.github/workflows/build-branch.yml`
   - branch-tagged test builds
   - reuse or rebuild the shared akmods cache when the branch targets a new primary kernel

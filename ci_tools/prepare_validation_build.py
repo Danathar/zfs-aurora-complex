@@ -40,13 +40,15 @@ def main() -> None:
         source_repo=source_repo,
         fedora_version=inputs.version,
         kernel_release=inputs.kernel_release,
+        zfs_minor_version=inputs.zfs_minor_version,
     )
     if not status.reusable:
         # Branch/PR paths intentionally do not rebuild the shared akmods tag;
         # the repair action is a main-workflow rebuild_akmods run.
         raise CiToolError(
             f"Shared akmods source tag {status.source_image} is missing or does not "
-            f"cover the supported primary kernel {status.missing_release}. "
+            f"cover the supported primary kernel {status.missing_release} on the "
+            f"ZFS {inputs.zfs_minor_version} line. "
             "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
             "then rerun this workflow."
         )
