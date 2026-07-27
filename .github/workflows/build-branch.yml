@@ -138,6 +138,14 @@ jobs:
       - name: Install skopeo and cosign
         uses: ./.github/actions/install-signing-tools
 
+      # cosign pushes the signature blob to GHCR, so this job needs its own
+      # registry login. See build.yml's sign-akmods-cache for the fuller note.
+      - uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Require signing secret for akmods cache signing
         if: env.HAS_SIGNING_SECRET != 'true'
         shell: bash

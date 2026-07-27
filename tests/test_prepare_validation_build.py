@@ -146,7 +146,77 @@ class PrepareValidationBuildTests(unittest.TestCase):
                 str(context.exception),
             )
             self.assertIn("rebuild_akmods=true", str(context.exception))
+            self.assertIn("6.18.16-200.fc43.x86_64", str(context.exception))
             clone_pinned.assert_called_once_with(_AKMODS_REPO_URL, "abcdef123456")
+
+    def test_signature_rejection_says_so_instead_of_blaming_the_kernel(self) -> None:
+        # A cache with the right kmod-zfs but no valid signature leaves
+        # missing_release empty. Reporting the kernel unconditionally produced
+        # "does not cover the supported primary kernel <blank>", which pointed
+        # a reader at entirely the wrong problem.
+        resolution = _resolved_inputs()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "github-output.txt")
+            with patch.dict(
+                os.environ,
+                {
+                    "GITHUB_OUTPUT": output_path,
+                    "GITHUB_REPOSITORY_OWNER": "Danathar",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
+                    "AKMODS_UPSTREAM_REPO": _AKMODS_REPO_URL,
+                },
+                clear=False,
+            ), patch(
+                "ci_tools.prepare_validation_build.resolve_build_inputs",
+                return_value=resolution,
+            ), patch("ci_tools.prepare_validation_build.clone_pinned"), patch(
+                "ci_tools.prepare_validation_build.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    source_image_pinned=(
+                        "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc"
+                    ),
+                    missing_release="",
+                    signature_verified=False,
+                ),
+            ), self.assertRaises(CiToolError) as context:
+                main()
+
+            message = str(context.exception)
+            self.assertIn("cosign signature could not be verified", message)
+            self.assertIn("sha256:abc", message)
+            self.assertNotIn("does not cover the supported primary kernel", message)
+
+    def test_missing_cache_image_says_it_is_missing(self) -> None:
+        resolution = _resolved_inputs()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "github-output.txt")
+            with patch.dict(
+                os.environ,
+                {
+                    "GITHUB_OUTPUT": output_path,
+                    "GITHUB_REPOSITORY_OWNER": "Danathar",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
+                    "AKMODS_UPSTREAM_REPO": _AKMODS_REPO_URL,
+                },
+                clear=False,
+            ), patch(
+                "ci_tools.prepare_validation_build.resolve_build_inputs",
+                return_value=resolution,
+            ), patch("ci_tools.prepare_validation_build.clone_pinned"), patch(
+                "ci_tools.prepare_validation_build.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=False,
+                    missing_release="6.18.16-200.fc43.x86_64",
+                ),
+            ), self.assertRaises(CiToolError) as context:
+                main()
+
+            self.assertIn("is missing from the registry", str(context.exception))
 
 
 if __name__ == "__main__":
