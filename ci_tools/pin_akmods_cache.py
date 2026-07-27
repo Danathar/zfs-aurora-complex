@@ -22,12 +22,18 @@ def akmods_cache_image_tag(*, image_org: str, source_repo: str, fedora_version: 
     return f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
 
 
-def pin_akmods_cache_image(image_tag: str) -> str:
-    """Resolve a mutable akmods cache tag to an immutable digest reference."""
+def pin_akmods_cache_image(image_tag: str) -> tuple[str, str]:
+    """
+    Resolve a mutable akmods cache tag to an immutable digest reference.
+
+    Returns `(pinned_ref, digest)`. The bare digest is returned alongside the
+    full ref because the signing job needs to sign this exact digest rather
+    than re-resolve the tag, which a concurrent branch run can move.
+    """
 
     digest = skopeo_inspect_digest(f"docker://{image_tag}")
     image_name = image_tag.rsplit(":", 1)[0]
-    return f"{image_name}@{digest}"
+    return f"{image_name}@{digest}", digest
 
 
 def main() -> None:
@@ -40,12 +46,13 @@ def main() -> None:
         source_repo=source_repo,
         fedora_version=fedora_version,
     )
-    image_pinned = pin_akmods_cache_image(image_tag)
+    image_pinned, image_digest = pin_akmods_cache_image(image_tag)
 
     write_github_outputs(
         {
             "akmods_image": image_tag,
             "akmods_image_pinned": image_pinned,
+            "akmods_image_digest": image_digest,
         }
     )
 

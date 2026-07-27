@@ -83,12 +83,22 @@ outputs:
   akmods_image_pinned:
     description: Digest-pinned shared akmods cache image ref for the final image build.
     value: ${{ steps.pin_akmods.outputs.akmods_image_pinned || steps.cache.outputs.akmods_image_pinned }}
+  akmods_image_digest:
+    description: >-
+      Bare digest of the shared akmods cache image this run published. Only set
+      when this run actually rebuilt the cache, because only then is there a
+      freshly published digest that still needs signing. The signing job signs
+      this digest instead of re-resolving the tag, which a concurrent branch
+      run rebuilding the same shared tag could move underneath it.
+    value: ${{ steps.pin_akmods.outputs.akmods_image_digest }}
   rebuilt:
     description: >-
       Whether this run actually rebuilt and republished the shared akmods
       cache image, as opposed to reusing an existing one. Callers use this to
       decide whether the freshly published cache needs signing this run.
-    value: ${{ inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true' }}
+      Reported by the build step itself rather than recomputed from the same
+      condition that guards it, so the two can never drift apart.
+    value: ${{ steps.akmods_build.outputs.rebuilt || 'false' }}
 
 runs:
   # This composite action is the "front half" of the main workflow. It decides
@@ -209,6 +219,11 @@ runs:
         mkdir -p artifacts
         set -o pipefail
         python3 -m ci_tools.cli akmods-build-and-publish 2>&1 | tee artifacts/akmods-build.log
+        # Only reached when the build above actually succeeded, so this reports
+        # what happened rather than restating the `if:` condition guarding this
+        # step. A failed build leaves this unset and the action's `rebuilt`
+        # output falls back to 'false'.
+        echo "rebuilt=true" >> "${GITHUB_OUTPUT}"
 
     # Run only when the akmods build step above failed. Classifies the failure
     # and writes a sticky-issue payload the downstream visibility workflow

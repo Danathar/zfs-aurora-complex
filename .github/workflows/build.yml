@@ -109,6 +109,7 @@ jobs:
       akmods_cache_exists: ${{ steps.prepare.outputs.akmods_cache_exists }}
       akmods_image: ${{ steps.prepare.outputs.akmods_image }}
       akmods_image_pinned: ${{ steps.prepare.outputs.akmods_image_pinned }}
+      akmods_image_digest: ${{ steps.prepare.outputs.akmods_image_digest }}
       rebuilt: ${{ steps.prepare.outputs.rebuilt }}
     permissions:
       contents: read
@@ -187,21 +188,35 @@ jobs:
           echo "SIGNING_SECRET is not configured. Refusing to leave a freshly rebuilt akmods cache unsigned: a later run's cache-reuse check refuses to trust an unsigned cache, so an unsigned rebuild here just forces every future run to rebuild again." >&2
           exit 1
 
-      # Signs the shared cache tag this run just rebuilt and published, by
-      # digest -- reusing the exact same sign-image command the OS image
-      # publish step already uses, unmodified. ci_tools/check_akmods_cache.py
-      # refuses to reuse a cache without this signature (see its
-      # cosign_verify call), which is the actual point: this cache is a real
-      # supply-chain input (branch workflows can also rebuild and republish
-      # this same shared tag), so a later run reusing it should be able to
-      # prove it was produced by this repo's own pipeline, not just that a
-      # filename happens to match.
+      # Fail closed rather than silently letting sign-image fall back to
+      # re-resolving the tag, which is exactly the race this digest avoids.
+      - name: Require a pinned cache digest to sign
+        if: needs.build-zfs-akmods.outputs.akmods_image_digest == ''
+        shell: bash
+        run: |
+          echo "This run rebuilt the shared akmods cache but produced no pinned digest. Refusing to sign by re-resolving the shared tag, which a concurrent branch rebuild could have moved." >&2
+          exit 1
+
+      # Signs the exact digest the previous job pinned, not the shared tag.
+      # ci_tools/check_akmods_cache.py refuses to reuse a cache without this
+      # signature (see its cosign_verify call), which is the actual point:
+      # this cache is a real supply-chain input, so a later run reusing it
+      # should be able to prove it was produced by this repo's own pipeline,
+      # not just that a filename happens to match.
+      #
+      # IMAGE_DIGEST matters here. `build-branch.yml` rebuilds and republishes
+      # this same shared `main-<fedora>` tag, so a concurrent branch run can
+      # move it between the moment build-zfs-akmods pinned a digest and the
+      # moment this job runs. Re-resolving the tag would then sign the other
+      # run's image and leave the digest this run's candidate image was
+      # actually built from unsigned forever.
       - name: Sign shared akmods cache image
         shell: bash
         env:
           IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
           IMAGE_NAME: ${{ steps.defaults.outputs.akmods_repo }}
           IMAGE_TAG: main-${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          IMAGE_DIGEST: ${{ needs.build-zfs-akmods.outputs.akmods_image_digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           python3 -m ci_tools.cli sign-image
@@ -300,9 +315,26 @@ jobs:
     needs:
       - build-zfs-akmods
       - build-candidate-image
-    # Manual runs can opt out of promotion so a maintainer can build and inspect
-    # the candidate image without moving the public `latest` tag.
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true'
+      - sign-akmods-cache
+    # `sign-akmods-cache` is in `needs` so a failed cache signing stops
+    # promotion. Without it that job runs in parallel with nothing downstream
+    # depending on it, so a signing failure turned the run red while `:latest`
+    # still moved -- publishing an image built from a cache this repo cannot
+    # prove it produced, and leaving that cache permanently untrusted.
+    #
+    # It is legitimately skipped whenever the cache was reused rather than
+    # rebuilt, which is the common case. A skipped `needs` job would normally
+    # skip this job too, so the conditions below are spelled out explicitly
+    # under `!cancelled()`: promote only when both build jobs actually
+    # succeeded, and when cache signing either succeeded or was never needed.
+    # This reproduces the previous skip behaviour for a gate-skipped scheduled
+    # run (both build jobs skipped, so neither is 'success').
+    if: >-
+      !cancelled()
+      && needs.build-zfs-akmods.result == 'success'
+      && needs.build-candidate-image.result == 'success'
+      && (needs.sign-akmods-cache.result == 'success' || needs.sign-akmods-cache.result == 'skipped')
+      && (github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true')
     runs-on: ubuntu-24.04
     permissions:
       contents: read

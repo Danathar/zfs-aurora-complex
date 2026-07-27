@@ -69,6 +69,7 @@ jobs:
       akmods_cache_exists: ${{ steps.prepare.outputs.akmods_cache_exists }}
       akmods_image: ${{ steps.prepare.outputs.akmods_image }}
       akmods_image_pinned: ${{ steps.prepare.outputs.akmods_image_pinned }}
+      akmods_image_digest: ${{ steps.prepare.outputs.akmods_image_digest }}
       rebuilt: ${{ steps.prepare.outputs.rebuilt }}
     permissions:
       contents: read
@@ -144,12 +145,24 @@ jobs:
           echo "SIGNING_SECRET is not configured. Refusing to leave a freshly rebuilt akmods cache unsigned: a later run's cache-reuse check refuses to trust an unsigned cache, so an unsigned rebuild here just forces every future run to rebuild again." >&2
           exit 1
 
+      - name: Require a pinned cache digest to sign
+        if: needs.build-branch-akmods.outputs.akmods_image_digest == ''
+        shell: bash
+        run: |
+          echo "This run rebuilt the shared akmods cache but produced no pinned digest. Refusing to sign by re-resolving the shared tag, which a concurrent rebuild could have moved." >&2
+          exit 1
+
       - name: Sign shared akmods cache image
         shell: bash
         env:
           IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
           IMAGE_NAME: ${{ steps.defaults.outputs.akmods_repo }}
           IMAGE_TAG: main-${{ needs.build-branch-akmods.outputs.fedora_version }}
+          # Sign the digest this run pinned, not the shared tag. `main.yml` and
+          # other branch runs republish this same shared tag, so re-resolving
+          # it here could sign someone else's image. See build.yml's fuller
+          # comment on the same step.
+          IMAGE_DIGEST: ${{ needs.build-branch-akmods.outputs.akmods_image_digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           python3 -m ci_tools.cli sign-image

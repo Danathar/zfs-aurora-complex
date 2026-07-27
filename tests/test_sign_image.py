@@ -101,6 +101,44 @@ class SignImageTests(unittest.TestCase):
         self.assertEqual(calls[1][0][4], str(key_path))
         self.assertEqual(calls[1][2], None)
 
+    def test_explicit_digest_is_signed_without_resolving_the_tag(self) -> None:
+        # The shared akmods cache tag is republished by more than one workflow,
+        # so a caller that already pinned a digest must be able to sign exactly
+        # that digest. Re-resolving the tag here would sign whatever a
+        # concurrent run had most recently pushed instead.
+        calls: list[list[str]] = []
+
+        def fake_run_cmd(args: list[str], **_kwargs) -> str:
+            calls.append(args)
+            return ""
+
+        def exploding_lookup(_ref: str) -> str:
+            raise AssertionError("tag must not be resolved when a digest is supplied")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            key_path = Path(temp_dir) / "cosign.pub"
+            key_path.write_text("public-key", encoding="utf-8")
+            with unittest.mock.patch.dict(
+                os.environ, {"COSIGN_PUBLIC_KEY_PATH": str(key_path)}, clear=False
+            ):
+                digest_ref = sign_published_image(
+                    image_org="danathar",
+                    image_name="zfs-aurora-complex-akmods",
+                    image_tag="main-43",
+                    cosign_private_key="private-key",
+                    image_digest="sha256:pinned",
+                    digest_lookup=exploding_lookup,
+                    command_runner=fake_run_cmd,
+                )
+
+        self.assertEqual(
+            digest_ref,
+            "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:pinned",
+        )
+        # Both the sign and the verify call must target the pinned digest.
+        self.assertEqual(calls[0][-1], "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:pinned")
+        self.assertEqual(calls[1][-1], "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:pinned")
+
     def test_cosign_password_comes_from_environment_when_set(self) -> None:
         calls: list[tuple[list[str], bool, dict[str, str] | None]] = []
 
