@@ -9,6 +9,45 @@ What this repository promises about published images, what it deliberately
 does not promise, and what an operator should do when a published image turns
 out to be bad. Read this before depending on `:latest`.
 
+## The ZFS Line Is Set By The Base Image, Not By This Repo
+
+`DEFAULT_ZFS_MINOR_VERSION` in [`ci/defaults.json`](../ci/defaults.json) selects which OpenZFS
+line the *kernel module* is built from. It does **not** freely select the ZFS line the image
+ships, because the Aurora DX base image already contains ZFS **userspace** packages, and those
+constrain what can be installed on top.
+
+Established empirically on 2026-07-28 by attempting to move this repo to the 2.3 line
+(pull request #54, closed unmerged). The akmods build succeeded -- 2.3.8 compiled cleanly
+against kernel 7.0.12-201.fc44, consistent with its `Linux-Maximum: 7.0` -- and the image build
+then failed:
+
+```text
+Problem 1: installed package libzfs7-2.4.3-1.fc44.x86_64 obsoletes libzfs6 <= 2.4.3
+           provided by libzfs6-2.3.8-1.fc44.x86_64 from @commandline
+Problem 2: installed package libzpool7-2.4.3-1.fc44.x86_64 obsoletes libzpool6 <= 2.4.3
+           provided by libzpool6-2.3.8-1.fc44.x86_64 from @commandline
+```
+
+The base carried `libzfs7`/`libzpool7` from the 2.4 line. Those *obsolete* the 2.3-era
+`libzfs6`/`libzpool6`, so `dnf5` refused the transaction.
+
+**What follows from this:**
+
+1. Changing `DEFAULT_ZFS_MINOR_VERSION` to a line *older* than the base image's own ZFS
+   userspace will fail at image-build time, not at akmods-build time. A green akmods job is not
+   evidence the line change will work.
+2. This repo therefore cannot hold an older ZFS line to match an existing machine while also
+   tracking a current Aurora base. Those two goals conflict, and the base wins.
+3. A machine moving onto this image from an older ZFS line **must** cross that line. That is not
+   avoidable by configuration here. The mitigation is the rollback discipline described below:
+   keep the previous image as a pinned rollback target, and do not run `zpool upgrade` until the
+   new line is trusted. Importing a pool created under an older line does not activate new
+   feature flags by itself -- only `zpool upgrade` does.
+
+Two workarounds were considered and rejected: removing the base's ZFS packages before installing
+(diverges from Aurora's own stack and needs re-checking on every base update), and pinning an
+older base image (surrenders the kernel currency this repo exists to track).
+
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
