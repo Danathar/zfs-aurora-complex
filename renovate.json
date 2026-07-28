@@ -64,7 +64,8 @@
 
   "packageRules": [
     {
-      "automerge": true,
+      "description": "Do not automerge anything, including digest pins. Merging to main triggers the production workflow, which builds, signs with this repo's key, and promotes to :latest. Automerge made that an unattended path from a third-party service (Renovate) all the way to the published image with no human in it. The content of a pin update is low risk; the property of having such a path at all is the thing being removed. Renovate still opens the PRs and CI still runs on them -- merging is one click.",
+      "automerge": false,
       "matchUpdateTypes": ["pin", "pinDigest"]
     },
     {
