@@ -10,75 +10,36 @@
 
 ## Why This Repo Exists
 
-The problem has not changed:
+Fedora-family images move kernels quickly, and ZFS is an out-of-tree kernel module — so a new
+Fedora kernel can land before a matching OpenZFS release exists. Build that carelessly and you
+publish an Aurora DX image whose kernel and ZFS modules do not match.
 
-1. Fedora-family images move kernels quickly.
-2. ZFS is an out-of-tree kernel module.
-3. That means a new Fedora kernel can arrive before a matching OpenZFS release is ready.
-4. If you do not gate builds carefully, you can publish an Aurora DX image whose kernel and ZFS modules do not match.
+This repository builds a signed Aurora DX image with ZFS userspace and kernel modules installed
+from a self-hosted akmods cache image (a container image holding prebuilt ZFS kernel-module
+packages), Distrobox and Homebrew inherited from upstream Aurora DX, and a single-repository
+signing policy for signed `bootc upgrade`. It deliberately stays close to standard tooling: one
+`Containerfile`, direct `buildah`/Open Container Initiative (OCI) build arguments, one image
+repository (`ghcr.io/danathar/zfs-aurora-complex`), and one shared akmods cache repository
+(`ghcr.io/danathar/zfs-aurora-complex-akmods`).
 
-This repository intentionally uses:
-
-1. a standard `Containerfile`
-2. direct `buildah`/Open Container Initiative (OCI) build arguments
-3. one image repository (`ghcr.io/danathar/zfs-aurora-complex`)
-4. one shared akmods cache repository (`ghcr.io/danathar/zfs-aurora-complex-akmods`)
-
-This repository builds a signed Aurora DX image with:
-
-- ZFS userspace and kernel modules installed from a self-hosted akmods cache image, meaning a container image that stores prebuilt ZFS kernel-module packages
-- Distrobox inherited from the upstream Aurora DX image
-- Homebrew inherited from the upstream Aurora DX image
-- a single-repository signing policy for future signed `bootc upgrade` flows
-
-OpenZFS itself is not hand-pinned to a patch version baked into this repo. Each build resolves
-the latest stable release in a configured minor line (`ZFS_MINOR_VERSION`, `2.4` by default —
-see [`ci/defaults.json`](./ci/defaults.json)) directly from
-[OpenZFS's own GitHub releases](https://github.com/openzfs/zfs/releases) at build time, and
-that is the version it attempts to build and install.
-
-The documentation in this repository tries to stay readable for someone who is learning these topics while reading. Terms are defined when they first appear where practical, and the glossary fills in the rest.
-
-GitHub Actions workflow: `build.yml`
+OpenZFS is not hand-pinned to a patch version. Each build resolves the newest stable release in
+a configured minor line (`ZFS_MINOR_VERSION`, `2.4` by default — see
+[`ci/defaults.json`](./ci/defaults.json)) from
+[OpenZFS's own GitHub releases](https://github.com/openzfs/zfs/releases) at build time, and that
+is the version it attempts to build and install.
 
 > [!IMPORTANT]
-> **First switch command for this image:**
->
-> ```bash
-> sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
-> sudo systemctl reboot
-> ```
->
-> Do not use plain `bootc switch` for the first move from stock Aurora DX into this
-> image. This image installs a repository-specific signing policy for
-> `ghcr.io/danathar/zfs-aurora-complex`, so the first switch should record the
-> deployment as policy-verified. After rebooting into this image family, future
-> updates should be normal:
->
-> ```bash
-> sudo bootc upgrade
-> ```
-
-> [!IMPORTANT]
-> **This is now a production system, not a demonstration.** The author runs this
-> image as a daily driver on real hardware with real ZFS pools — this repo eats
-> its own dog food. Changes here can break a booted machine and can put pooled
-> data at risk, so they are held to a production standard: understand the
-> blast radius before changing the build, promotion, or signing path.
->
-> If you are an AI agent working in this repository, read
-> [`CLAUDE.md`](./CLAUDE.md) before making changes. It describes the
-> production-safety rules that apply here.
+> **Changing this repository is a production change, not a demonstration.** A bad build can
+> break a booted machine and put pooled data at risk, so the build, promotion, and signing paths
+> are held to a production standard — understand the blast radius before changing them. AI agents
+> working here must read [`CLAUDE.md`](./CLAUDE.md) first.
 
 > [!NOTE]
-> This repository was developed with significant AI assistance. It demonstrates
-> production-grade CI/CD patterns for building bootable container images with ZFS
-> support: candidate-first promotion, input pinning, digest resolution, shared
-> akmods caching, image signing, and comprehensive unit testing.
->
-> For a simpler, more direct approach to the same problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple). That repo is the minimal expression of the same idea; this one carries the fuller safety and automation pipeline.
->
-> The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
+> Developed with significant AI assistance. For a simpler, more direct approach to the same
+> problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple) — the minimal
+> expression of the same idea. This repo carries the fuller pipeline: candidate-first promotion,
+> input pinning, digest resolution, shared akmods caching, image signing, and unit tests
+> throughout.
 
 ## Install
 
