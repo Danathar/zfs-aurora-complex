@@ -1,6 +1,7 @@
 """
 Script: tests/test_workflow_build_container.py
-What: Guards how the privileged akmods build container is selected in workflows.
+What: Guards how the privileged akmods build container is selected, and that automated
+branch runs can neither sign nor republish shared state.
 Doing: Reads the workflow files as text and asserts no run-time override exists and that
 every hardcoded container literal matches the checked-in default.
 Why: That container runs --privileged, as root, with `/` bind-mounted and a package-write
@@ -97,6 +98,52 @@ class BuildContainerSelectionTests(unittest.TestCase):
                     f"{name} runs {image}, but ci/defaults.json says {expected}. "
                     "These must stay identical.",
                 )
+
+
+class BotActorRestrictionTests(unittest.TestCase):
+    """
+    Automated (bot) branch runs must not reach anything production consumes.
+
+    Renovate holds write access, so a bot-authored push runs build-branch.yml.
+    Two separate things have to stay true: such a run must not republish the
+    shared akmods cache, and must not sign anything with this repo's key.
+    These were not both true -- the cache-signing job shipped without the guard
+    the OS-image publish step already had.
+    """
+
+    def _branch_workflow(self) -> str:
+        return (WORKFLOW_DIR / "build-branch.yml").read_text(encoding="utf-8")
+
+    def test_branch_cache_refresh_is_denied_for_bot_actors(self) -> None:
+        text = self._branch_workflow()
+        self.assertIn(
+            "allow_cache_rebuild: ${{ steps.registry.outputs.actor_is_bot != 'true' }}",
+            text,
+            "build-branch.yml must deny shared akmods cache republishing to bot actors; "
+            "otherwise an automated run can mutate the cache production later consumes.",
+        )
+
+    def test_branch_cache_signing_is_denied_for_bot_actors(self) -> None:
+        text = self._branch_workflow()
+        sign_job = text.split("sign-branch-akmods-cache:", 1)
+        self.assertEqual(len(sign_job), 2, "sign-branch-akmods-cache job not found")
+        # Only look at that job's own block, up to the next top-level job key.
+        block = re.split(r"\n  [a-z][a-z0-9-]*:\n", sign_job[1])[0]
+        self.assertIn(
+            "actor_is_bot != 'true'",
+            block,
+            "sign-branch-akmods-cache must not run for bot actors; a bot-authored branch "
+            "run hitting a stale cache would otherwise sign it with the production key.",
+        )
+
+    def test_prepare_action_supports_denying_cache_rebuild(self) -> None:
+        action = (
+            REPO_ROOT / ".github" / "actions" / "prepare-main-akmods" / "action.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("allow_cache_rebuild:", action)
+        # The guard must fail the run rather than silently skipping the rebuild,
+        # which would leave the caller believing a usable cache exists.
+        self.assertIn("Refuse to refresh the shared akmods cache", action)
 
 
 if __name__ == "__main__":

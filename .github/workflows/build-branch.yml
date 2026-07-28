@@ -66,6 +66,7 @@ jobs:
       akmods_image_pinned: ${{ steps.prepare.outputs.akmods_image_pinned }}
       akmods_image_digest: ${{ steps.prepare.outputs.akmods_image_digest }}
       rebuilt: ${{ steps.prepare.outputs.rebuilt }}
+      actor_is_bot: ${{ steps.registry.outputs.actor_is_bot }}
     permissions:
       contents: read
       packages: write
@@ -96,9 +97,16 @@ jobs:
         name: Load repository defaults
         uses: ./.github/actions/load-ci-defaults
 
-      # Branch builds should reuse the shared Aurora cache when possible, but
-      # they also need to be able to seed that cache the first time a new base
-      # kernel stream appears on the branch.
+      # Needed here (not just in the image job) so the cache-refresh permission
+      # below can depend on whether an automation account triggered this run.
+      - id: registry
+        name: Prepare registry context
+        uses: ./.github/actions/prepare-registry-context
+
+      # Human-authored branch builds reuse the shared Aurora cache when
+      # possible, and may seed it the first time a new base kernel stream
+      # appears. Automated (bot) branch runs may only reuse it -- see
+      # allow_cache_rebuild below.
       - name: Resolve inputs, verify cache state, and refresh shared akmods when required
         id: prepare
         uses: ./.github/actions/prepare-main-akmods
@@ -109,6 +117,10 @@ jobs:
           akmods_repo: ${{ steps.defaults.outputs.akmods_repo }}
           akmods_upstream_repo: ${{ steps.defaults.outputs.akmods_upstream_repo }}
           rebuild_akmods: "false"
+          # Renovate and other automation branches validate that a branch still
+          # builds; they must not republish the shared cache that production
+          # consumes.
+          allow_cache_rebuild: ${{ steps.registry.outputs.actor_is_bot != 'true' }}
           registry_actor: ${{ github.actor }}
           registry_token: ${{ github.token }}
 
@@ -119,7 +131,14 @@ jobs:
     # run actually rebuilt and republished the shared cache tag. Branch
     # builds can rebuild that same shared tag too, so this closes the same
     # gap here that it does on main.
-    if: needs.build-branch-akmods.outputs.rebuilt == 'true'
+    # Never sign from an automation account. This mirrors the existing guard on
+    # "Push and sign branch image" below; without it a bot-authored branch run
+    # that happened to hit a stale cache would sign the shared production cache
+    # with this repo's key. allow_cache_rebuild above means such a run now fails
+    # before publishing anything, so this is the second of two layers.
+    if: >-
+      needs.build-branch-akmods.outputs.rebuilt == 'true'
+      && needs.build-branch-akmods.outputs.actor_is_bot != 'true'
     runs-on: ubuntu-24.04
     env:
       HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
