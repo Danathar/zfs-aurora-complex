@@ -93,7 +93,18 @@ human can boot the candidate in a VM if they judge it warranted.
   is tracking a moving kernel, that is a real behavioural change — `:latest` would lag until
   approved. Worth being deliberate about; it may be the correct posture anyway given the
   maintainer daily-drives the result.
-- **Note:** this is a repository setting, not a code change. An agent cannot apply it.
+- **This needs BOTH a setting and a one-line workflow change.** An earlier draft of this
+  document said it was "a repository setting, not a code change". That was wrong. Verified
+  against `build.yml`: no job declares an `environment:` key, so creating an environment in
+  repository settings gates nothing on its own -- scheduled runs would keep moving `:latest`
+  with no approval, while the settings screen made it look protected. Tier 1 requires:
+  1. create the environment with required reviewers (settings; owner only), **and**
+  2. add `environment: <name>` to the `promote-stable` job in `.github/workflows/build.yml`
+     (a normal pull request).
+
+  Adding the key does not interfere with that job's existing `if:` expression; the environment
+  gate is evaluated in addition to it. `production-boundary-proposal.md` section 2 already
+  states this correctly for the signing jobs -- the same rule applies here.
 - **Do not enable "Prevent self-review" on that environment.** It is optional and off by
   default. In a solo-maintainer repository, enabling it means the only reviewer is forbidden
   from approving, which blocks promotion entirely with no way through except changing the
