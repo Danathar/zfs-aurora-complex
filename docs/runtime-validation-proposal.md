@@ -1,8 +1,47 @@
 # Proposal: Runtime ZFS Validation Before Unattended Promotion
 
-**Status: proposal, not adopted.** Nothing here has been implemented. This is the last item
-from the 2026-07-28 production-readiness review, and the one that actually gates the claim
-"safe for unattended promotion to a machine with pools attached."
+**Status: considered and DECLINED by the maintainer, 2026-07-28.** Recorded so it is not
+re-raised without new information. See "Decision" immediately below before reading the rest;
+the analysis is kept because the reasoning and the one carve-out still matter.
+
+## Decision (2026-07-28)
+
+**Not adopting any tier. Rollback is the accepted mitigation.**
+
+Maintainer's reasoning: this is an image-based OS, the previous deployment is retained, and a
+bad image can simply be rolled back. That reasoning is sound for every routine failure this
+would have caught -- image will not boot, module will not load, userspace and kmod versions
+disagree. All of those fail loudly and reverse cleanly. Building a QEMU boot harness to catch
+failures that rollback already handles would be effort aimed at the wrong risk.
+
+**The one carve-out, and why it is already covered.** Rollback does *not* save you when a newer
+OpenZFS *line* (2.4 -> 2.5, not 2.4.3 -> 2.4.4) activates new on-disk pool feature flags: the
+older image can then no longer import the pool, so you roll back into a system that boots
+perfectly and cannot read your data. Patch bumps inside a line do not carry this risk.
+
+That case is already gated: `renovate.json` sets `automerge: false` for `openzfs/zfs`
+specifically because "once those are activated on a pool the previous image can no longer
+import it -- which would break this repo's rollback-to-previous-image recovery path." A line
+bump can only arrive as a pull request someone deliberately merges.
+
+**What follows from relying on rollback:**
+
+- treat an OpenZFS *line* bump PR differently from every other Renovate PR -- it is the one
+  where "I will just roll back" stops being true
+- rollback is load-bearing now, so confirm `bootc rollback` actually works on the target machine
+  once, rather than discovering otherwise during an incident
+
+**Reopen this only if** the repo starts publishing unattended to machines whose owners cannot
+roll back, or if ZFS line changes stop being a deliberate, reviewed decision.
+
+---
+
+The original analysis follows.
+
+## Original framing (superseded by the decision above)
+
+This was the last item from the 2026-07-28 production-readiness review, and the one that would
+gate the claim "safe for unattended promotion to a machine with pools attached."
 
 ## The gap, stated precisely
 
