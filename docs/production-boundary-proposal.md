@@ -38,13 +38,17 @@ access, not from a fork. The realistic threats this closes are a compromised per
 token, a compromised collaborator account, or a compromised bot/automation integration that has
 write access (Renovate already has it, for example) -- not a random GitHub user opening a PR.
 
-### A note on Task E (already in flight, PR #44)
+### A note on cache signing (PR #44, now merged)
 
-The `sign-akmods-cache` / `sign-branch-akmods-cache` jobs added in PR #44 pass `SIGNING_SECRET`
-to branch-push workflows too, for a real reason (an unsigned branch-rebuilt cache is a cache
-nothing can ever trust on reuse). This is not new in kind -- `build-branch.yml`'s existing
-"Push and sign branch image" step already does the same for human-authored branches -- but it
-is a second instance of it. This proposal accounts for both; see "What breaks" below.
+The `sign-akmods-cache` / `sign-branch-akmods-cache` jobs pass `SIGNING_SECRET` to branch-push
+workflows too, for a real reason (an unsigned branch-rebuilt cache is a cache nothing can ever
+trust on reuse). This is not new in kind -- `build-branch.yml`'s existing "Push and sign branch
+image" step already did the same for human-authored branches -- but it is a second instance of
+it. This proposal accounts for both; see "What breaks" below.
+
+This widens rather than narrows the exposure described above, and it is now live: a branch run
+signed the shared production cache on 2026-07-28. That is the design working as intended, and
+it is precisely why this proposal matters more after #44 than before it.
 
 ## Proposed changes
 
@@ -173,10 +177,69 @@ adds complexity for no real benefit here. The status-check requirement is what a
 it stops an accidental or malicious direct push from skipping CI, which a required-reviewer
 count does not add much to in a one-maintainer repo.
 
-Do not enable "include administrators" unless the owner specifically wants the rule to bind
-themselves too, including in an emergency. Recommended: leave administrators exempt initially, so
-a genuine hotfix is never blocked by the owner's own rule; revisit later if that exemption ever
-gets used in a way that feels wrong in hindsight.
+**Do enable "include administrators".** This reverses an earlier recommendation in this
+document, which said to leave administrators exempt so a hotfix is never blocked. That advice
+was wrong for this repository's actual threat model. The threat here is not the owner making a
+hurried mistake, it is a **compromised credential** -- and in a solo-maintainer repo the owner's
+own credential is the single most valuable one to steal. An admin exemption means the rule
+protects against everything except the case worth protecting against. The hotfix concern is real
+but cheap to handle: a ruleset can be disabled from Settings in seconds (see "Rollback"), which
+is a deliberate, logged act rather than a standing hole.
+
+## 5. The privileged build-container path (closed in PR #48, recorded here)
+
+An external audit found a path this document originally missed, and it is worth recording
+because it shows the limit of what an environment restriction can do.
+
+`build.yml` and `build-branch.yml` accepted a free-text `workflow_dispatch` input naming the
+image for the akmods job -- a job running `--privileged`, as root, with `/` bind-mounted, and a
+package-write token. Anyone able to dispatch could run arbitrary code there **against the real
+`main` ref**, publish a cache that later trusted jobs sign and build from, and reach `:latest`.
+Because `install_zfs_from_akmods_cache.py` installs every RPM in the cache that is not
+`.src`/`-debug`/`-devel`/`-test`, with no package-name allowlist, that meant arbitrary package
+installation into the published image.
+
+**A `main`-only environment would not have closed this**, because a dispatch against `main`
+satisfies the branch restriction. Nor could a validation step: a job's `container:` is resolved
+and started before any step runs, so a guard would execute inside the container it was meant to
+gate. PR #48 removed the input entirely; the build container is now only changeable by a
+reviewed edit to `ci/defaults.json` plus the workflow literals, with a test enforcing that they
+stay identical.
+
+The lesson for the rest of this proposal: **branch-scoping the secret is necessary but not
+sufficient.** Anything that lets a dispatcher choose what *code runs* in a trusted position
+bypasses it. Worth re-checking any future workflow input against that question.
+
+## 6. Repository security settings (separate from the above, all owner-applied)
+
+Verified disabled on 2026-07-28:
+
+| Setting | State | Suggested |
+|---|---|---|
+| Dependabot alerts | disabled (`/dependabot/alerts` → 403) | enable |
+| Dependabot security updates | disabled | enable |
+| Automated security fixes | `false` | enable |
+| Code scanning | no analysis | consider; see caveat |
+| Actions policy | `allowed_actions: all` | consider restricting |
+| Secret scanning + push protection | **enabled**, 0 alerts | keep |
+
+Notes:
+
+- **Dependabot alerts are worth enabling even though Renovate handles updates.** They are
+  different things: Renovate opens version-bump PRs, alerts tell you a dependency has a
+  published advisory. Enabling alerts does not conflict with Renovate and does not create
+  competing PRs unless security *updates* are also enabled.
+- **Code scanning is a judgement call, not an obvious win.** This is a small Python CI-tooling
+  repo with no network-facing service; CodeQL's Python rules would mostly find nothing, and a
+  new workflow has real maintenance cost. Worth it mainly if you want the GitHub Security tab
+  populated. Not recommended as urgent.
+- **Restricting `allowed_actions`** to "selected actions" would let you require SHA pinning
+  repository-wide. This repo already SHA-pins everything by convention, so the setting mostly
+  guards against a future lapse. Low cost, low urgency.
+- No SBOM, container vulnerability scan, or provenance attestation exists. Of those, a
+  vulnerability scan of the published image is the one with a real argument behind it, since
+  this image is a daily driver -- but it is a new workflow with ongoing noise, so it belongs in
+  a deliberate decision rather than being bundled here.
 
 ## Rollback
 
@@ -209,6 +272,62 @@ Nothing here requires re-keying, re-signing existing images, or touching `cosign
 6. Only after 1-5 are settled and working: add the `main` ruleset. Protecting `main` first, before
    the key is actually isolated, protects nothing that matters yet -- the branch bypass would
    still be wide open.
+
+## Lockout safety
+
+The maintainer's stated priority is not getting locked out of their own repository. Nothing
+proposed here can do that permanently, but two things can *stall* work and one would be a hard
+stop. Worth reading before touching any setting.
+
+### The escape hatch
+
+A ruleset can be set to **Disabled** without deleting it (Settings -> Rules -> Rulesets). Every
+ruleset rule type governs refs and content -- pushes, deletions, required checks, linear history,
+signatures -- and none of them govern who may administer repository settings. So a ruleset cannot
+revoke the ability to turn that ruleset off.
+
+*Caveat, stated plainly:* GitHub's ruleset documentation describes the disable/delete mechanics
+but does not spell out the permission model, so that last sentence is inference from the rule
+taxonomy rather than a quoted guarantee. Confirm it once by creating a trivial ruleset and
+checking that Settings -> Rules is still reachable, before relying on it under pressure.
+
+### The three real failure modes
+
+1. **A required status check that never runs. This is the only true lockout.** A PR that cannot
+   produce a required check can never merge. This is not hypothetical: requiring
+   `Build PR Image (No Push)` would have made every documentation-only PR permanently
+   unmergeable, because `build-pr.yml` skips `docs/**` and `**/*.md`. That is why section 4
+   requires only **Python Unit Tests**. Residual risk: if `test.yml`'s job name ever changes,
+   the required check stops appearing and every PR stalls. Symptom to recognise -- PRs blocked
+   on a check that is not merely pending but absent. Fix by disabling the ruleset.
+2. **"Prevent self-review" on an environment. Do not enable it.** It is an optional setting and
+   is off by default. Left off, the maintainer can approve their own runs, which is what makes
+   the required-reviewer gate in `runtime-validation-proposal.md` usable at all. Enabled in a
+   solo-maintainer repo it is a hard stop: the only reviewer is forbidden from reviewing.
+3. **Deleting the repository-level `SIGNING_SECRET` too early.** This breaks signing, not
+   access. The order of operations below keeps both copies until a real run proves the
+   environment-scoped one works.
+
+### On "include administrators"
+
+Section 4 recommends enabling it. That does **not** create a lockout, because the escape hatch
+above is a settings change, not a push. What it costs is those extra clicks during a hotfix.
+
+The alternative, if even that is unwanted, is adding the owner as a **bypass actor**: pull
+requests stay required by default and bypasses are recorded, but the owner's credential can push
+directly. That is strictly weaker against the compromised-credential case, which is the entire
+reason for the rule. It is a real trade, not a free option -- choose it deliberately if at all.
+
+### Rollout order that keeps every step reversible
+
+Verify each step before adding the next, so a problem is always attributable to the last change:
+
+1. Create the ruleset **without** required status checks. Confirm a trivial PR still merges.
+2. Add **Python Unit Tests** as a required check. Open a **docs-only** PR and confirm it still
+   merges -- this is the exact case that would break under a wrongly chosen required check.
+3. Create the environment. **Leave "Prevent self-review" unchecked.**
+4. Keep both `SIGNING_SECRET` copies until a real `main` run signs successfully.
+5. Add required reviewers last, once everything above is proven.
 
 ## Why this is a proposal, not a PR that changes settings
 
