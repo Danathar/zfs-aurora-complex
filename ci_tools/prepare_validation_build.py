@@ -45,10 +45,28 @@ def main() -> None:
     if not status.reusable:
         # Branch/PR paths intentionally do not rebuild the shared akmods tag;
         # the repair action is a main-workflow rebuild_akmods run.
+        #
+        # Say which of the two checks actually rejected the cache. Reporting
+        # the kernel unconditionally is misleading when the content was fine
+        # and only the signature failed: `missing_release` is empty in that
+        # case, so the message read "does not cover the supported primary
+        # kernel <blank>" and pointed at the wrong problem entirely.
+        if not status.image_exists:
+            reason = "is missing from the registry"
+        elif status.missing_release:
+            reason = (
+                f"does not cover the supported primary kernel {status.missing_release} "
+                f"at ZFS version {inputs.zfs_version}"
+            )
+        else:
+            reason = (
+                f"({status.source_image_pinned}) has the required kmod-zfs but its cosign "
+                "signature could not be verified against cosign.pub. Expected the first "
+                "time this check runs after cache signing was introduced, because the "
+                "already-published cache predates it"
+            )
         raise CiToolError(
-            f"Shared akmods source tag {status.source_image} is missing or does not "
-            f"cover the supported primary kernel {status.missing_release} at "
-            f"ZFS version {inputs.zfs_version}. "
+            f"Shared akmods source tag {status.source_image} {reason}. "
             "Run main workflow (Build And Promote Main Image) with rebuild_akmods=true, "
             "then rerun this workflow."
         )

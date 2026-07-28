@@ -1,8 +1,10 @@
 """
 Script: ci_tools/check_akmods_cache.py
 What: Checks whether the shared akmods cache can be reused for the current primary base-image kernel.
-Doing: Pins and pulls the cache image, checks for a matching `kmod-zfs` RPM, then writes cache state outputs.
-Why: Skip rebuild when safe, but rebuild when the required primary-kernel module set is missing or older than the current target kernel.
+Doing: Pins and pulls the cache image, checks for a matching `kmod-zfs` RPM and a valid
+cosign signature, then writes cache state outputs.
+Why: Skip rebuild when safe, but rebuild when the required primary-kernel module set is
+missing, older than the current target kernel, or not signed by this repo's own key.
 Goal: Control rebuild decisions in main and validation workflows.
 """
 
@@ -13,7 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_tools.common import (
+    REPO_ROOT,
     CiToolError,
+    cosign_verify,
     normalize_owner,
     optional_env,
     require_env,
@@ -34,7 +38,9 @@ class AkmodsCacheStatus:
     `missing_release` is the fail-closed kernel not covered by that image at
     the required exact ZFS version, and `required_zfs_version` records which
     version that was so a rebuild reason can say why the cache was rejected.
-    A reusable cache must satisfy both conditions.
+    `signature_verified` is only meaningful once `missing_release` is empty:
+    there is no point checking a signature on an image that does not even
+    have the right kmod-zfs RPM. A reusable cache must satisfy all three.
     """
 
     source_image: str
@@ -42,13 +48,30 @@ class AkmodsCacheStatus:
     source_image_pinned: str = ""
     missing_release: str = ""
     required_zfs_version: str = ""
+    signature_verified: bool = False
     inspection_method: str = "unpacked-image"
 
     @property
-    def reusable(self) -> bool:
-        """True only when the cache exists and covers the required kernel."""
+    def content_matches(self) -> bool:
+        """
+        True when the cache holds the right kmod-zfs, regardless of signature.
+
+        Kept separate from `reusable` because the two questions are asked at
+        different points. Reuse asks "may I trust this cache someone else
+        built?", which requires a signature. The post-rebuild verification asks
+        "did the build produce the ZFS version I resolved?", which cannot
+        require one: that check runs inside the akmods job, while signing
+        happens in a later, separate job, so a freshly rebuilt cache is always
+        still unsigned at that moment.
+        """
 
         return self.image_exists and not self.missing_release
+
+    @property
+    def reusable(self) -> bool:
+        """True only when the cache exists, covers the required kernel, and is signed."""
+
+        return self.content_matches and self.signature_verified
 
 
 def _has_kernel_matching_rpm(root_dir: Path, kernel_release: str, zfs_version: str) -> bool:
@@ -78,6 +101,7 @@ def inspect_akmods_cache(
     fedora_version: str,
     kernel_release: str,
     zfs_version: str,
+    verify_signature: bool = True,
 ) -> AkmodsCacheStatus:
     """
     Inspect one shared akmods cache image and report whether it is reusable.
@@ -114,14 +138,44 @@ def inspect_akmods_cache(
             raise CiToolError(str(exc)) from exc
 
         has_match = _has_kernel_matching_rpm(root, kernel_release, zfs_version)
-        return AkmodsCacheStatus(
-            source_image=source_image,
-            image_exists=True,
-            source_image_pinned=source_image_pinned,
-            missing_release="" if has_match else kernel_release,
-            required_zfs_version=zfs_version,
-            inspection_method="unpacked-image",
-        )
+        if not has_match:
+            return AkmodsCacheStatus(
+                source_image=source_image,
+                image_exists=True,
+                source_image_pinned=source_image_pinned,
+                missing_release=kernel_release,
+                required_zfs_version=zfs_version,
+                inspection_method="unpacked-image",
+            )
+
+    # Only verify the signature once the RPM content has already been
+    # confirmed correct -- no point checking who signed a cache that does not
+    # even have the RPM this run needs. This cache is a real supply-chain
+    # input (branch workflows can rebuild and republish the same shared tag),
+    # so a reused cache must be signed by this repo's own key, not just
+    # contain a filename that happens to match.
+    #
+    # Callers verifying a cache this same run just rebuilt pass
+    # verify_signature=False: signing runs in a later job, so the image is
+    # legitimately unsigned at that point and a cosign call would be a
+    # guaranteed failure against an image nobody has signed yet.
+    signature_verified = False
+    if verify_signature:
+        signature_verified = True
+        try:
+            cosign_verify(source_image_pinned, key_path=str(REPO_ROOT / "cosign.pub"))
+        except CiToolError:
+            signature_verified = False
+
+    return AkmodsCacheStatus(
+        source_image=source_image,
+        image_exists=True,
+        source_image_pinned=source_image_pinned,
+        missing_release="",
+        required_zfs_version=zfs_version,
+        signature_verified=signature_verified,
+        inspection_method="unpacked-image",
+    )
 
 
 def main() -> None:
@@ -143,9 +197,10 @@ def main() -> None:
         fedora_version=fedora_version,
         kernel_release=kernel_release,
         zfs_version=zfs_version,
+        verify_signature=not require_match,
     )
 
-    if require_match and not status.reusable:
+    if require_match and not status.content_matches:
         raise CiToolError(
             f"Shared akmods cache {status.source_image} does not provide a kmod-zfs for "
             f"primary kernel {kernel_release} at ZFS version {zfs_version} even after a "
@@ -169,19 +224,29 @@ def main() -> None:
             }
         )
         print(
-            f"Found matching {status.source_image} kmods for primary kernel {kernel_release} "
-            f"at ZFS version {zfs_version}; "
+            f"Found matching, signed {status.source_image} kmods for primary kernel "
+            f"{kernel_release} at ZFS version {zfs_version}; "
             f"akmods rebuild can be skipped. Inspection method: {status.inspection_method}."
         )
         print(f"Checked akmods cache digest: {status.source_image_pinned}")
         return
 
     write_github_outputs({"exists": "false"})
-    print(
-        f"Cached {status.source_image} is present but has no kmod-zfs for primary kernel "
-        f"{status.missing_release} at ZFS version {zfs_version}; "
-        "akmods rebuild is required."
-    )
+    if status.missing_release:
+        print(
+            f"Cached {status.source_image} is present but has no kmod-zfs for primary kernel "
+            f"{status.missing_release} at ZFS version {zfs_version}; "
+            "akmods rebuild is required."
+        )
+    else:
+        print(
+            f"Cached {status.source_image} ({status.source_image_pinned}) has a matching "
+            f"kmod-zfs for primary kernel {kernel_release} at ZFS version {zfs_version}, "
+            "but its cosign signature could not be verified against cosign.pub; "
+            "akmods rebuild is required. This is expected the first time this check runs "
+            "after signing was added, or if a cache was published before this repo's key "
+            "was configured for akmods signing."
+        )
 
 
 if __name__ == "__main__":

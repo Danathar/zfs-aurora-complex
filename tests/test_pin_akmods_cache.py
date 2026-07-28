@@ -32,11 +32,14 @@ class PinAkmodsCacheTests(unittest.TestCase):
             "ci_tools.pin_akmods_cache.skopeo_inspect_digest",
             return_value="sha256:abc123",
         ) as inspect_digest:
-            image_pinned = pin_akmods_cache_image(
+            image_pinned, image_digest = pin_akmods_cache_image(
                 "ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
             )
 
         self.assertEqual(image_pinned, "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123")
+        # The bare digest is returned separately so the signing job can sign
+        # exactly this image instead of re-resolving the shared tag.
+        self.assertEqual(image_digest, "sha256:abc123")
         inspect_digest.assert_called_once_with(
             "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
         )
@@ -62,6 +65,8 @@ class PinAkmodsCacheTests(unittest.TestCase):
         self.assertIn("ghcr.io/danathar/zfs-aurora-complex-akmods:main-43", output)
         self.assertIn("akmods_image_pinned<<", output)
         self.assertIn("ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123", output)
+        # The signing job consumes this one directly as IMAGE_DIGEST.
+        self.assertIn("akmods_image_digest<<", output)
 
 
 if __name__ == "__main__":

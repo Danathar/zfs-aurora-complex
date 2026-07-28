@@ -191,11 +191,12 @@ That action does five things in one place:
 The workflow checks whether the shared cache image already contains a matching
 `kmod-zfs-<kernel_release>-<zfs_version>-...rpm` for the supported primary
 kernel **and** the exact OpenZFS patch version resolved for this run (see
-[`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py)). Matching on the
-minor line alone (for example any `2.4.*`) used to let a cache built for an
-older patch on that line silently satisfy a newer one, so a new OpenZFS patch
-release never actually forced a rebuild as long as the kernel and line stayed
-the same.
+[`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py)), **and** that the
+cache is signed by this repo's own cosign key. Matching on the minor line
+alone (for example any `2.4.*`) used to let a cache built for an older patch
+on that line silently satisfy a newer one, so a new OpenZFS patch release
+never actually forced a rebuild as long as the kernel and line stayed the
+same.
 
 The repo's policy is:
 
@@ -209,6 +210,32 @@ That check now does one direct inspection path:
 1. copy the shared cache image into a local Open Container Initiative (OCI) layout
 2. unpack its filesystem layers
 3. check whether the extracted RPM tree contains a matching `kmod-zfs` package for the supported primary kernel at the exact resolved ZFS version
+4. only once that matches, verify the cache image's cosign signature against
+   the committed `cosign.pub` (see
+   [`ci_tools/check_akmods_cache.py`](../ci_tools/check_akmods_cache.py)'s
+   `cosign_verify` call)
+
+The signature check exists because this cache is a real supply-chain input,
+not just build-time infrastructure: branch workflows also hold `packages:
+write` and can rebuild and republish this same shared tag, so a matching
+filename alone does not prove who produced the content being reused. A cache
+that matches the kernel and ZFS version but fails signature verification is
+treated the same as a cache miss -- rebuild, then sign the result (see "5.
+Promotion And Signing" for the general signing model; the akmods cache is
+signed by a dedicated `sign-akmods-cache` job in `build.yml`/`build-branch.yml`
+that runs only when that run actually rebuilt the cache, reusing
+`ci_tools/sign_image.py` unchanged).
+
+One environment detail worth knowing: this signature check runs inside the
+same `ghcr.io/ublue-os/devcontainer` container as the rest of the akmods job,
+which ships its own preinstalled cosign (currently v2.4.1) rather than the
+v3.1.2 this repo installs elsewhere via `install-signing-tools`. The
+`cosign_verify` helper deliberately does not pass `--new-bundle-format=false`
+(a flag v2.4.1 does not recognize at all) because both versions verify this
+repo's legacy-format signatures correctly without it -- verified directly
+against a real signed image before relying on it. `build-pr.yml`'s validation
+job does not run inside that container, so it installs cosign explicitly via
+`install-signing-tools` instead.
 
 Even when the shared cache is reusable, the workflows still clone the resolved
 `Danathar/akmods` commit once per run.
