@@ -272,12 +272,21 @@ Important design change:
   fork commit itself
 - that keeps the runtime clone step boring: clone, check out the exact commit, verify the commit SHA, stop
 
-Plain-language summary of the pin:
+Plain-language summary of how the akmods source is selected:
 
 1. the source repository is still the configured fork, `Danathar/akmods`
-2. this repo records one exact commit from that fork in `ci/defaults.json`
-3. the GitHub Actions workflow run clones that one commit into `/tmp/akmods` for the current run only
-4. pushing new commits to that fork does nothing here until the pin is updated
+2. `ci/defaults.json` *can* pin one exact commit via `AKMODS_UPSTREAM_REF`, but that
+   field is **empty by default**, so the normal mode is floating: `AKMODS_UPSTREAM_TRACK`
+   (default `main`) is resolved with `git ls-remote` at the start of every run
+3. whichever commit that resolves to is then treated as fixed for the rest of the run —
+   the workflow clones exactly that SHA into `/tmp/akmods` and verifies it
+4. so pushing new commits to that fork **does** affect this repo without any edit here.
+   The next run resolves the new SHA immediately; that new fork code only builds the
+   shipped modules at the next akmods cache rebuild, since a reused cache is not rebuilt
+
+See [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md) for the full
+resolution cascade, when to set a temporary pin, and the provenance caveat that follows
+from point 4.
 
 ### 3. Native Final Image Build
 

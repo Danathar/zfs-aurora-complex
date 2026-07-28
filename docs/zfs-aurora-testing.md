@@ -66,37 +66,51 @@ Maintenance note:
 
 ### 2. Validate Existing Shared Akmods Cache
 
-Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image already contains a matching `kmod-zfs-<kernel_release>` RPM for the supported primary kernel.
+Before rebuilding akmods, the GitHub Actions workflow run checks whether the shared cache image can be reused.
 
 That check now uses one direct inspection path:
 
 1. copy the shared cache image into a local Open Container Initiative (OCI) layout
 2. unpack the filesystem layers from that local copy
-3. inspect the extracted RPM filenames directly
+3. inspect the extracted RPM filenames directly, requiring a `kmod-zfs` RPM matching
+   both the supported primary kernel **and** the exact OpenZFS patch version this run
+   resolved — matching the minor line alone would let an older patch satisfy a newer one
+4. only once that content matches, verify the cache image's cosign signature against the
+   committed `cosign.pub`
 
-If the supported kernel is missing, rebuild is forced.
+Any of those failing forces a rebuild. The signature check means a cache that looks
+correct but was not produced by this repo's own pipeline is treated as a cache miss
+rather than trusted.
 
-Separate from cache reuse, every workflow path also clones the pinned
+Separate from cache reuse, every workflow path also clones the resolved
 `Danathar/akmods` commit once.
 
 That check exists because:
 
-1. an out-of-date shared cache can hide a broken pin for a while
-2. branch and pull request validation should still prove that the configured akmods commit SHA is
+1. an out-of-date shared cache can hide a broken source ref for a while
+2. branch and pull request validation should still prove that the resolved akmods commit SHA is
    fetchable, even when they do not end up rebuilding the cache
 
-What "pinned" means here:
+What that resolved commit actually is:
 
 1. this repo uses the configured fork, not upstream directly
-2. it uses one exact commit from that fork, not the moving `main` branch tip
+2. it resolves **one exact commit per run**, and clones only that SHA — but by default that
+   commit is discovered by resolving the moving `main` tip at the start of each run, not read
+   from a checked-in pin. `AKMODS_UPSTREAM_REF` in `ci/defaults.json` exists to freeze it and
+   is empty by default
 3. the GitHub Actions workflow run clones that exact commit into `/tmp/akmods` for the current run only
-4. updating that fork later does not change the build until this repo's pin is updated
+4. so updating that fork **does** change what this repo builds, with no edit here — at the next
+   cache rebuild. A run that reuses the cache does not rebuild the modules, so fork changes
+   reach the image on the next rebuild rather than immediately
+
+See [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md) for the full cascade
+and for why the `akmods-ref` image label is only reliable on a run that rebuilt.
 
 ### 3. Build Shared Akmods Cache When Required
 
 If the cache is missing, out of date, or a manual rebuild is requested, the workflow run:
 
-1. clones the pinned `Danathar/akmods` commit
+1. clones the resolved `Danathar/akmods` commit for this run
 2. points its target output to `zfs-aurora-complex-akmods`
 3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
