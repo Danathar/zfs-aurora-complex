@@ -25,8 +25,24 @@ The floating mode is the self-healing default. A transient upstream mismatch sta
 
 Every build records the resolved commit SHA in two places:
 
-1. the workflow `build-inputs` manifest artifact, so you can trace any run to the SHA it used
-2. an OCI image label `org.zfs-aurora-complex.akmods-ref`, so any published candidate or stable image can be traced back to the exact upstream commit it was built from — even after the tracking ref has moved
+1. the workflow `build-inputs` manifest artifact, so you can trace any run to the SHA it resolved
+2. an OCI image label `org.zfs-aurora-complex.akmods-ref`
+
+> [!WARNING]
+> **`akmods-ref` is only guaranteed accurate on a build that actually rebuilt the shared
+> akmods cache.** Both records above hold the SHA *this run resolved*, which is not
+> necessarily the SHA that produced the ZFS modules in the image.
+>
+> On a cache-reuse build — the common case, since most runs reuse — the cache may have been
+> built days earlier against an older commit while the tracking ref has since moved. The
+> label still reports the freshly resolved SHA, so it can name a commit that never touched
+> the modules being shipped. Do not treat it as proof of module provenance.
+>
+> What *is* always accurate is `org.zfs-aurora-complex.akmods-image`: the digest-pinned ref
+> of the exact cache image the build consumed, verified by
+> [`ci_tools/check_akmods_cache.py`](../ci_tools/check_akmods_cache.py) to contain the
+> required `kmod-zfs` RPM and to carry a valid signature. When tracing what a published
+> image really contains, start from that digest, not from `akmods-ref`.
 
 ## Why A Pin Still Exists At All
 
