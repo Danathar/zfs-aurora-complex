@@ -80,260 +80,49 @@ GitHub Actions workflow: `build.yml`
 >
 > The goal here is not feature maximalism. The goal is a clear build-and-publish flow: one image repository, one shared akmods cache image, direct build arguments, and standard Open Container Initiative (OCI) tooling.
 
-## Changing The Base Image
-
-If you clone this repository and want it to build from a different upstream base image, change these files:
-
-1. [`ci/defaults.json`](./ci/defaults.json)
-   - update `DEFAULT_BASE_IMAGE`
-   - this is the default base image used by the GitHub Actions workflows
-2. [`Containerfile`](./Containerfile)
-   - update the fallback `ARG BASE_IMAGE`
-   - this keeps local `podman build` runs aligned with CI defaults
-3. [`README.md`](./README.md) and any other docs/examples that mention the old base image
-   - update example `BASE_IMAGE` arguments and descriptive text so the docs match the build
-
-If you use workflow replay mode with `use_input_lock=true`, also check [`ci/inputs.lock.json`](./ci/inputs.lock.json). That lock file can pin one exact base image for a specific replayed run even after the normal defaults have changed.
-
-## Licensing Note
-
-ZFS is distributed under the Common Development and Distribution License (CDDL). The Linux kernel is distributed under version 2 of the GNU General Public License (GPLv2). The Software Freedom Law Center, the Free Software Foundation, and the OpenZFS project itself have long-standing disagreements about whether redistributing a binary kernel module built against a Linux kernel satisfies both licenses. This repository produces exactly such a binary: a `kmod-zfs` package compiled against a Fedora kernel, baked into a published container image.
-
-This is not a legal opinion and nothing in this repository is legal advice. Operators running this image, redistributing it, or using it as a basis for a downstream image should read the [OpenZFS FAQ on licensing](https://openzfs.github.io/openzfs-docs/Project%20and%20Community/FAQ.html#licensing) and decide for themselves whether their use falls inside what they are comfortable shipping.
-
-## Safety Model
-
-Stable users should only see tested outputs. Scheduled runs first check
-whether the upstream Aurora base image has advanced, or a newer OpenZFS patch
-is available on the configured minor line, since the last promoted image, and
-skip the rest of the workflow only if neither has changed; push and manual
-runs always build. Once a run
-does build, it resolves and pins its inputs, reuses or rebuilds the shared
-akmods cache, builds and signs a candidate image, and only then promotes that
-candidate digest to an audit tag and `latest`. If candidate fails, `latest`
-does not move. See ["Scheduled-Build Gate"](docs/architecture-overview.md#0-scheduled-build-gate)
-and ["Promotion And Signing"](docs/architecture-overview.md#5-promotion-and-signing) in the
-architecture overview for the full decision tables and promotion ordering.
-
-Published images must be signed, matching the Universal Blue image-template
-model. The repository commits only `cosign.pub`; the matching private key must
-be stored as the GitHub Actions secret `SIGNING_SECRET`. The publish action
-refuses to push an image when that secret is missing.
-
-Initial signing setup:
-
-```bash
-COSIGN_PASSWORD="" cosign generate-key-pair
-gh secret set SIGNING_SECRET < cosign.key
-git add cosign.pub
-git commit -m "Configure image signing key"
-git push
-```
-
-Never commit `cosign.key`. For key rotation and the full signing model, see
-[`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
-
-## Assumptions And Recovery Policy
-
-This repo intentionally follows a simpler support contract:
-
-1. the build must fail if ZFS does not match the primary kernel the image is expected to boot first
-2. the build does not promise ZFS support for older kernels that may also be present inside the same image
-3. if a deployed image turns out to be bad anyway, the recovery path is image rollback to the previous known-good image
-
-That means this repo optimizes for:
-
-1. not publishing a bad new image
-2. keeping rollback to the previous image simple
-3. reducing complexity inside the build pipeline
-
-It does not optimize for:
-
-1. booting an older bundled kernel inside the current image and still expecting ZFS to work there
-
-Operator rule:
-
-1. if a newly deployed image fails, roll back to the previous known-good image
-2. stay on that previous image until this repo successfully publishes a newer image whose primary kernel has matching ZFS support
-3. do not treat "boot an older bundled kernel from the bad current image" as the intended recovery workflow
-
-## What Gets Published
-
-Everything lives in two GitHub Container Registry (GHCR) repositories: the OS
-image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
-`stable-*` audit, and `br-*` branch tags) and the shared akmods cache image
-(`ghcr.io/danathar/zfs-aurora-complex-akmods`). There is no separate
-candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
-repair script to keep in sync. The akmods cache is signed the same way the OS
-image is, and a cache that fails signature verification is treated as a
-rebuild, not reused. For the full tag list and how transient
-`*-unsigned-<run_id>` tags fit into publishing, see
-["Outputs"](docs/architecture-overview.md#outputs) in the architecture overview.
-
-## How Akmods Source Is Chosen
-
-This repository builds from the configured akmods fork
-(`https://github.com/Danathar/akmods.git`). By default it floats on the
-`AKMODS_UPSTREAM_TRACK` ref in [`ci/defaults.json`](./ci/defaults.json)
-(currently `main`), resolved to one exact commit SHA at the start of each
-workflow run — an explicit `AKMODS_UPSTREAM_REF` pin, if set, overrides that
-float. For the full selection order, how to freeze or debug a specific
-commit, and how to clear a temporary pin, see
-[`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md).
-
-## Repository Layout
-
-```text
-Containerfile                         native image build definition
-build_files/build-image.sh            build-time orchestration inside the image
-containerfiles/zfs-akmods/            compose-time ZFS install helper
-shared/                               shared Python helpers copied into CI and image build context
-ci/defaults.json                      checked-in defaults shared by workflows and helpers
-files/scripts/                        image-local helper scripts
-ci_tools/                             workflow helper commands
-.github/actions/                      local composite actions used by the workflows
-.github/workflows/                    GitHub Actions pipelines
-.github/scripts/README.md             workflow step -> command-line interface (CLI) command map
-docs/                                 teaching-style documentation
-```
-
-## Core Workflows
-
-- `.github/workflows/build.yml`
-  - main push/schedule/manual workflow
-  - candidate-first build and promotion
-  - scheduled runs skip when the upstream Aurora base image has not advanced since the last promoted image (see "Safety Model" above)
-- `.github/workflows/build-branch.yml`
-  - branch-tagged test builds
-  - reuse or rebuild the shared akmods cache when the branch targets a new primary kernel
-- `.github/workflows/build-pr.yml`
-  - pull request (PR) validation build
-  - no push and no signing
-- `.github/workflows/test.yml`
-  - Python unit tests and `ruff` lint for all CI tool modules
-  - runs on pull requests and pushes to main
-
-Docs-only changes do not trigger image builds.
-
-## Native Build Flow
-
-At a high level, `Containerfile` starts from `ghcr.io/ublue-os/aurora-dx`,
-`build_files/build-image.sh` installs ZFS RPMs (Red Hat Package Manager
-package files) from the shared akmods cache image and writes signing policy,
-`bootc container lint` validates the result, and the image is then re-layered
-into content-addressed chunks with [Chunkah](https://github.com/coreos/chunkah)
-before it is pushed and signed. The ZFS install step inspects every detected
-kernel, treats only the newest as the supported primary kernel, and installs
-just that kernel's `kmod-zfs` package — older bundled kernels are not treated
-as supported ZFS targets, matching the recovery policy above. For the full
-build steps, the Fedora-version detection details, and the Chunkah rechunk
-mechanics, see ["Input Resolution"](docs/architecture-overview.md#1-input-resolution) through
-["Content-Based Layering With Chunkah"](docs/architecture-overview.md#content-based-layering-with-chunkah) in the
-architecture overview. The install logic itself lives in
-[`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](./containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py).
-
-## Local Build
-
-CI uses [`.github/actions/build-native-image`](./.github/actions/build-native-image/action.yml), which calls `buildah build` directly with the same flags shown below. For local iteration you can invoke `podman build` directly against the repository root. `AKMODS_IMAGE` is the only build argument that is genuinely required outside CI, because the shared akmods cache image is the source of the `kmod-zfs` RPM for the primary kernel.
-
-```bash
-podman build \
-    --build-arg BASE_IMAGE=ghcr.io/ublue-os/aurora-dx:stable \
-    --build-arg AKMODS_IMAGE=ghcr.io/danathar/zfs-aurora-complex-akmods:main-44 \
-    -t zfs-aurora-complex:local \
-    .
-```
-
-Notes:
-
-1. the `AKMODS_IMAGE` tag must match the Fedora major version of the chosen base image; inspect the base image (`skopeo inspect docker://<base>`) to confirm which `main-<fedora>` tag to reference. CI uses the digest-pinned form of that same cache image.
-2. `AKMODS_IMAGE` can be omitted for offline experiments; the install helper falls back to `AKMODS_IMAGE_TEMPLATE` and auto-detects the Fedora version from the base image, but that fallback still requires network access to pull the cache image
-3. local builds do not go through the candidate-before-promote flow or signing; the resulting image tag is ephemeral and is not trusted by any `bootc` policy
-
-For reproducing a specific published image, prefer the CI workflow with `use_input_lock=true` (see [`ci/inputs.lock.json`](./ci/inputs.lock.json)) rather than a local `podman build`. The lock file pins the base image ref, the build container ref, and the OpenZFS version (line plus, if set, the exact patch) from a prior run. It deliberately does **not** pin the akmods fork commit — that comes from `ci/defaults.json` so there is one source of truth — and it does not record the kernel set, which is re-derived from the pinned base image. Replay is therefore close to, but not the same as, a bit-for-bit reproduction.
-
-## Install And Rebase
+## Install
 
 > [!WARNING]
-> This is a single-maintainer image stream. It is production for its author —
-> daily-driven on real hardware with real ZFS pools — but that means the bar it
-> has cleared is "safe enough for one person's own machines," not a vendor
-> support commitment to anyone else. The pipeline builds, signs, and promotes
-> automatically (see "Safety Model" above), but nothing in it currently boots
-> the image or imports a pool before `:latest` moves. Switching a machine you
-> depend on onto this image means trusting that bar, not a guarantee.
-
-Fresh stock Aurora DX can switch to the published image after the GitHub workflow
-has produced a signed `latest` tag:
+> This is a single-maintainer image stream. It is production for its author --
+> daily-driven on real hardware with real ZFS pools -- but the bar it has cleared
+> is "safe enough for one person's own machines", not a vendor support
+> commitment. The pipeline builds, signs, and promotes automatically, but nothing
+> in it boots the image or imports a pool before `:latest` moves. Switching a
+> machine you depend on onto this image means trusting that bar, not a guarantee.
 
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
 sudo systemctl reboot
 ```
 
-That `--enforce-container-sigpolicy` flag is intentional. It makes the first
-custom-image deployment use the in-image container signature policy instead of
-recording the origin as an unverified registry image.
+`--enforce-container-sigpolicy` is required on the first switch, not optional --
+it records the deployment as policy-verified instead of as an unverified
+registry image. Afterwards, `sudo bootc upgrade` is the normal path.
 
-If a test VM was already switched with plain `bootc switch`, switch it again
-with the command above and reboot before relying on `bootc upgrade`.
+Full steps, post-boot validation commands, and manual signature verification:
+[`docs/install-and-verify.md`](./docs/install-and-verify.md).
 
-Why this image flow stays easier to reason about:
+## Documentation
 
-1. the stable and candidate image tags live in the same repository
-2. after you boot into this image family once, the in-image policy only needs to trust one repository path
-3. there is no dual-repository policy normalization or host repair path to keep in sync
+Start here depending on what you want:
 
-## Quick Validation After Boot
+| I want to... | Read |
+|---|---|
+| run this image on a machine | [`docs/install-and-verify.md`](./docs/install-and-verify.md) |
+| know what this promises, and what to do when a build is bad | [`docs/safety-model.md`](./docs/safety-model.md) |
+| build or fork it myself | [`docs/building-locally.md`](./docs/building-locally.md) |
+| understand the design | [`docs/architecture-overview.md`](./docs/architecture-overview.md) |
+| find my way around the code | [`docs/code-reading-guide.md`](./docs/code-reading-guide.md) |
+| understand image signing and bootc trust | [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md) |
+| fix a broken build | [`docs/upstream-change-response.md`](./docs/upstream-change-response.md) |
+| read the deep design history and validation notes | [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md) |
+| change which akmods commit is built | [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md) |
+| look up a term | [`docs/glossary.md`](./docs/glossary.md) |
+| see the whole documentation map | [`docs/documentation-guide.md`](./docs/documentation-guide.md) |
 
-```bash
-rpm -q kmod-zfs
-modinfo zfs | head
-lsmod | grep '^zfs'
-zpool --version
-zfs --version
-distrobox --version
-brew --version
-```
-
-For virtual machine (VM) testing with a secondary disk:
-
-```bash
-sudo wipefs -a /dev/vdb
-sudo zpool create -f -o ashift=12 -O mountpoint=none testpool /dev/vdb
-sudo zfs create -o mountpoint=/var/mnt/testpool testpool/data
-sudo zpool status
-sudo zfs list
-```
-
-## Signature Verification
-
-```bash
-cosign verify \
-  --key cosign.pub \
-  --new-bundle-format=false \
-  ghcr.io/danathar/zfs-aurora-complex:latest
-```
-
-`--new-bundle-format=false` is required: this repo signs with legacy cosign
-registry attachments so Fedora/Aurora's bootc signature policy path can
-discover them via `use-sigstore-attachments`, which default cosign v3
-verification does not use. For the full signing model, key rotation, and the
-in-image trust policy, read [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md).
-
-## Reading Order
-
-If you want the full technical design and workflow details, read:
-
-1. [`docs/glossary.md`](./docs/glossary.md)
-2. [`docs/documentation-guide.md`](./docs/documentation-guide.md)
-3. [`docs/architecture-overview.md`](./docs/architecture-overview.md)
-4. [`docs/code-reading-guide.md`](./docs/code-reading-guide.md)
-5. [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md)
-6. [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md)
-7. [`docs/upstream-change-response.md`](./docs/upstream-change-response.md)
-8. [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md)
-9. [`.github/scripts/README.md`](./.github/scripts/README.md)
+The CDDL/GPLv2 position on redistributing a binary ZFS module is recorded in
+[`docs/licensing.md`](./docs/licensing.md). It is not legal advice; read it
+before redistributing this image or basing a downstream image on it.
 
 ## References
 

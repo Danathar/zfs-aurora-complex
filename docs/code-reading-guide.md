@@ -3,6 +3,40 @@
 If a term is unfamiliar, check the shared glossary first:
 [`docs/glossary.md`](./glossary.md)
 
+## Repository Layout
+
+```text
+Containerfile                         native image build definition
+build_files/build-image.sh            build-time orchestration inside the image
+containerfiles/zfs-akmods/            compose-time ZFS install helper
+shared/                               shared Python helpers copied into CI and image build context
+ci/defaults.json                      checked-in defaults shared by workflows and helpers
+files/scripts/                        image-local helper scripts
+ci_tools/                             workflow helper commands
+.github/actions/                      local composite actions used by the workflows
+.github/workflows/                    GitHub Actions pipelines
+.github/scripts/README.md             workflow step -> command-line interface (CLI) command map
+docs/                                 teaching-style documentation
+```
+
+## Core Workflows
+
+- `.github/workflows/build.yml`
+  - main push/schedule/manual workflow
+  - candidate-first build and promotion
+  - scheduled runs skip when the upstream Aurora base image has not advanced since the last promoted image (see "Safety Model" above)
+- `.github/workflows/build-branch.yml`
+  - branch-tagged test builds
+  - reuse or rebuild the shared akmods cache when the branch targets a new primary kernel
+- `.github/workflows/build-pr.yml`
+  - pull request (PR) validation build
+  - no push and no signing
+- `.github/workflows/test.yml`
+  - Python unit tests and `ruff` lint for all CI tool modules
+  - runs on pull requests and pushes to main
+
+Docs-only changes do not trigger image builds.
+
 ## Read This Repo In This Order
 
 ### 1. Main workflow
