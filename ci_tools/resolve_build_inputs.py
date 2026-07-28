@@ -327,10 +327,15 @@ def resolve_configured_inputs() -> ConfiguredBuildInputs:
             raise CiToolError("Lock file build_container still contains placeholder value")
         if lock_build_container_ref and build_container_ref != lock_build_container_ref:
             raise CiToolError(
-                "Replay mismatch: build container input "
+                "Replay mismatch: build container "
                 f"({build_container_ref}) does not match lock file "
-                f"({lock_build_container_ref}). Set workflow input "
-                f"build_container_image={lock_build_container_ref} when use_input_lock=true."
+                f"({lock_build_container_ref}). The build container is no longer "
+                "settable per run -- the workflow_dispatch override was removed "
+                "because it selected the image for a privileged job. To replay "
+                "this lock file, set DEFAULT_BUILD_CONTAINER_IMAGE in "
+                f"ci/defaults.json to {lock_build_container_ref} (and the matching "
+                "literal in each workflow's `container:` block) via a reviewed pull "
+                "request, or update the lock file to the current build container."
             )
 
         if not zfs_minor_version:
