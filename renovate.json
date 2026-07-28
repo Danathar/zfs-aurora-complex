@@ -74,7 +74,7 @@
       "matchManagers": ["dockerfile"]
     },
     {
-      "description": "Never automerge an OpenZFS minor-line bump. A new minor line can introduce new on-disk pool feature flags, and once those are activated on a pool the previous image can no longer import it -- which would break this repo's rollback-to-previous-image recovery path. Adopting a new line must stay a deliberate decision.",
+      "description": "Never automerge an OpenZFS minor-line bump. A new minor line can introduce new on-disk pool feature flags, and once those are activated on a pool the previous image can no longer import it -- which would break this repo's rollback-to-previous-image recovery path. Adopting a new line must stay a deliberate decision. NOTE: DEFAULT_ZFS_MINOR_VERSION is currently held at 2.3 on purpose, to match the ZFS line already running on the maintainer's production pools so that switching to this image carries no pool-feature risk and rollback stays safe. Renovate will therefore keep proposing 2.3 -> 2.4. Do not merge that until the maintainer has decided to move the pools to the 2.4 line; see docs/safety-model.md.",
       "automerge": false,
       "matchPackageNames": ["openzfs/zfs"]
     }

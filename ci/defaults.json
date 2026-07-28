@@ -7,5 +7,5 @@
   "DEFAULT_BASE_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
   "STABLE_SIGNAL_IMAGE": "ghcr.io/ublue-os/aurora-dx:stable",
   "DEFAULT_BUILD_CONTAINER_IMAGE": "ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca",
-  "DEFAULT_ZFS_MINOR_VERSION": "2.4"
+  "DEFAULT_ZFS_MINOR_VERSION": "2.3"
 }

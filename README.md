@@ -23,7 +23,7 @@ repository (`ghcr.io/danathar/zfs-aurora-complex`), and one shared akmods cache 
 (`ghcr.io/danathar/zfs-aurora-complex-akmods`).
 
 OpenZFS is not hand-pinned to a patch version. Each build resolves the newest stable release in
-a configured minor line (`ZFS_MINOR_VERSION`, `2.4` by default — see
+a configured minor line (`ZFS_MINOR_VERSION`, `2.3` by default — see
 [`ci/defaults.json`](./ci/defaults.json)) from
 [OpenZFS's own GitHub releases](https://github.com/openzfs/zfs/releases) at build time, and that
 is the version it attempts to build and install.

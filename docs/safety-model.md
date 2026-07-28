@@ -9,6 +9,27 @@ What this repository promises about published images, what it deliberately
 does not promise, and what an operator should do when a published image turns
 out to be bad. Read this before depending on `:latest`.
 
+## ZFS Line Policy
+
+`DEFAULT_ZFS_MINOR_VERSION` in [`ci/defaults.json`](../ci/defaults.json) is currently **2.3**,
+deliberately, even though 2.4 exists and builds fine against the current kernel.
+
+The reason is rollback safety rather than caution about 2.4 itself. The maintainer's production
+pools run the 2.3 line. Publishing an image on 2.4 would mean a machine switching to this image
+crosses a ZFS line boundary, and once any new 2.4 on-disk feature is activated on a pool, the
+previous image can no longer import that pool -- so rollback, which is this repo's entire
+recovery model (see below), would produce a system that boots correctly and cannot read its
+data.
+
+Holding at 2.3 keeps the switch to this image a *single* change: same ZFS as before, so
+rollback is unconditionally safe, and the only thing being tested is the image and pipeline.
+
+Moving to 2.4 is a separate, deliberate decision to be taken later, on its own merits. Renovate
+will keep opening a 2.3 -> 2.4 pull request; it is configured never to automerge it, and it
+should not be merged until the pool-feature consequences are accepted. Both lines currently
+declare the same kernel ceiling (`Linux-Maximum: 7.0`), so staying on 2.3 costs no kernel
+currency today.
+
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
