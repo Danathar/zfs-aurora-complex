@@ -200,15 +200,30 @@ def main() -> None:
         verify_signature=not require_match,
     )
 
-    if require_match and not status.content_matches:
-        raise CiToolError(
-            f"Shared akmods cache {status.source_image} does not provide a kmod-zfs for "
-            f"primary kernel {kernel_release} at ZFS version {zfs_version} even after a "
-            "rebuild. The akmods build resolves its own OpenZFS version independently of "
-            "this repo, so the two can disagree. Refusing to continue: the image would be "
-            f"labelled org.zfs-aurora-complex.zfs-version={zfs_version} while actually "
-            "shipping whatever the cache really contains."
+    if require_match:
+        # Strict mode answers a different question from the reuse decision
+        # below, so it returns here rather than sharing that output path. It
+        # deliberately skipped the signature check (signing runs in a later
+        # job), which leaves `reusable` false -- falling through would print
+        # "signature could not be verified ... akmods rebuild is required"
+        # immediately after a successful rebuild and write exists=false, both
+        # of which are actively misleading to anyone reading the log.
+        if not status.content_matches:
+            raise CiToolError(
+                f"Shared akmods cache {status.source_image} does not provide a kmod-zfs for "
+                f"primary kernel {kernel_release} at ZFS version {zfs_version} even after a "
+                "rebuild. The akmods build resolves its own OpenZFS version independently of "
+                "this repo, so the two can disagree. Refusing to continue: the image would be "
+                f"labelled org.zfs-aurora-complex.zfs-version={zfs_version} while actually "
+                "shipping whatever the cache really contains."
+            )
+        print(
+            f"Verified the rebuilt {status.source_image} ({status.source_image_pinned}) "
+            f"contains kmod-zfs for primary kernel {kernel_release} at ZFS version "
+            f"{zfs_version}, matching the version this image will be labelled with. "
+            "Signature is not checked here; this cache is signed by a later job."
         )
+        return
 
     if not status.image_exists:
         write_github_outputs({"exists": "false"})

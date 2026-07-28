@@ -11,6 +11,8 @@ when the cache cannot be verified as this repo's own signed output.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -404,6 +406,38 @@ class RequireMatchModeTests(unittest.TestCase):
             # It must also skip the cosign call entirely, rather than making a
             # request that is guaranteed to fail against an unsigned image.
             self.assertFalse(inspect_cache.call_args.kwargs["verify_signature"])
+
+    def test_require_match_success_does_not_claim_a_rebuild_is_required(self) -> None:
+        # Strict mode skips the signature check, which leaves `reusable` false.
+        # Sharing the reuse-decision output path made a *successful* post-rebuild
+        # verification print "signature could not be verified ... akmods rebuild
+        # is required" and write exists=false -- seen for real in run 30318665416.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            env = {**self._ENV, "REQUIRE_MATCH": "true", "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    source_image_pinned=(
+                        "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc"
+                    ),
+                    missing_release="",
+                    required_zfs_version="2.4.4",
+                    signature_verified=False,
+                ),
+            ), contextlib.redirect_stdout(io.StringIO()) as out:
+                main()
+
+            printed = out.getvalue()
+            self.assertIn("Verified the rebuilt", printed)
+            self.assertNotIn("rebuild is required", printed)
+            self.assertNotIn("could not be verified", printed)
+            # Must not stamp a reuse decision the caller might act on. Strict
+            # mode returns before writing any output at all, so the file is
+            # never even created.
+            self.assertFalse(output_path.exists())
 
     def test_reuse_path_still_verifies_the_signature(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
