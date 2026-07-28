@@ -38,13 +38,17 @@ access, not from a fork. The realistic threats this closes are a compromised per
 token, a compromised collaborator account, or a compromised bot/automation integration that has
 write access (Renovate already has it, for example) -- not a random GitHub user opening a PR.
 
-### A note on Task E (already in flight, PR #44)
+### A note on cache signing (PR #44, now merged)
 
-The `sign-akmods-cache` / `sign-branch-akmods-cache` jobs added in PR #44 pass `SIGNING_SECRET`
-to branch-push workflows too, for a real reason (an unsigned branch-rebuilt cache is a cache
-nothing can ever trust on reuse). This is not new in kind -- `build-branch.yml`'s existing
-"Push and sign branch image" step already does the same for human-authored branches -- but it
-is a second instance of it. This proposal accounts for both; see "What breaks" below.
+The `sign-akmods-cache` / `sign-branch-akmods-cache` jobs pass `SIGNING_SECRET` to branch-push
+workflows too, for a real reason (an unsigned branch-rebuilt cache is a cache nothing can ever
+trust on reuse). This is not new in kind -- `build-branch.yml`'s existing "Push and sign branch
+image" step already did the same for human-authored branches -- but it is a second instance of
+it. This proposal accounts for both; see "What breaks" below.
+
+This widens rather than narrows the exposure described above, and it is now live: a branch run
+signed the shared production cache on 2026-07-28. That is the design working as intended, and
+it is precisely why this proposal matters more after #44 than before it.
 
 ## Proposed changes
 
@@ -173,10 +177,69 @@ adds complexity for no real benefit here. The status-check requirement is what a
 it stops an accidental or malicious direct push from skipping CI, which a required-reviewer
 count does not add much to in a one-maintainer repo.
 
-Do not enable "include administrators" unless the owner specifically wants the rule to bind
-themselves too, including in an emergency. Recommended: leave administrators exempt initially, so
-a genuine hotfix is never blocked by the owner's own rule; revisit later if that exemption ever
-gets used in a way that feels wrong in hindsight.
+**Do enable "include administrators".** This reverses an earlier recommendation in this
+document, which said to leave administrators exempt so a hotfix is never blocked. That advice
+was wrong for this repository's actual threat model. The threat here is not the owner making a
+hurried mistake, it is a **compromised credential** -- and in a solo-maintainer repo the owner's
+own credential is the single most valuable one to steal. An admin exemption means the rule
+protects against everything except the case worth protecting against. The hotfix concern is real
+but cheap to handle: a ruleset can be disabled from Settings in seconds (see "Rollback"), which
+is a deliberate, logged act rather than a standing hole.
+
+## 5. The privileged build-container path (closed in PR #48, recorded here)
+
+An external audit found a path this document originally missed, and it is worth recording
+because it shows the limit of what an environment restriction can do.
+
+`build.yml` and `build-branch.yml` accepted a free-text `workflow_dispatch` input naming the
+image for the akmods job -- a job running `--privileged`, as root, with `/` bind-mounted, and a
+package-write token. Anyone able to dispatch could run arbitrary code there **against the real
+`main` ref**, publish a cache that later trusted jobs sign and build from, and reach `:latest`.
+Because `install_zfs_from_akmods_cache.py` installs every RPM in the cache that is not
+`.src`/`-debug`/`-devel`/`-test`, with no package-name allowlist, that meant arbitrary package
+installation into the published image.
+
+**A `main`-only environment would not have closed this**, because a dispatch against `main`
+satisfies the branch restriction. Nor could a validation step: a job's `container:` is resolved
+and started before any step runs, so a guard would execute inside the container it was meant to
+gate. PR #48 removed the input entirely; the build container is now only changeable by a
+reviewed edit to `ci/defaults.json` plus the workflow literals, with a test enforcing that they
+stay identical.
+
+The lesson for the rest of this proposal: **branch-scoping the secret is necessary but not
+sufficient.** Anything that lets a dispatcher choose what *code runs* in a trusted position
+bypasses it. Worth re-checking any future workflow input against that question.
+
+## 6. Repository security settings (separate from the above, all owner-applied)
+
+Verified disabled on 2026-07-28:
+
+| Setting | State | Suggested |
+|---|---|---|
+| Dependabot alerts | disabled (`/dependabot/alerts` → 403) | enable |
+| Dependabot security updates | disabled | enable |
+| Automated security fixes | `false` | enable |
+| Code scanning | no analysis | consider; see caveat |
+| Actions policy | `allowed_actions: all` | consider restricting |
+| Secret scanning + push protection | **enabled**, 0 alerts | keep |
+
+Notes:
+
+- **Dependabot alerts are worth enabling even though Renovate handles updates.** They are
+  different things: Renovate opens version-bump PRs, alerts tell you a dependency has a
+  published advisory. Enabling alerts does not conflict with Renovate and does not create
+  competing PRs unless security *updates* are also enabled.
+- **Code scanning is a judgement call, not an obvious win.** This is a small Python CI-tooling
+  repo with no network-facing service; CodeQL's Python rules would mostly find nothing, and a
+  new workflow has real maintenance cost. Worth it mainly if you want the GitHub Security tab
+  populated. Not recommended as urgent.
+- **Restricting `allowed_actions`** to "selected actions" would let you require SHA pinning
+  repository-wide. This repo already SHA-pins everything by convention, so the setting mostly
+  guards against a future lapse. Low cost, low urgency.
+- No SBOM, container vulnerability scan, or provenance attestation exists. Of those, a
+  vulnerability scan of the published image is the one with a real argument behind it, since
+  this image is a daily driver -- but it is a new workflow with ongoing noise, so it belongs in
+  a deliberate decision rather than being bundled here.
 
 ## Rollback
 
