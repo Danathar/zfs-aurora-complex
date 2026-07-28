@@ -44,11 +44,6 @@ on:
         required: false
         default: ci/inputs.lock.json
         type: string
-      build_container_image:
-        description: Build container image/ref override for the akmods job
-        required: false
-        default: ""
-        type: string
 
 concurrency:
   # Never let two `main` runs race to publish images. If a newer run starts, the
@@ -133,10 +128,21 @@ jobs:
       # its `extractContainer()` in `github-actions/extract.js`), so this pin
       # gets kept current the same way GitHub Actions SHA pins do -- no custom
       # manager needed.
-      # This fallback must match DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json;
+      # This literal must match DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json;
       # a job's `container:` block cannot read step outputs, so it cannot read the
       # checked-in default and this literal must be kept in sync manually.
-      image: ${{ github.event.inputs.build_container_image || 'ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca' }}
+      #
+      # Deliberately a fixed literal with no `workflow_dispatch` override. An
+      # override here was a free-text string that became the image for a job
+      # running --privileged, as root, with `/` bind-mounted at /host-sys,
+      # container storage mounted, and a package-write token -- so anyone able
+      # to dispatch this workflow could run arbitrary code in that position and
+      # publish a cache that later trusted jobs sign, build from, and promote.
+      # It cannot be fixed with a validation step: `container:` is resolved and
+      # started before any step in the job runs, so a guard would execute inside
+      # the very container it was meant to gate. Changing the build container is
+      # a reviewable edit to ci/defaults.json plus this literal, via a PR.
+      image: ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,7 +164,7 @@ jobs:
         with:
           use_input_lock: ${{ github.event.inputs.use_input_lock || 'false' }}
           lock_file: ${{ github.event.inputs.lock_file || 'ci/inputs.lock.json' }}
-          build_container_ref: ${{ github.event.inputs.build_container_image || steps.defaults.outputs.default_build_container_image }}
+          build_container_ref: ${{ steps.defaults.outputs.default_build_container_image }}
           akmods_repo: ${{ steps.defaults.outputs.akmods_repo }}
           akmods_upstream_repo: ${{ steps.defaults.outputs.akmods_upstream_repo }}
           rebuild_akmods: ${{ github.event_name == 'schedule' || github.event.inputs.rebuild_akmods == 'true' }}
