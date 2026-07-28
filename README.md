@@ -250,7 +250,7 @@ Notes:
 2. `AKMODS_IMAGE` can be omitted for offline experiments; the install helper falls back to `AKMODS_IMAGE_TEMPLATE` and auto-detects the Fedora version from the base image, but that fallback still requires network access to pull the cache image
 3. local builds do not go through the candidate-before-promote flow or signing; the resulting image tag is ephemeral and is not trusted by any `bootc` policy
 
-For reproducing a specific published image exactly, prefer the CI workflow with `use_input_lock=true` (see [`ci/inputs.lock.json`](./ci/inputs.lock.json)) rather than a local `podman build`. The lock-file path records the exact base image digest, akmods fork SHA, and kernel set of a prior run.
+For reproducing a specific published image, prefer the CI workflow with `use_input_lock=true` (see [`ci/inputs.lock.json`](./ci/inputs.lock.json)) rather than a local `podman build`. The lock file pins the base image ref, the build container ref, and the OpenZFS version (line plus, if set, the exact patch) from a prior run. It deliberately does **not** pin the akmods fork commit — that comes from `ci/defaults.json` so there is one source of truth — and it does not record the kernel set, which is re-derived from the pinned base image. Replay is therefore close to, but not the same as, a bit-for-bit reproduction.
 
 ## Install And Rebase
 

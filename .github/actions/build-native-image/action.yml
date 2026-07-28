@@ -65,9 +65,16 @@ runs:
         AKMODS_IMAGE: ${{ inputs.akmods_image }}
         IMAGE_REPO: ${{ inputs.image_repo }}
         SIGNING_KEY_FILENAME: ${{ inputs.signing_key_filename }}
-        # Recorded as OCI image labels below so any published image can be
-        # traced back to the exact upstream commit and stable-signal state it
-        # was built from, even when the tracking ref has since moved.
+        # Recorded as OCI image labels below, as provenance for the run.
+        #
+        # AKMODS_UPSTREAM_REF is the akmods fork commit this run *resolved*,
+        # which is only the commit that built the shipped modules when this run
+        # actually rebuilt the akmods cache. On a cache-reuse build the cache
+        # may predate the current tracking ref, so this label can name a commit
+        # that never touched the modules in the image. Do not treat it as proof
+        # of module provenance; org.zfs-aurora-complex.akmods-image (the
+        # verified digest of the cache actually consumed) is the reliable one.
+        # See docs/akmods-fork-maintenance.md for the full caveat.
         AKMODS_UPSTREAM_REF: ${{ inputs.akmods_upstream_ref }}
         STABLE_SIGNAL_IMAGE: ${{ inputs.stable_signal_image }}
         STABLE_SIGNAL_DIGEST: ${{ inputs.stable_signal_digest }}
