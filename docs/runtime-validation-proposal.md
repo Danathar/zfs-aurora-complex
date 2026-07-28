@@ -55,6 +55,11 @@ human can boot the candidate in a VM if they judge it warranted.
   approved. Worth being deliberate about; it may be the correct posture anyway given the
   maintainer daily-drives the result.
 - **Note:** this is a repository setting, not a code change. An agent cannot apply it.
+- **Do not enable "Prevent self-review" on that environment.** It is optional and off by
+  default. In a solo-maintainer repository, enabling it means the only reviewer is forbidden
+  from approving, which blocks promotion entirely with no way through except changing the
+  setting back. See "Lockout safety" in
+  [`production-boundary-proposal.md`](./production-boundary-proposal.md).
 
 ### Tier 2 — runtime smoke test in CI, no pools
 

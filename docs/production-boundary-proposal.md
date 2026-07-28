@@ -273,6 +273,62 @@ Nothing here requires re-keying, re-signing existing images, or touching `cosign
    the key is actually isolated, protects nothing that matters yet -- the branch bypass would
    still be wide open.
 
+## Lockout safety
+
+The maintainer's stated priority is not getting locked out of their own repository. Nothing
+proposed here can do that permanently, but two things can *stall* work and one would be a hard
+stop. Worth reading before touching any setting.
+
+### The escape hatch
+
+A ruleset can be set to **Disabled** without deleting it (Settings -> Rules -> Rulesets). Every
+ruleset rule type governs refs and content -- pushes, deletions, required checks, linear history,
+signatures -- and none of them govern who may administer repository settings. So a ruleset cannot
+revoke the ability to turn that ruleset off.
+
+*Caveat, stated plainly:* GitHub's ruleset documentation describes the disable/delete mechanics
+but does not spell out the permission model, so that last sentence is inference from the rule
+taxonomy rather than a quoted guarantee. Confirm it once by creating a trivial ruleset and
+checking that Settings -> Rules is still reachable, before relying on it under pressure.
+
+### The three real failure modes
+
+1. **A required status check that never runs. This is the only true lockout.** A PR that cannot
+   produce a required check can never merge. This is not hypothetical: requiring
+   `Build PR Image (No Push)` would have made every documentation-only PR permanently
+   unmergeable, because `build-pr.yml` skips `docs/**` and `**/*.md`. That is why section 4
+   requires only **Python Unit Tests**. Residual risk: if `test.yml`'s job name ever changes,
+   the required check stops appearing and every PR stalls. Symptom to recognise -- PRs blocked
+   on a check that is not merely pending but absent. Fix by disabling the ruleset.
+2. **"Prevent self-review" on an environment. Do not enable it.** It is an optional setting and
+   is off by default. Left off, the maintainer can approve their own runs, which is what makes
+   the required-reviewer gate in `runtime-validation-proposal.md` usable at all. Enabled in a
+   solo-maintainer repo it is a hard stop: the only reviewer is forbidden from reviewing.
+3. **Deleting the repository-level `SIGNING_SECRET` too early.** This breaks signing, not
+   access. The order of operations below keeps both copies until a real run proves the
+   environment-scoped one works.
+
+### On "include administrators"
+
+Section 4 recommends enabling it. That does **not** create a lockout, because the escape hatch
+above is a settings change, not a push. What it costs is those extra clicks during a hotfix.
+
+The alternative, if even that is unwanted, is adding the owner as a **bypass actor**: pull
+requests stay required by default and bypasses are recorded, but the owner's credential can push
+directly. That is strictly weaker against the compromised-credential case, which is the entire
+reason for the rule. It is a real trade, not a free option -- choose it deliberately if at all.
+
+### Rollout order that keeps every step reversible
+
+Verify each step before adding the next, so a problem is always attributable to the last change:
+
+1. Create the ruleset **without** required status checks. Confirm a trivial PR still merges.
+2. Add **Python Unit Tests** as a required check. Open a **docs-only** PR and confirm it still
+   merges -- this is the exact case that would break under a wrongly chosen required check.
+3. Create the environment. **Leave "Prevent self-review" unchecked.**
+4. Keep both `SIGNING_SECRET` copies until a real `main` run signs successfully.
+5. Add required reviewers last, once everything above is proven.
+
 ## Why this is a proposal, not a PR that changes settings
 
 Repository rulesets, branch protection, environments, and secret placement are GitHub repository
