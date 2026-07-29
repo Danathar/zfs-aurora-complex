@@ -20,7 +20,7 @@ The objective is to validate that we can safely:
 2. ZFS compatibility can lag new Fedora kernels.
 3. Branch testing must not overwrite `latest`.
 4. pull request (PR) validation should exercise the real build logic but should not push anything.
-5. pull request validation stays read-only, but human-owned branch builds may seed or refresh the shared akmods cache when a new target kernel requires it.
+5. pull request validation stays read-only, and branch builds are read-only against shared production state too: they may reuse the shared akmods cache but never rebuild or republish it. Seeding a missing cache is a `main` workflow action (`workflow_dispatch` with `rebuild_akmods=true`).
 
 ## Artifact Strategy
 
@@ -36,7 +36,7 @@ The objective is to validate that we can safely:
 
 1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
 2. bot-authored branch runs stop after local validation and do not push any public tag
-3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags, but they may refresh that shared source when it does not yet cover the current primary kernel
+3. shared akmods cache stays the same shared source image; branch builds never publish branch-specific cache tags and never refresh the shared one. When it does not cover the current primary kernel, the branch's akmods job fails fast with instructions to seed it from the `main` workflow
 
 ## End-To-End Build Flow
 
@@ -117,8 +117,12 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 
 Branch note:
 
-- human-owned branch builds can run this same refresh path when they move to a base image whose primary kernel is not yet covered by the shared cache
-- pull request validation remains read-only and still fails fast instead of publishing cache changes
+- branch builds cannot run this refresh path -- it is exclusive to the `main`
+  workflow. A branch targeting a kernel or ZFS version the shared cache does
+  not cover fails fast in its akmods job with instructions to run the `main`
+  workflow with `rebuild_akmods=true`, then re-run the branch
+- pull request validation is likewise read-only and fails fast instead of
+  publishing cache changes
 
 ### 4. Build Candidate Or Branch Image
 

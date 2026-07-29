@@ -168,13 +168,21 @@ succeeds but `bootc upgrade` cannot find a usable signature, see
 
 ## Branch Or Pull Request Validation Failures
 
-Pull request validation intentionally does not rebuild the shared akmods cache.
-Human-owned branch builds can now refresh the shared cache when they move to a new kernel stream.
+Neither pull request validation nor branch builds rebuild the shared akmods
+cache -- both are read-only against shared production state. Only the `main`
+workflow may rebuild and republish it, because only `main` refs can reach the
+signing key, and an unsigned cache would be rejected by every later run anyway.
 
-So if `build-pr.yml` fails in `prepare-validation-build`, or if `build-branch.yml` fails before it can refresh the cache, the right repair path is usually:
+So if `build-pr.yml` fails in `prepare-validation-build`, or if
+`build-branch.yml`'s akmods job fails with "not allowed to publish it", the
+repair path is always the same:
 
-1. fix `main`
-2. refresh the shared akmods cache on `main`
-3. rerun branch or pull request validation
+1. fix `main` if `main` itself is broken
+2. refresh the shared akmods cache from `main`: run the Build And Promote Main
+   Image workflow via `workflow_dispatch` with `rebuild_akmods=true` (set
+   `promote_to_stable=false` if `latest` should not move as a side effect)
+3. rerun the branch or pull request validation
 
-That is intentional for pull requests. Branch builds are allowed to seed the shared branch-target cache when required, but pull requests still do not rewrite shared image tags.
+There is no branch-side recovery path, on purpose: a branch run has no signing
+key, so anything it published would degrade the shared cache for every other
+consumer.
