@@ -83,6 +83,20 @@ an explicit `zpool upgrade`, never on import) plus the discipline above. The gua
 it is also the only thing standing between a working rollback and an unreadable pool, which is
 why the rule is stated as absolutely as it is.
 
+### Upgrades are applied by a human, not a timer
+
+Rollback-as-mitigation only works if someone *notices* a bad image before depending on it, so it
+matters that nothing here applies OS upgrades unattended. This image does not enable any
+OS-upgrade timer: `build_files/build-image.sh` runs `systemctl preset` on `brew-update.timer` and
+`brew-upgrade.timer` only (Homebrew, inherited from upstream), and touches neither
+`bootc-fetch-apply-updates.timer` nor `ublue-update.timer`. Whatever the base image and host
+configuration decide therefore stands.
+
+On the maintainer's machines those OS-upgrade timers are disabled -- confirmed 2026-07-29 for
+both the previous `aurora-zfs-simple` deployment and this one -- so `bootc upgrade` runs only
+when invoked. Anyone adopting this image who runs upgrades on a timer should understand they are
+removing the human checkpoint that the recovery model assumes.
+
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
