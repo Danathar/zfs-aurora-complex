@@ -48,6 +48,30 @@ Two workarounds were considered and rejected: removing the base's ZFS packages b
 (diverges from Aurora's own stack and needs re-checking on every base update), and pinning an
 older base image (surrenders the kernel currency this repo exists to track).
 
+## Live Pool State: Do Not Run `zpool upgrade`
+
+The maintainer's production host switched onto this image on 2026-07-29, coming from
+`aurora-zfs-simple` running the ZFS **2.3** line. This image ships **2.4.3**, and per the
+section above that crossing is unavoidable -- the base image dictates the userspace line.
+
+As a result `zpool status` reports something like *"Some supported features are not enabled on
+the pool"*. **That warning is expected and must be left alone.** It is what a 2.3-era pool looks
+like when read by 2.4 tooling, and it is precisely what keeps rollback available.
+
+Importing a pool under newer ZFS does **not** activate new feature flags. Only an explicit
+`zpool upgrade` does. So while the pools stay un-upgraded:
+
+- the previous image (`aurora-zfs-simple`, pinned as the rollback target) can still import them
+- `bootc rollback` remains a complete recovery path
+
+The moment `zpool upgrade` runs, that stops being true permanently: the older image can no
+longer import those pools, and rollback yields a system that boots correctly and cannot read its
+data. There is no undo.
+
+**Rule:** do not run `zpool upgrade` -- and do not "fix" the `zpool status` warning -- until the
+2.4 line is trusted and rolling back to a 2.3 image is no longer a recovery path anyone wants.
+That is a deliberate, one-way decision, not routine maintenance.
+
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check

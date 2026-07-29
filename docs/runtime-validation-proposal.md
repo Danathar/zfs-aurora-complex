@@ -72,6 +72,12 @@ end-to-end confirmation — label `zfs-version=2.4.3` matched a booted `zfs-2.4.
 `7.0.12-201.fc44` — but it was manual, one-off, on a digest that has since been superseded
 twice, and had no pool attached.
 
+**Superseded 2026-07-29:** the maintainer's production host now runs this image with real
+multi-terabyte pools attached and booted without issue. That is stronger evidence than any tier
+below would have produced, and it arrived by the accepted route -- rollback-backed adoption on
+real hardware rather than pre-publication CI testing. Pools are deliberately not upgraded; see
+"Live Pool State" in [`safety-model.md`](./safety-model.md).
+
 ## Three tiers, cheapest first
 
 These are independent; adopting tier 1 does not require tier 3.

@@ -47,9 +47,12 @@ is the version it attempts to build and install.
 > This is a single-maintainer image stream. It is production for its author --
 > daily-driven on real hardware with real ZFS pools -- but the bar it has cleared
 > is "safe enough for one person's own machines", not a vendor support
-> commitment. The pipeline builds, signs, and promotes automatically, but nothing
-> in it boots the image or imports a pool before `:latest` moves. Switching a
-> machine you depend on onto this image means trusting that bar, not a guarantee.
+> commitment. **CI does not boot the image or import a pool before `:latest`
+> moves**; promotion proves the image composed, is correctly signed, and passed
+> `bootc container lint`, nothing more. The recovery model is image rollback, not
+> pre-publication runtime testing -- see
+> [`docs/safety-model.md`](./docs/safety-model.md). Switching a machine you
+> depend on onto this image means trusting that bar, not a guarantee.
 
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
