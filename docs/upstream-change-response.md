@@ -145,10 +145,17 @@ Symptoms:
 What to inspect:
 
 1. whether the candidate tag was actually pushed
-2. whether `SIGNING_SECRET` is present in repository secrets
-3. whether `cosign.pub` in the repo matches the private key stored in the secret
-4. whether GitHub Container Registry (GHCR) permissions for the workflow token are correct
-5. whether old-format verification succeeds:
+2. whether `SIGNING_SECRET` is present in the `production-signing` environment
+   (Settings -> Environments -> `production-signing` -> Environment secrets),
+   **not** in repository secrets -- the signing jobs read it from there
+3. whether the failing job declares `environment: production-signing`, and
+   whether the run is on `main`; the environment's deployment-branch rule
+   denies the secret to any other ref, which is the intended behaviour rather
+   than a misconfiguration
+4. whether `cosign.pub` in the repo matches the private key stored in the
+   secret
+5. whether GitHub Container Registry (GHCR) permissions for the workflow token are correct
+6. whether old-format verification succeeds:
    `cosign verify --new-bundle-format=false --key cosign.pub ghcr.io/danathar/zfs-aurora-complex:latest`
 6. whether the registry contains the bootc-compatible
    `sha256-<digest-without-colon>.sig` attachment tag
