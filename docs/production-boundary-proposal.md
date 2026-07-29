@@ -64,11 +64,18 @@ it is precisely why this proposal matters more after #44 than before it.
 ### 1. A GitHub Environment scoped to `main`, holding the signing key
 
 Create an environment (suggested name: `production-signing`) with a deployment branch
-restriction limiting it to `main` only. Exact current UI path, verified against GitHub's
-documentation on 2026-07-29: Settings -> Environments -> **New environment** -> name it ->
-**Configure environment** -> the **Deployment branches** dropdown (defaults to "All branches,
-tags, and environments") -> choose **"Selected branches and tags"** -> **"Add deployment branch
-or tag rule"** -> ref type **Branch** -> pattern `main`.
+restriction limiting it to `main` only. Exact UI path, verified against the live interface
+on 2026-07-29 (GitHub's own documentation used different labels than the product did, so trust
+this): Settings -> Environments -> **New environment** -> name it -> **Configure environment**
+-> the **"Deployment branches and tags"** section, whose dropdown defaults to **"No
+restriction"** -> choose **"Selected branches and tags"** -> add a rule with ref type **Branch**
+and pattern `main`.
+
+While on that screen, note **"Allow administrators to bypass configured protection rules"** is
+ticked by default. It does not affect the deployment-branch restriction on secrets, but it is
+the environment-level twin of the ruleset admin-exemption question in section 4 -- untick it
+for the same reason, since in a solo-maintainer repository the owner's credential is the one
+worth protecting against.
 
 Create it *before* merging the workflow change. Referencing an environment that does not exist
 auto-creates it, but with no protection rules at all -- so merging first briefly yields an
@@ -76,6 +83,23 @@ unprotected environment rather than a restricted one.
 
 Move `SIGNING_SECRET` into that environment as an environment secret, and remove the
 repository-level copy once the migration below is verified working.
+
+**Set the secret from the key file, never by pasting.** A paste can lose or rewrite newlines,
+and a cosign private key is JSON -- a mangled copy fails at signing time with
+`reading key: decrypt: invalid character ';' after object key`, well after the secret has
+resolved and the registry login has succeeded, which makes it look like a permissions problem
+when it is a content problem. This happened during the real migration on 2026-07-29. Use:
+
+```bash
+gh secret set SIGNING_SECRET --env production-signing < /path/to/cosign.key
+```
+
+Confirm the file is the right key first -- the public half it derives must equal the committed
+`cosign.pub`, or every already-signed image stops verifying:
+
+```bash
+COSIGN_PASSWORD="" cosign public-key --key /path/to/cosign.key | diff - cosign.pub && echo MATCH
+```
 
 This is the mechanism that actually closes the exfiltration path: GitHub enforces the branch
 restriction at the point a job requests the secret, based on the ref the job is actually running
