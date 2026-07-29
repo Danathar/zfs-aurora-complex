@@ -72,6 +72,17 @@ end-to-end confirmation — label `zfs-version=2.4.3` matched a booted `zfs-2.4.
 `7.0.12-201.fc44` — but it was manual, one-off, on a digest that has since been superseded
 twice, and had no pool attached.
 
+**Partially superseded 2026-07-29:** the maintainer's production host switched onto this
+image with real multi-terabyte pools already imported, and booted without issue. That confirms
+the image boots and the existing import survives a switch -- narrower than what this proposal
+calls Tier 3, which is import, write, scrub, export, and rollback compatibility, all confirmed.
+Of those, only rollback has since been separately verified (in a test VM; see
+"Live Pool State" in [`safety-model.md`](./safety-model.md)). Write/scrub/export on the
+production pools specifically have not been exercised under this image. It arrived by the
+accepted route regardless -- rollback-backed adoption on real hardware rather than
+pre-publication CI testing -- and pools are deliberately not upgraded, which is what keeps that
+rollback path available if a problem surfaces later.
+
 ## Three tiers, cheapest first
 
 These are independent; adopting tier 1 does not require tier 3.

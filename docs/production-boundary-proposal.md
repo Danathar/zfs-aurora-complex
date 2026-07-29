@@ -1,22 +1,62 @@
 # Proposal: Protect `main` And Isolate The Signing Key
 
-**Status: partially adopted (2026-07-29).** The *workflow* half is implemented: `build.yml`'s
-`build-candidate-image` and `sign-akmods-cache` jobs declare `environment: production-signing`,
-`build-branch.yml` no longer references `SIGNING_SECRET` at all, branch runs can no longer
-rebuild the shared akmods cache (`allow_cache_rebuild: "false"` -- stricter than the options
-below, chosen after a branch run demonstrated the mid-flight shared-tag swap), and branch
-image testing uses explicitly-unsigned `br-*` tags ("What breaks" option 1, chosen by the
-maintainer for throwaway-VM testing; rules in `docs/install-and-verify.md`).
+**Status: ADOPTED (2026-07-29).** Both halves are done. Verified live via the GitHub API on
+2026-07-29:
 
-The *settings* half remains the owner's: create the `production-signing` environment with the
-`main`-only deployment branch restriction, add `SIGNING_SECRET` to it as an environment secret,
-verify one real signed `main` run, then delete the repository-level copy -- per "Suggested order of operations" and "Lockout safety" below. Until
-that is done, the secret remains repository-scoped and the exposure this document describes
-remains open.
+| Item | State |
+|---|---|
+| `production-signing` environment | exists, `custom_branch_policies: true` |
+| allowed refs | `branch: main` only |
+| admin bypass of protection rules | unticked |
+| `SIGNING_SECRET` (repository level) | **deleted** -- repo secret list is empty |
+| `SIGNING_SECRET` (environment) | present in `production-signing` |
+| `main` ruleset / branch protection | still **none** (see "Deliberately not done") |
+
+Proven by behaviour, not just configuration:
+
+- `main` run `30479538345` built, signed, and promoted with **no repository-level secret in
+  existence** -- so the environment copy alone is doing the work. Resulting `:latest`
+  `@sha256:38b6f937…` verifies against the committed `cosign.pub`.
+- A throwaway branch push (run `30483215044`) built and published
+  `br-test-unsigned-branch-publish-44`, and `cosign verify` on that tag **fails** -- the
+  branch genuinely could not sign. A verifying signature there would have meant the boundary
+  leaked.
+
+The workflow half: `build.yml`'s `build-candidate-image` and `sign-akmods-cache` declare
+`environment: production-signing`; `build-branch.yml` references `SIGNING_SECRET` nowhere at
+all; branch runs cannot rebuild the shared akmods cache (`allow_cache_rebuild: "false"`,
+stricter than the options below, chosen after a branch run swapped the shared tag mid-flight);
+and branch testing uses explicitly-unsigned `br-*` tags ("What breaks" option 1, chosen by the
+maintainer -- rules in [`install-and-verify.md`](./install-and-verify.md)).
+
+### Deliberately not done
+
+**No `main` ruleset or branch protection.** This was proposed in section 4 below and the
+maintainer chose not to apply it, on reasoning established during the review: for a
+single-collaborator repository, branch protection does not stop the threat it appears to. A
+leaked write-scoped token can open a pull request *and merge it*, and requiring approvals is
+not usable for a solo maintainer (GitHub blocks self-approval). Meanwhile nothing in the
+repository defends against full compromise of the owner account, because every control here is
+administered by that account. Hardware 2FA on the GitHub account is worth more than this rule.
+
+Section 4 is retained below unchanged as the record of what was proposed and why, including
+the "Lockout safety" analysis, should this be revisited.
+
+**Migration gotchas that actually bit** -- worth reading before re-doing this anywhere:
+
+1. The environment secret was first added by pasting the key into the web UI, which mangled
+   it. `cosign` then failed at signing time with
+   `reading key: decrypt: invalid character ';' after object key` -- *after* the secret
+   resolved and the registry login succeeded, so it presented as a permissions problem when it
+   was a content problem. Set it from the file:
+   `gh secret set SIGNING_SECRET --env production-signing < cosign.key`.
+2. GitHub's documentation used different labels than the product. See section 1.
 
 ## The problem, in two parts that must be fixed together
 
-Verified live against this repository on 2026-07-27:
+*Historical record of the situation this document was written to fix. Both parts are now
+resolved for the secret (see Status above); the branch-protection part was deliberately
+declined.* Verified live against this repository on 2026-07-27:
 
 - `main` has no branch protection and no repository ruleset. A direct push to `main` triggers
   build, sign, and promote to `:latest` with nothing in between.
@@ -55,11 +95,18 @@ trust on reuse). This is not new in kind -- `build-branch.yml`'s existing "Push 
 image" step already did the same for human-authored branches -- but it is a second instance of
 it. This proposal accounts for both; see "What breaks" below.
 
-This widens rather than narrows the exposure described above, and it is now live: a branch run
-signed the shared production cache on 2026-07-28. That is the design working as intended, and
-it is precisely why this proposal matters more after #44 than before it.
+This widened rather than narrowed the exposure described above, and it was live for two days: a
+branch run signed the shared production cache on 2026-07-28. **Closed since** -- #51 and then
+#57 removed branch signing entirely and barred branch runs from rebuilding the cache. Kept here
+because any image published in that window carries the provenance caveat.
 
 ## Proposed changes
+
+*Everything from here down is the original proposal, preserved as the record of what was
+considered and why. It is accurate to 2026-07-27 and describes jobs and behaviour that have
+since changed -- notably `sign-branch-akmods-cache`, which no longer exists (#57 deleted it),
+and branch cache rebuilding, which is now forbidden outright. Read the Status section at the
+top for what is actually true now.*
 
 ### 1. A GitHub Environment scoped to `main`, holding the signing key
 
