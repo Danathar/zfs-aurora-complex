@@ -22,8 +22,16 @@ inputs:
     description: Lowercase registry owner used for signing lookups.
     required: true
   cosign_private_key:
-    description: Private signing key used to sign the pushed image digest.
-    required: true
+    description: >-
+      Private signing key used to sign the pushed image digest. Optional only
+      because the branch workflow legitimately omits it (see allow_unsigned);
+      every production caller must pass it, and omitting it without
+      allow_unsigned fails the publication. GitHub does not actually enforce
+      `required:` on action inputs -- an omitted input silently becomes an
+      empty string -- so the guard step below, not this field, is what protects
+      the production path.
+    required: false
+    default: ""
   allow_unsigned:
     description: >-
       Explicit opt-in to publish without a signature when no signing key is
