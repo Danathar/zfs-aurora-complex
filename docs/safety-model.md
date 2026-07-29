@@ -72,6 +72,17 @@ data. There is no undo.
 2.4 line is trusted and rolling back to a 2.3 image is no longer a recovery path anyone wants.
 That is a deliberate, one-way decision, not routine maintenance.
 
+`bootc rollback` itself was exercised successfully in a test VM on 2026-07-29, with
+`aurora-zfs-simple` as the rollback target -- the same arrangement as the production host. So
+the *mechanics* of the recovery path are verified rather than assumed.
+
+Note precisely what that does and does not establish. It proves rollback works. It does not
+independently prove that 2.3-line tooling can still import the production pools after they have
+been read by 2.4 -- that rests on the OpenZFS feature-flag guarantee (features activate only on
+an explicit `zpool upgrade`, never on import) plus the discipline above. The guarantee is sound;
+it is also the only thing standing between a working rollback and an unreadable pool, which is
+why the rule is stated as absolutely as it is.
+
 ## Safety Model
 
 Stable users should only see tested outputs. Scheduled runs first check
