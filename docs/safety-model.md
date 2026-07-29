@@ -63,21 +63,41 @@ and ["Promotion And Signing"](docs/architecture-overview.md#5-promotion-and-sign
 architecture overview for the full decision tables and promotion ordering.
 
 Published images must be signed, matching the Universal Blue image-template
-model. The repository commits only `cosign.pub`; the matching private key must
-be stored as the GitHub Actions secret `SIGNING_SECRET`. The publish action
-refuses to push an image when that secret is missing.
+model. The repository commits only `cosign.pub`; the matching private key is
+stored as `SIGNING_SECRET` in the **`production-signing` GitHub Environment**,
+restricted to the `main` branch. The publish action refuses to push an image
+when that secret is missing.
+
+Store it as an *environment* secret, not a repository secret. A repository
+secret is readable by every workflow run in the repo, including
+`build-branch.yml` runs triggered by pushing any branch -- so a leaked
+write-scoped token could sign images with it. GitHub grants environment
+secrets based on the ref a job actually runs against, which a branch push
+cannot forge.
 
 Initial signing setup:
 
 ```bash
 COSIGN_PASSWORD="" cosign generate-key-pair
-gh secret set SIGNING_SECRET < cosign.key
+
+# One-time, in the web UI: Settings -> Environments -> New environment ->
+# `production-signing` -> Deployment branches -> "Selected branches and tags"
+# -> Add deployment branch or tag rule -> Branch -> `main`
+gh secret set SIGNING_SECRET --env production-signing < cosign.key
+
 git add cosign.pub
 git commit -m "Configure image signing key"
 git push
 ```
 
-Never commit `cosign.key`. For key rotation and the full signing model, see
+Only `main` jobs that declare `environment: production-signing` can read it
+(`build-candidate-image` and `sign-akmods-cache` in `build.yml`). Branch runs
+deliberately cannot sign at all; they publish unsigned `br-*` test images
+instead, and cannot rebuild the shared akmods cache.
+
+Never commit `cosign.key`. Keep the original file somewhere safe: GitHub
+secrets cannot be read back, so it is the only way to re-add or migrate the
+key. For key rotation and the full signing model, see
 [`docs/signing-and-bootc.md`](./signing-and-bootc.md).
 
 ## Assumptions And Recovery Policy
@@ -113,6 +133,15 @@ image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
 candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
 repair script to keep in sync. The akmods cache is signed the same way the OS
 image is, and a cache that fails signature verification is treated as a
-rebuild, not reused. For the full tag list and how transient
-`*-unsigned-<run_id>` tags fit into publishing, see
-["Outputs"](docs/architecture-overview.md#outputs) in the architecture overview.
+rebuild, not reused.
+
+One deliberate exception to "everything is signed": `br-*` branch tags are
+**unsigned test images**. Branch refs cannot reach the signing key (it is
+scoped to a `main`-only environment), so human-authored branches publish via an
+explicit unsigned opt-in instead. Machines enforcing this repository's
+signature policy refuse those tags; they are only usable on fresh, throwaway
+test VMs and must never be a durable install -- see
+["Testing an unsigned branch image"](./install-and-verify.md) for the rules.
+For the full tag list and how transient `*-unsigned-<run_id>` tags fit into
+publishing, see ["Outputs"](./architecture-overview.md#outputs) in the
+architecture overview.

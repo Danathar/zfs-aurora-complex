@@ -1,9 +1,18 @@
 # Proposal: Protect `main` And Isolate The Signing Key
 
-**Status: proposal, not adopted.** Nothing in this document has been applied. It describes a
-plan for the repository owner to review and decide on; the settings changes it describes must
-be made by the owner directly in GitHub, not by an agent. See "Why this is a proposal, not a
-PR that changes settings" at the end.
+**Status: partially adopted (2026-07-29).** The *workflow* half is implemented: `build.yml`'s
+`build-candidate-image` and `sign-akmods-cache` jobs declare `environment: production-signing`,
+`build-branch.yml` no longer references `SIGNING_SECRET` at all, branch runs can no longer
+rebuild the shared akmods cache (`allow_cache_rebuild: "false"` -- stricter than the options
+below, chosen after a branch run demonstrated the mid-flight shared-tag swap), and branch
+image testing uses explicitly-unsigned `br-*` tags ("What breaks" option 1, chosen by the
+maintainer for throwaway-VM testing; rules in `docs/install-and-verify.md`).
+
+The *settings* half remains the owner's: create the `production-signing` environment with the
+`main`-only deployment branch restriction, add `SIGNING_SECRET` to it as an environment secret,
+verify one real signed `main` run, then delete the repository-level copy -- per "Suggested order of operations" and "Lockout safety" below. Until
+that is done, the secret remains repository-scoped and the exposure this document describes
+remains open.
 
 ## The problem, in two parts that must be fixed together
 
@@ -54,9 +63,16 @@ it is precisely why this proposal matters more after #44 than before it.
 
 ### 1. A GitHub Environment scoped to `main`, holding the signing key
 
-Create an environment (suggested name: `production-signing`) with a **deployment branch
-restriction** limiting it to `main` only (GitHub: Settings -> Environments -> New environment ->
-"Deployment branches and tags" -> "Selected branches and tags" -> add `main`).
+Create an environment (suggested name: `production-signing`) with a deployment branch
+restriction limiting it to `main` only. Exact current UI path, verified against GitHub's
+documentation on 2026-07-29: Settings -> Environments -> **New environment** -> name it ->
+**Configure environment** -> the **Deployment branches** dropdown (defaults to "All branches,
+tags, and environments") -> choose **"Selected branches and tags"** -> **"Add deployment branch
+or tag rule"** -> ref type **Branch** -> pattern `main`.
+
+Create it *before* merging the workflow change. Referencing an environment that does not exist
+auto-creates it, but with no protection rules at all -- so merging first briefly yields an
+unprotected environment rather than a restricted one.
 
 Move `SIGNING_SECRET` into that environment as an environment secret, and remove the
 repository-level copy once the migration below is verified working.

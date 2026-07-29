@@ -1,7 +1,8 @@
 """
 Script: tests/test_workflow_build_container.py
-What: Guards how the privileged akmods build container is selected, and that automated
-branch runs can neither sign nor republish shared state.
+What: Guards how the privileged akmods build container is selected, that branch runs
+stay read-only against shared production state, and that only branches may publish
+unsigned (and only explicitly).
 Doing: Reads the workflow files as text and asserts no run-time override exists and that
 every hardcoded container literal matches the checked-in default.
 Why: That container runs --privileged, as root, with `/` bind-mounted and a package-write
@@ -100,40 +101,80 @@ class BuildContainerSelectionTests(unittest.TestCase):
                 )
 
 
-class BotActorRestrictionTests(unittest.TestCase):
+class BranchIsolationTests(unittest.TestCase):
     """
-    Automated (bot) branch runs must not reach anything production consumes.
+    Branch runs must be read-only against shared production state.
 
-    Renovate holds write access, so a bot-authored push runs build-branch.yml.
-    Two separate things have to stay true: such a run must not republish the
-    shared akmods cache, and must not sign anything with this repo's key.
-    These were not both true -- the cache-signing job shipped without the guard
-    the OS-image publish step already had.
+    The production signing key is scoped to a main-only environment, so branch
+    refs cannot sign. Everything here pins the consequences: the branch
+    workflow never references the secret at all, never mutates the shared
+    akmods cache, and publishes only explicitly-unsigned test images. build.yml
+    must never take the unsigned path.
     """
 
     def _branch_workflow(self) -> str:
         return (WORKFLOW_DIR / "build-branch.yml").read_text(encoding="utf-8")
 
-    def test_branch_cache_refresh_is_denied_for_bot_actors(self) -> None:
+    def test_branch_workflow_never_references_the_signing_secret(self) -> None:
+        # The strongest form of "branches cannot sign": not a guard around the
+        # secret, but no reference to it anywhere in the file. A branch push
+        # cannot exfiltrate or use a secret its workflow never requests.
+        self.assertNotIn("SIGNING_SECRET", self._branch_workflow())
+
+    def test_branch_cache_refresh_is_denied_for_everyone(self) -> None:
         text = self._branch_workflow()
         self.assertIn(
-            "allow_cache_rebuild: ${{ steps.registry.outputs.actor_is_bot != 'true' }}",
+            'allow_cache_rebuild: "false"',
             text,
-            "build-branch.yml must deny shared akmods cache republishing to bot actors; "
-            "otherwise an automated run can mutate the cache production later consumes.",
+            "build-branch.yml must deny shared akmods cache republishing to ALL branch "
+            "runs; without a signing key a branch rebuild publishes an unsigned cache "
+            "that every later run rejects, and a compromised write credential could "
+            "replace the signed cache at will.",
         )
 
-    def test_branch_cache_signing_is_denied_for_bot_actors(self) -> None:
-        text = self._branch_workflow()
-        sign_job = text.split("sign-branch-akmods-cache:", 1)
-        self.assertEqual(len(sign_job), 2, "sign-branch-akmods-cache job not found")
-        # Only look at that job's own block, up to the next top-level job key.
-        block = re.split(r"\n  [a-z][a-z0-9-]*:\n", sign_job[1])[0]
+    def test_branch_workflow_has_no_cache_signing_job(self) -> None:
+        # The job cannot work without the key; leaving it in place would fail
+        # loudly on every human cache rebuild with a misleading message.
+        self.assertNotIn("sign-branch-akmods-cache", self._branch_workflow())
+
+    def test_branch_publish_is_explicitly_unsigned(self) -> None:
+        self.assertIn('allow_unsigned: "true"', self._branch_workflow())
+
+    def test_build_yml_never_allows_unsigned_publish(self) -> None:
+        text = (WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
+        self.assertNotIn(
+            "allow_unsigned",
+            text,
+            "build.yml must never pass allow_unsigned; the production path's "
+            "no-key-no-push guard is the invariant that keeps user-facing tags signed.",
+        )
+
+    def test_main_signing_jobs_declare_the_environment(self) -> None:
+        # Creating the environment in repository settings gates nothing on its
+        # own; the jobs must declare it. (This exact settings-only mistake was
+        # caught in review of the runtime-validation proposal.)
+        text = (WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
+        for job in ("build-candidate-image:", "sign-akmods-cache:"):
+            block = text.split(job, 1)[1]
+            block = re.split(r"\n  [a-z][a-z0-9-]*:\n", block)[0]
+            self.assertIn(
+                "environment: production-signing",
+                block.split("\n    steps:")[0],
+                f"{job.rstrip(':')} must declare the production-signing environment; "
+                "without it the secret stays reachable from any ref once the "
+                "repository-level copy is removed, or signing silently breaks.",
+            )
+
+    def test_publish_action_fails_closed_by_default(self) -> None:
+        action = (
+            REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('default: "false"', action)
         self.assertIn(
-            "actor_is_bot != 'true'",
-            block,
-            "sign-branch-akmods-cache must not run for bot actors; a bot-authored branch "
-            "run hitting a stale cache would otherwise sign it with the production key.",
+            "inputs.cosign_private_key == '' && inputs.allow_unsigned != 'true'",
+            action,
+            "publish-native-image must refuse to push when there is no key unless the "
+            "caller explicitly opted into unsigned publication.",
         )
 
     def test_prepare_action_supports_denying_cache_rebuild(self) -> None:

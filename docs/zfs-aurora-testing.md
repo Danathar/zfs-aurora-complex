@@ -20,7 +20,7 @@ The objective is to validate that we can safely:
 2. ZFS compatibility can lag new Fedora kernels.
 3. Branch testing must not overwrite `latest`.
 4. pull request (PR) validation should exercise the real build logic but should not push anything.
-5. pull request validation stays read-only, but human-owned branch builds may seed or refresh the shared akmods cache when a new target kernel requires it.
+5. pull request validation stays read-only, and branch builds are read-only against shared production state too: they may reuse the shared akmods cache but never rebuild or republish it. Seeding a missing cache is a `main` workflow action (`workflow_dispatch` with `rebuild_akmods=true`).
 
 ## Artifact Strategy
 
@@ -36,7 +36,7 @@ The objective is to validate that we can safely:
 
 1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
 2. bot-authored branch runs stop after local validation and do not push any public tag
-3. shared akmods cache stays the same shared source image; branch builds do not publish branch-specific cache tags, but they may refresh that shared source when it does not yet cover the current primary kernel
+3. shared akmods cache stays the same shared source image; branch builds never publish branch-specific cache tags and never refresh the shared one. When it does not cover the current primary kernel, the branch's akmods job fails fast with instructions to seed it from the `main` workflow
 
 ## End-To-End Build Flow
 
@@ -117,8 +117,12 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 
 Branch note:
 
-- human-owned branch builds can run this same refresh path when they move to a base image whose primary kernel is not yet covered by the shared cache
-- pull request validation remains read-only and still fails fast instead of publishing cache changes
+- branch builds cannot run this refresh path -- it is exclusive to the `main`
+  workflow. A branch targeting a kernel or ZFS version the shared cache does
+  not cover fails fast in its akmods job with instructions to run the `main`
+  workflow with `rebuild_akmods=true`, then re-run the branch
+- pull request validation is likewise read-only and fails fast instead of
+  publishing cache changes
 
 ### 4. Build Candidate Or Branch Image
 
@@ -143,21 +147,20 @@ without requiring a manual `modprobe zfs`.
 
 ### 5. Sign Published Tags
 
-Tags published outside pull request validation are signed after push by resolving
-the pushed tag to a digest and then signing that digest.
-
-This keeps signature behavior consistent for:
-
-1. candidate tags
-2. branch tags
+Candidate tags are signed after push by resolving the pushed tag to a digest and
+then signing that digest, inside the `production-signing` environment that only
+`main` refs can reach.
 
 Stable `latest` is promoted by copying the already-signed candidate digest, not
 by signing a second time.
 
 Branch note:
 
-- only human-authored branch runs push/sign branch tags
-- automation accounts such as Renovate still run the build, but they stop before the GitHub Container Registry (GHCR) push/signing step so the registry does not fill with unsigned test images
+- branch runs cannot sign: the key is environment-scoped to `main`
+- human-authored branch runs push an UNSIGNED `br-*` test image via an explicit
+  `allow_unsigned` opt-in -- usable only on fresh, never-enforced throwaway VMs,
+  since enforced machines refuse unsigned tags under this repository's policy
+- automation accounts such as Renovate stop before the push entirely
 
 ### 6. Promote Candidate To Stable
 

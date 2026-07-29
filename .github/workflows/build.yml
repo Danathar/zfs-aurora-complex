@@ -181,6 +181,16 @@ jobs:
     # so this job correctly does not run either.
     if: needs.build-zfs-akmods.outputs.rebuilt == 'true'
     runs-on: ubuntu-24.04
+    # The production signing key is expected to live in this environment as an
+    # environment secret, with a deployment branch restriction limiting it to
+    # `main`. GitHub decides whether to hand over environment secrets based on
+    # the ref the job actually runs against -- not on what any workflow file
+    # says -- so a branch push cannot reach the key even by editing this file.
+    # Referencing the environment before it exists in repository settings
+    # auto-creates it unprotected; the branch restriction itself can only be
+    # configured by the repository owner in Settings -> Environments. See
+    # docs/production-boundary-proposal.md.
+    environment: production-signing
     env:
       HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
     permissions:
@@ -260,6 +270,9 @@ jobs:
       - build-zfs-akmods
     if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
+    # Signs the candidate with the production key; same environment scoping as
+    # sign-akmods-cache above -- see the comment there.
+    environment: production-signing
     env:
       HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
     permissions:
