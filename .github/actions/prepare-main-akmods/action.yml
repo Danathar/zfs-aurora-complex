@@ -25,9 +25,9 @@ inputs:
     description: >-
       Whether this run is permitted to rebuild and republish the shared akmods
       cache at all. Callers set this to false for runs that must never mutate
-      shared state -- automated branch runs, for example. When false and a
-      rebuild would otherwise be required, the job fails with an explanation
-      instead of publishing.
+      shared state -- branch runs, which cannot sign what they publish. When
+      false and a rebuild would otherwise be required, the job fails with an
+      explanation instead of publishing.
     required: false
     default: "true"
   registry_actor:
@@ -190,19 +190,19 @@ runs:
         python3 -m ci_tools.cli check-akmods-cache
 
     # A run that is not allowed to touch shared state must stop here rather
-    # than republish the cache. This is the fail-closed half of the bot policy:
-    # automated branch runs (Renovate) validate that a branch still builds, but
-    # they must never publish the shared cache image that production later
-    # consumes, and must never sign anything. Failing loudly is correct -- the
-    # alternative, letting the run publish an unsigned cache, would degrade
-    # shared state for every later run.
+    # than republish the cache. Branch runs (human or automated) validate that
+    # a branch still builds, but they must never publish the shared cache image
+    # that production later consumes -- they have no signing key, so anything
+    # they published would be unsigned, which every later run correctly rejects.
+    # Failing loudly is correct: the alternative silently degrades shared state
+    # for every consumer.
     - name: Refuse to refresh the shared akmods cache from a restricted run
       if: inputs.allow_cache_rebuild != 'true' && (inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true')
       shell: bash
       run: |
         echo "The shared akmods cache needs rebuilding, but this run is not allowed to publish it." >&2
-        echo "Automated (bot) branch runs deliberately cannot refresh shared state or sign images." >&2
-        echo "Refresh it from a human-authored branch push, or from the main workflow with rebuild_akmods=true, then re-run this." >&2
+        echo "Branch runs deliberately cannot refresh shared production state or sign images." >&2
+        echo "Seed or refresh the cache from the main workflow: workflow_dispatch with rebuild_akmods=true, then re-run this." >&2
         exit 1
 
     # Always verify that the resolved akmods source commit is fetchable. This

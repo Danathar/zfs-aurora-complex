@@ -143,21 +143,20 @@ without requiring a manual `modprobe zfs`.
 
 ### 5. Sign Published Tags
 
-Tags published outside pull request validation are signed after push by resolving
-the pushed tag to a digest and then signing that digest.
-
-This keeps signature behavior consistent for:
-
-1. candidate tags
-2. branch tags
+Candidate tags are signed after push by resolving the pushed tag to a digest and
+then signing that digest, inside the `production-signing` environment that only
+`main` refs can reach.
 
 Stable `latest` is promoted by copying the already-signed candidate digest, not
 by signing a second time.
 
 Branch note:
 
-- only human-authored branch runs push/sign branch tags
-- automation accounts such as Renovate still run the build, but they stop before the GitHub Container Registry (GHCR) push/signing step so the registry does not fill with unsigned test images
+- branch runs cannot sign: the key is environment-scoped to `main`
+- human-authored branch runs push an UNSIGNED `br-*` test image via an explicit
+  `allow_unsigned` opt-in -- usable only on fresh, never-enforced throwaway VMs,
+  since enforced machines refuse unsigned tags under this repository's policy
+- automation accounts such as Renovate stop before the push entirely
 
 ### 6. Promote Candidate To Stable
 

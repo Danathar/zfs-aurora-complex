@@ -113,6 +113,15 @@ image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
 candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
 repair script to keep in sync. The akmods cache is signed the same way the OS
 image is, and a cache that fails signature verification is treated as a
-rebuild, not reused. For the full tag list and how transient
-`*-unsigned-<run_id>` tags fit into publishing, see
-["Outputs"](docs/architecture-overview.md#outputs) in the architecture overview.
+rebuild, not reused.
+
+One deliberate exception to "everything is signed": `br-*` branch tags are
+**unsigned test images**. Branch refs cannot reach the signing key (it is
+scoped to a `main`-only environment), so human-authored branches publish via an
+explicit unsigned opt-in instead. Machines enforcing this repository's
+signature policy refuse those tags; they are only usable on fresh, throwaway
+test VMs and must never be a durable install -- see
+["Testing an unsigned branch image"](./install-and-verify.md) for the rules.
+For the full tag list and how transient `*-unsigned-<run_id>` tags fit into
+publishing, see ["Outputs"](./architecture-overview.md#outputs) in the
+architecture overview.

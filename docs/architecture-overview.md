@@ -220,11 +220,14 @@ not just build-time infrastructure: branch workflows also hold `packages:
 write` and can rebuild and republish this same shared tag, so a matching
 filename alone does not prove who produced the content being reused. A cache
 that matches the kernel and ZFS version but fails signature verification is
-treated the same as a cache miss -- rebuild, then sign the result (see "5.
-Promotion And Signing" for the general signing model; the akmods cache is
-signed by a dedicated `sign-akmods-cache` job in `build.yml`/`build-branch.yml`
-that runs only when that run actually rebuilt the cache, reusing
-`ci_tools/sign_image.py` unchanged).
+treated the same as a cache miss. Only `main` runs may rebuild and republish
+this cache: branch runs pass `allow_cache_rebuild: "false"` and fail with an
+explanation instead, because the signing key lives in a `main`-restricted
+environment they cannot reach, so anything they published would be unsigned
+and rejected by every later consumer anyway. When a `main` run does rebuild,
+a dedicated `sign-akmods-cache` job (in `build.yml`, running in the
+`production-signing` environment) signs the freshly published digest, reusing
+`ci_tools/sign_image.py` unchanged.
 
 One environment detail worth knowing: this signature check runs inside the
 same `ghcr.io/ublue-os/devcontainer` container as the rest of the akmods job,
@@ -532,9 +535,13 @@ model and the cosign v3 compatibility flags.
      candidate-tag generation instead of inline shell snippets
    - scheduled runs are gated on the upstream base image advancing; see "0. Scheduled-Build
      Gate" above. Push and manual runs always build
-2. `build-branch.yml`: branch-tagged push with shared-cache reuse or rebuild when required
-   - bot-authored branch runs still build locally but intentionally skip push and signing
-   - human-authored branch runs push/sign normally
+2. `build-branch.yml`: branch-tagged push with shared-cache reuse only
+   - branch runs never rebuild the shared akmods cache and never sign anything;
+     the signing key is scoped to a `main`-only environment
+   - bot-authored branch runs build locally and intentionally skip the push
+   - human-authored branch runs push an UNSIGNED `br-*` test image (explicit
+     `allow_unsigned` opt-in in `publish-native-image`) for throwaway VMs only;
+     machines enforcing this repository's signature policy refuse those tags
    - the final branch image tag is now composed by a small Python helper
 3. `build-pr.yml`: read-only validation inputs plus no-push build
 4. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers

@@ -1,9 +1,19 @@
 # Proposal: Protect `main` And Isolate The Signing Key
 
-**Status: proposal, not adopted.** Nothing in this document has been applied. It describes a
-plan for the repository owner to review and decide on; the settings changes it describes must
-be made by the owner directly in GitHub, not by an agent. See "Why this is a proposal, not a
-PR that changes settings" at the end.
+**Status: partially adopted (2026-07-29).** The *workflow* half is implemented: `build.yml`'s
+`build-candidate-image` and `sign-akmods-cache` jobs declare `environment: production-signing`,
+`build-branch.yml` no longer references `SIGNING_SECRET` at all, branch runs can no longer
+rebuild the shared akmods cache (`allow_cache_rebuild: "false"` -- stricter than the options
+below, chosen after a branch run demonstrated the mid-flight shared-tag swap), and branch
+image testing uses explicitly-unsigned `br-*` tags ("What breaks" option 1, chosen by the
+maintainer for throwaway-VM testing; rules in `docs/install-and-verify.md`).
+
+The *settings* half remains the owner's: create the `production-signing` environment (or let
+the first run auto-create it unprotected), add the `main`-only deployment branch restriction,
+move `SIGNING_SECRET` into it, verify one real signed `main` run, then delete the
+repository-level copy -- per "Suggested order of operations" and "Lockout safety" below. Until
+that is done, the secret remains repository-scoped and the exposure this document describes
+remains open.
 
 ## The problem, in two parts that must be fixed together
 
