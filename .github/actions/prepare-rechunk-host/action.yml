@@ -21,21 +21,23 @@ runs:
 
     # Chunkah relies on OCI layer annotations to describe its content-based
     # chunks. Podman versions before 5 silently drop those annotations on
-    # push, which would defeat the whole point of rechunking. Install a
-    # newer podman/buildah/crun/skopeo from Ubuntu's `resolute` suite until
-    # GitHub's hosted runner image ships podman >= 5 by default. This step
-    # skips itself once that happens, so it retires automatically instead of
-    # needing a follow-up removal.
+    # push, which would defeat the whole point of rechunking. Install
+    # crun/buildah/podman/skopeo from Ubuntu's `resolute` suite as one
+    # version-matched set.
+    #
+    # This deliberately installs unconditionally rather than skipping when the
+    # runner already ships podman >= 5. It used to skip, and that is how it
+    # broke: runner image ubuntu24/20260726.254 bumped podman 4.9.3 -> 5.8.4
+    # without bumping crun, so the skip fired for the first time and Chunkah
+    # then died in `podman run` with `crun: unknown version specified`
+    # (run 30535305788). podman and crun have to move together; one of them
+    # being new enough is not evidence the pair works. Pinning the toolchain
+    # that executes Chunkah is the same reasoning that digest-pins the Chunkah
+    # image itself in `rechunk-native-image`.
     - name: Update Podman
       shell: bash
       run: |
         set -eux
-        need_major=5
-        have_major=$(podman --version | grep -oE '[0-9]+' | head -n 1)
-        if [ "${have_major}" -ge "${need_major}" ]; then
-          echo "Runner podman is already >= ${need_major}; skipping cross-release install"
-          exit 0
-        fi
         echo "deb http://azure.archive.ubuntu.com/ubuntu resolute universe main" | sudo tee /etc/apt/sources.list.d/resolute.list
         sudo apt-get update
         sudo apt-get install -y --allow-downgrades \
@@ -43,7 +45,22 @@ runs:
           buildah/resolute \
           podman/resolute \
           skopeo/resolute
+        # Record both, so a future mismatch is diagnosable from the log alone.
+        # The runner's crun version was absent from run 30535305788's log,
+        # which is what made that failure harder to pin down than it needed
+        # to be.
         podman --version
+        crun --version
+
+        # Fail closed. Installing podman unconditionally means a regression in
+        # the `resolute` suite could hand us podman < 5, which would drop
+        # Chunkah's layer annotations silently rather than loudly -- the exact
+        # failure this step exists to prevent.
+        have_major=$(podman --version | grep -oE '[0-9]+' | head -n 1)
+        if [ "${have_major}" -lt 5 ]; then
+          echo "Installed podman is ${have_major}.x; Chunkah needs >= 5 or it loses OCI layer annotations." >&2
+          exit 1
+        fi
 
     # GitHub-hosted runners keep most free disk space on /mnt (~66G) while /
     # has far less headroom. Building the image and then rechunking it keeps

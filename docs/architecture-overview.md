@@ -363,11 +363,17 @@ signed:
 1. [`.github/actions/prepare-rechunk-host`](../.github/actions/prepare-rechunk-host/action.yml)
    runs at the top of each build job, before `build-native-image`, and prepares
    two things a default GitHub-hosted runner does not provide:
-   - a podman version `>= 5`, installed from Ubuntu's `resolute` apt suite when
-     the runner's own podman is older; podman before 5 silently drops Chunkah's
-     layer annotations on push, which would defeat the whole point of
-     rechunking. This step self-skips once GitHub's hosted runner image ships
-     podman `>= 5` by default.
+   - a version-matched `crun`/`buildah`/`podman`/`skopeo` set, installed
+     unconditionally from Ubuntu's `resolute` apt suite; podman before 5
+     silently drops Chunkah's layer annotations on push, which would defeat the
+     whole point of rechunking. The install is unconditional on purpose. It
+     previously self-skipped when the runner's own podman was already `>= 5`,
+     and that skip is what broke the build on 2026-07-30: runner image
+     `ubuntu24/20260726.254` bumped podman 4.9.3 -> 5.8.4 without bumping crun,
+     so the skip fired and `podman run` failed with `crun: unknown version
+     specified`. The step now asserts podman `>= 5` after installing, so a
+     regression in the suite fails the build instead of quietly producing an
+     unannotated image.
    - container storage relocated onto the runner's larger `/mnt` disk, because
      rechunking briefly needs two unpacked copies of the image in storage at once
 2. [`.github/actions/rechunk-native-image`](../.github/actions/rechunk-native-image/action.yml)
