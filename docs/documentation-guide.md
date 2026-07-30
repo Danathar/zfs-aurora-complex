@@ -30,6 +30,7 @@ docs/
   upstream-change-response.md <- incident triage and recovery actions
   zfs-aurora-testing.md       <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how akmods source refs are selected and pinned
+  maintenance-watchlist.md    <- pins and decisions on a clock that no automation watches
 .github/scripts/
   README.md                   <- workflow step -> command-line interface (CLI) command -> Python module map
 ```
@@ -66,6 +67,10 @@ docs/
 1. [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md)
 2. [`docs/upstream-change-response.md`](./upstream-change-response.md)
 
+### Goal: I want to know what might silently go stale over time
+
+1. [`docs/maintenance-watchlist.md`](./maintenance-watchlist.md)
+
 ## Where To Put New Documentation
 
 1. Put shared term definitions in [`docs/glossary.md`](./glossary.md).
@@ -79,3 +84,5 @@ docs/
 6. Put runbook and incident-response steps in [`docs/upstream-change-response.md`](./upstream-change-response.md).
 7. Put deeper workflow history and validation notes in [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md).
 8. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).
+9. Put pins or decisions that will need a future human call, and that no automation
+   will surface, in [`docs/maintenance-watchlist.md`](./maintenance-watchlist.md).
