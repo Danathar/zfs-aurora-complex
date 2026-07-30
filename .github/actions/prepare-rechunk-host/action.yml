@@ -34,6 +34,10 @@ runs:
     # being new enough is not evidence the pair works. Pinning the toolchain
     # that executes Chunkah is the same reasoning that digest-pins the Chunkah
     # image itself in `rechunk-native-image`.
+    #
+    # This `resolute` dependency is itself a watchlist item -- see
+    # docs/maintenance-watchlist.md for what could make it stale or break, and
+    # why it is not something Renovate can track.
     - name: Update Podman
       shell: bash
       run: |
