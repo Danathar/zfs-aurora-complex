@@ -102,12 +102,20 @@ regression is fixed. If so:
   writing (confirmed in this repo's own run logs), below the `>= 5` floor Chunkah
   needs. Removing the step entirely reintroduces the silently-dropped-annotations
   failure mode this step was originally written to prevent, not just the crun mismatch.
-- *Verification if you do revert:* merge, then confirm with several real rechunk runs
-  (`workflow_dispatch` on `main`, or the `Build PR Image` check), ideally spread across
-  more than one day so different GitHub runner image rollouts get sampled. A single
-  green run proves less than it looks like, the same way it did in this incident's own
-  history -- run 30479538345 was clean the day before run 30535305788 failed on the
-  same code.
+- *Verification if you do revert:* validate on the pull request, before merging, not
+  after. `build-pr.yml`'s `Build PR Image (No Push)` check runs this same
+  `prepare-rechunk-host` path without publishing anything, so it is the safe place to
+  get a first real signal. Do not treat a single green PR check as sufficient either --
+  spread confirmation across more than one day so different GitHub runner image
+  rollouts get sampled; a single green run proved less than it looked like in this
+  incident's own history (run 30479538345 was clean the day before run 30535305788
+  failed on identical code). If you also want post-merge `workflow_dispatch` runs on
+  `main` for additional confidence, pass `promote_to_stable=false` explicitly -- that
+  input defaults to `true` (`build.yml`), and its default path builds, signs (the
+  `production-signing` environment), and promotes to `:latest` in one run. Merging an
+  under-validated revert and then dispatching `main` with default inputs makes the
+  production promotion path the first real test, which is the specific mistake this
+  bullet exists to prevent.
 
 ---
 
