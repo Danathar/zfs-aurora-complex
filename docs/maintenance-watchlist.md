@@ -33,6 +33,29 @@ bumping crun, an earlier version of this step's own skip-if-new-enough logic mis
 that split, and the mismatch broke every rechunk with `crun: unknown version
 specified` until fixed.
 
+**Update 2026-07-31 -- the triggering incident is fixed upstream.** GitHub confirmed
+and rolled back the regression that caused this:
+[`actions/runner-images#14473`](https://github.com/actions/runner-images/issues/14473).
+The precise cause was narrower than "crun too old": the broken image
+(`ubuntu24/20260726.254`) shipped *two* crun binaries -- a current one at
+`/usr/local/bin/crun` (1.28) and a stale leftover at `/usr/bin/crun` (1.14.1) -- and
+podman's internal runtime search wired itself to the stale one, which then rejected
+podman 5.8.4's newer `ociVersion` string. `crun --version` from a shell found the good
+one via `PATH` and masked the problem, which is part of why it was confusing to debug
+from the outside. GitHub, 2026-07-30: *"Due to the wide impact we are rolling back
+affected images."* GitHub, 2026-07-31: *"images were rolled back so the issue should
+be resolved."* The broken release/tag no longer exists in `actions/runner-images` at
+all (`GET` on it 404s). This repo's own CI corroborates it: every run since the fix
+merged has drawn the pre-incident image (`20260720.247.2`, podman 4.9.3 baseline) --
+GitHub's rollback, not this repo's fix, is why that particular failure is no longer
+reachable in practice.
+
+**This does not make the pin pointless.** GitHub reverting *this* regression doesn't
+change that inferring "the toolchain is fine" from one component's version number is
+what broke, nor that `resolute` carries its own risks below. See "If you decide to
+remove this" if you want to weigh dropping it anyway now that the immediate trigger is
+gone.
+
 **Not automated because:** there is no Renovate datasource for "an Ubuntu apt suite
 name." Renovate can bump digests and semver tags; it cannot notice that `resolute` has
 gone end-of-life or that a `resolute` package update now expects a newer glibc than the
@@ -56,6 +79,35 @@ gone end-of-life or that a `resolute` package update now expects a newer glibc t
 **If it fires:** the build fails at the `Update Podman` step, before anything is built,
 pushed, or signed. Re-point the suite name (or replace this step's approach entirely)
 and confirm with a real rechunk run.
+
+**If you decide to remove this pin:** the maintainer may decide the `resolute`
+dependency (and its own risks, above) isn't worth carrying now that GitHub's specific
+regression is fixed. If so:
+
+- *What to change:* in `prepare-rechunk-host/action.yml`'s `Update Podman` step, this is
+  the commit that added the unconditional install and the post-install `>= 5` assertion:
+  `7eee6d3` ("Install the rechunk host's podman and crun as one matched set", #59).
+  Reverting it restores the pre-incident behavior: skip the `resolute` install entirely
+  when the runner's own podman is already `>= 5`.
+- *What that trade actually is, stated plainly so it isn't reconsidered blind:*
+  reverting does not just undo one bug fix, it re-adopts the inference pattern that
+  caused this incident -- trusting one component's version number as evidence the whole
+  toolchain works. GitHub's specific regression is fixed, but nothing prevents a
+  *different* mismatched-pair regression from shipping later; the skip logic would be
+  exposed to it the same way it was here, for the same reason. That may be an
+  acceptable trade to make on purpose. It is not safe to make by assuming this incident
+  proves the general pattern is fine now.
+- *Do not* just delete the whole `Update Podman` step outright without restoring some
+  form of the skip logic -- GitHub's default `noble` podman is still 4.9.3 as of this
+  writing (confirmed in this repo's own run logs), below the `>= 5` floor Chunkah
+  needs. Removing the step entirely reintroduces the silently-dropped-annotations
+  failure mode this step was originally written to prevent, not just the crun mismatch.
+- *Verification if you do revert:* merge, then confirm with several real rechunk runs
+  (`workflow_dispatch` on `main`, or the `Build PR Image` check), ideally spread across
+  more than one day so different GitHub runner image rollouts get sampled. A single
+  green run proves less than it looks like, the same way it did in this incident's own
+  history -- run 30479538345 was clean the day before run 30535305788 failed on the
+  same code.
 
 ---
 
