@@ -70,11 +70,26 @@ credentials at all:
    runner-side registry login reaches it
 
 So a private akmods package does not merely degrade cache reuse — it stops the
-image from building. Fix it once, after the first successful main-workflow run
-has created the package:
+image from building.
 
-> Your profile or organization → **Packages** → the `*-akmods` package →
-> **Package settings** → **Change visibility** → **Public**
+That also makes bootstrapping a fork a chicken-and-egg problem, because the
+package does not exist until a run publishes it, and you cannot change the
+visibility of a package that is not there yet. **Expect it to take two runs, the
+first of which fails.**
+
+1. run the main workflow (**Build And Promote Main Image**) with
+   `rebuild_akmods=true`. **This run is expected to fail, and that does not mean
+   your fork is misconfigured.** *Build Shared ZFS Akmods Cache* publishes the
+   new cache package and *Sign Shared ZFS Akmods Cache* signs it — both
+   authenticate, so both succeed — and then *Build Candidate Image* fails,
+   because the in-image `skopeo copy` cannot read the package the same run just
+   created
+2. make the now-existing package public:
+   > Your profile or organization → **Packages** → the `*-akmods` package →
+   > **Package settings** → **Change visibility** → **Public**
+3. re-run the workflow. The cache check now finds the cache that run 1 published
+   *and signed*, so it reuses it rather than rebuilding — the second run skips
+   the expensive kernel-module build entirely
 
 Notes:
 
@@ -82,13 +97,10 @@ Notes:
    this repository are unaffected — see
    ["Why Pull Requests Against This Repository Are Unaffected"](#why-pull-requests-against-this-repository-are-unaffected)
    below for why, and for the evidence behind that claim
-2. the package does not exist until something publishes it. Seed it by running
-   the main workflow (**Build And Promote Main Image**) once with
-   `rebuild_akmods=true`, then change the visibility
-3. symptoms of missing this step are registry permission errors — a
+2. symptoms of missing this step are registry permission errors — a
    `403 Forbidden` bearer-token failure from `skopeo` — not "cache not found"
    errors. Rebuilding the cache will not clear them
-4. the published *image* package has the same default. If you intend anyone
+3. the published *image* package has the same default. If you intend anyone
    (including your own machines running `bootc upgrade`) to pull the image
    without logging in, that package needs to be public too
 
