@@ -333,7 +333,7 @@ def skopeo_copy(
     run_cmd(command, capture_output=False)
 
 
-def cosign_verify(image_ref: str, *, key_path: str) -> None:
+def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) -> None:
     """
     Verify a cosign signature on one image reference against a public key file.
 
@@ -341,6 +341,18 @@ def cosign_verify(image_ref: str, *, key_path: str) -> None:
     no signature found, wrong key, or a registry/network error. Callers that
     want "not signed" to mean "treat as unusable, do not consume" should catch
     `CiToolError` around this call rather than letting it propagate.
+
+    `creds` is an optional `username:password` pair, the same shape the skopeo
+    helpers here take. Passing it matters when the signature lives on a private
+    GHCR package: fetching a signature is an ordinary registry read, so an
+    anonymous `cosign verify` against a private package fails with an auth
+    error, which a caller that treats any failure as "unsigned" would silently
+    misread as "this cache is untrustworthy" and rebuild forever. Supplying
+    credentials explicitly also avoids depending on an ambient `docker login`
+    having happened earlier in the same job. Verified directly that both cosign
+    versions below accept `--registry-username`/`--registry-password` on
+    `verify`; `redact_command_args` masks both, so a failure cannot leak the
+    token into a workflow log.
 
     Deliberately does not pass `--new-bundle-format=false`, unlike
     `sign_image.py`'s sign step. This function runs in more than one
@@ -354,7 +366,14 @@ def cosign_verify(image_ref: str, *, key_path: str) -> None:
     with no format flag, and both correctly fail (nonzero exit, "no signatures
     found") against an actually-unsigned image.
     """
-    run_cmd(["cosign", "verify", "--key", key_path, image_ref])
+    command = ["cosign", "verify", "--key", key_path]
+    if creds:
+        # Split on the first colon only: a GHCR username cannot contain one,
+        # and a token that did would still rejoin correctly here.
+        username, _separator, password = creds.partition(":")
+        command.extend(["--registry-username", username, "--registry-password", password])
+    command.append(image_ref)
+    run_cmd(command)
 
 
 def sort_kernel_releases(kernel_releases: Sequence[str]) -> list[str]:

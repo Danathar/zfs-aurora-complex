@@ -22,7 +22,7 @@ docs/
   glossary.md                 <- shared term and command definitions
   install-and-verify.md       <- switching a machine onto the image, post-boot checks, signature verification
   safety-model.md             <- what the pipeline promises, what it does not, and the rollback recovery policy
-  building-locally.md         <- native build flow, local podman build, changing the base image
+  building-locally.md         <- native build flow, local podman build, running the workflows in a fork, changing the base image
   licensing.md                <- CDDL/GPLv2 position on the published binary module
   code-reading-guide.md       <- repository layout, workflow map, step-by-step code reading order
   architecture-overview.md    <- high-level design and flow

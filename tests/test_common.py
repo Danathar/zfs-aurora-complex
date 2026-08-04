@@ -169,6 +169,36 @@ class CommonTests(unittest.TestCase):
         )
         self.assertNotIn("--new-bundle-format=false", args)
 
+    def test_cosign_verify_passes_registry_credentials_when_given(self) -> None:
+        # Fetching a signature is a normal registry read, so verifying an image
+        # in a private GHCR package needs credentials. Without them cosign fails
+        # on auth, and check_akmods_cache reads any failure as "unsigned" --
+        # silently rejecting a correctly signed cache on every run.
+        # `--registry-username`/`--registry-password` are accepted by both
+        # cosign v2.4.1 (the akmods build container's version) and v3.x.
+        with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+            cosign_verify(
+                "ghcr.io/example/image@sha256:abc",
+                key_path="/tmp/cosign.pub",
+                creds="octocat:ghs-token",
+            )
+
+        args = run_cmd_mock.call_args.args[0]
+        self.assertEqual(
+            args,
+            [
+                "cosign",
+                "verify",
+                "--key",
+                "/tmp/cosign.pub",
+                "--registry-username",
+                "octocat",
+                "--registry-password",
+                "ghs-token",
+                "ghcr.io/example/image@sha256:abc",
+            ],
+        )
+
     def test_cosign_verify_propagates_failure(self) -> None:
         with patch(
             "ci_tools.common.run_cmd",

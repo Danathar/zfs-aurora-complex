@@ -178,6 +178,16 @@ runs:
     # only the minor line here used to let a cache holding an older patch on
     # the same line (e.g. 2.4.3) silently satisfy a newer one (e.g. 2.4.4), so
     # a new OpenZFS patch never actually reached the image.
+    #
+    # This is the first registry call in the job, and nothing has logged in
+    # yet: the `just login` inside the build step below only runs on the
+    # rebuild path, and runs after this. So the credentials have to be passed
+    # explicitly here rather than relied on as ambient state. Without them the
+    # probe is anonymous, which works only because this repo's cache package is
+    # public -- a fork's package is private by default, and GHCR answers an
+    # anonymous read of a private-or-nonexistent package with `denied`, which
+    # is correctly *not* treated as "missing" and so fails the job before the
+    # rebuild below could ever seed the cache.
     - id: cache
       name: Check for existing shared akmods cache
       shell: bash
@@ -186,6 +196,8 @@ runs:
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
+        REGISTRY_ACTOR: ${{ inputs.registry_actor }}
+        REGISTRY_TOKEN: ${{ inputs.registry_token }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache
 
@@ -344,5 +356,12 @@ runs:
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         REQUIRE_MATCH: "true"
+        # The build step's `just login` has already run by this point, so these
+        # were incidentally covered by the credentials it left behind. Passed
+        # explicitly anyway: this check is what stands between a mislabelled
+        # ZFS version and a published image, and it should not depend on a
+        # side effect of an earlier step that only runs on this same path.
+        REGISTRY_ACTOR: ${{ inputs.registry_actor }}
+        REGISTRY_TOKEN: ${{ inputs.registry_token }}
       run: |
         python3 -m ci_tools.cli check-akmods-cache

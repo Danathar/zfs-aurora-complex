@@ -220,6 +220,65 @@ class PrepareValidationBuildTests(unittest.TestCase):
 
             self.assertIn("is missing from the registry", str(context.exception))
 
+    def _run_with_inspect_error(self, error: CiToolError) -> str:
+        resolution = _resolved_inputs()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "github-output.txt")
+            with patch.dict(
+                os.environ,
+                {
+                    "GITHUB_OUTPUT": output_path,
+                    "GITHUB_REPOSITORY_OWNER": "Danathar",
+                    "AKMODS_REPO": "zfs-aurora-complex-akmods",
+                    "AKMODS_UPSTREAM_REPO": _AKMODS_REPO_URL,
+                },
+                clear=False,
+            ), patch(
+                "ci_tools.prepare_validation_build.resolve_build_inputs",
+                return_value=resolution,
+            ), patch("ci_tools.prepare_validation_build.clone_pinned"), patch(
+                "ci_tools.prepare_validation_build.inspect_akmods_cache",
+                side_effect=error,
+            ), self.assertRaises(CiToolError) as context:
+                main()
+
+            return str(context.exception)
+
+    def test_permission_error_explains_the_private_package_cause(self) -> None:
+        # The real message GHCR returns to an anonymous reader of a private or
+        # nonexistent package, captured from ghcr.io. Left unexplained it names
+        # nothing actionable, and the "rebuild the cache" guidance this command
+        # normally gives is both unreachable here and wrong: rebuilding cannot
+        # fix a permission problem.
+        message = self._run_with_inspect_error(
+            CiToolError(
+                "Command failed: skopeo inspect docker://ghcr.io/forker/pkg:main-43\n"
+                "Requesting bearer token: received unexpected HTTP status: 403 Forbidden"
+            )
+        )
+
+        self.assertIn("permission error", message)
+        self.assertIn("private", message)
+        self.assertIn("public", message)
+        self.assertIn("fork", message)
+        # The underlying registry text must survive, or the hint replaces the
+        # evidence someone needs when the guess about the cause is wrong.
+        self.assertIn("403 Forbidden", message)
+        self.assertNotIn("rebuild_akmods=true", message)
+
+    def test_non_permission_errors_are_not_reinterpreted(self) -> None:
+        # Only permission-shaped failures get the private-package hint. A
+        # transport error must propagate untouched rather than send someone to
+        # go change a package setting that was never the problem.
+        message = self._run_with_inspect_error(
+            CiToolError("Command failed: skopeo inspect\ndial tcp: i/o timeout")
+        )
+
+        self.assertIn("i/o timeout", message)
+        self.assertNotIn("private", message)
+        self.assertNotIn("Change visibility", message)
+
 
 if __name__ == "__main__":
     unittest.main()

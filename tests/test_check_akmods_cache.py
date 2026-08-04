@@ -97,7 +97,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
-            def fake_copy(_source: str, destination: str) -> None:
+            def fake_copy(_source: str, destination: str, **_kwargs: object) -> None:
                 image_dir = Path(destination.removeprefix("dir:"))
                 image_dir.mkdir(parents=True, exist_ok=True)
                 (image_dir / "manifest.json").write_text(
@@ -137,6 +137,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
                     fedora_version="43",
                     kernel_release="6.18.16-200.fc43.x86_64",
                     zfs_version="2.4.1",
+                    creds="octocat:ghs-token",
                 )
 
         self.assertTrue(status.reusable)
@@ -146,16 +147,23 @@ class CheckAkmodsCacheTests(unittest.TestCase):
             "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
         )
         self.assertEqual(status.inspection_method, "unpacked-image")
+        # Every registry call this makes must carry the credentials. The
+        # inspect is the one that deadlocks a fresh fork's bootstrap when it
+        # goes out anonymous; the copy and the cosign verify would each fail
+        # later against a private cache package for the same reason.
         inspect_json_optional.assert_called_once_with(
-            "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43"
+            "docker://ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+            creds="octocat:ghs-token",
         )
         skopeo_copy.assert_called_once_with(
             "docker://ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
             ANY,
+            creds="octocat:ghs-token",
         )
         cosign_verify.assert_called_once_with(
             "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc123",
             key_path=ANY,
+            creds="octocat:ghs-token",
         )
 
     def test_inspect_akmods_cache_rejects_reuse_when_signature_verification_fails(self) -> None:
@@ -166,7 +174,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
-            def fake_copy(_source: str, destination: str) -> None:
+            def fake_copy(_source: str, destination: str, **_kwargs: object) -> None:
                 image_dir = Path(destination.removeprefix("dir:"))
                 image_dir.mkdir(parents=True, exist_ok=True)
                 (image_dir / "manifest.json").write_text(
@@ -220,7 +228,7 @@ class CheckAkmodsCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
-            def fake_copy(_source: str, destination: str) -> None:
+            def fake_copy(_source: str, destination: str, **_kwargs: object) -> None:
                 image_dir = Path(destination.removeprefix("dir:"))
                 image_dir.mkdir(parents=True, exist_ok=True)
                 (image_dir / "manifest.json").write_text(
@@ -341,7 +349,45 @@ class RequireMatchModeTests(unittest.TestCase):
         "KERNEL_RELEASE": "6.18.16-200.fc43.x86_64",
         "AKMODS_REPO": "zfs-aurora-complex-akmods",
         "ZFS_VERSION": "2.4.4",
+        "REGISTRY_ACTOR": "octocat",
+        "REGISTRY_TOKEN": "ghs-token",
     }
+
+    def test_main_requires_registry_credentials(self) -> None:
+        # Anonymous access is not an acceptable fallback: it works on a public
+        # cache package, so a workflow that forgot to pass a token would look
+        # fine here and only break for someone forking the repo. Fail where the
+        # cause is visible instead.
+        for missing in ("REGISTRY_ACTOR", "REGISTRY_TOKEN"):
+            with self.subTest(missing=missing):
+                env = {**self._ENV, missing: ""}
+                with patch.dict(os.environ, env, clear=False), self.assertRaises(
+                    CiToolError
+                ) as context:
+                    main()
+
+                self.assertIn(missing, str(context.exception))
+
+    def test_main_passes_registry_credentials_to_the_cache_inspection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            env = {**self._ENV, "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    source_image_pinned=(
+                        "ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:abc"
+                    ),
+                    missing_release="",
+                    required_zfs_version="2.4.4",
+                    signature_verified=True,
+                ),
+            ) as inspect_cache:
+                main()
+
+            self.assertEqual(inspect_cache.call_args.kwargs["creds"], "octocat:ghs-token")
 
     def test_require_match_raises_when_the_rebuilt_cache_does_not_match(self) -> None:
         mismatched = AkmodsCacheStatus(
