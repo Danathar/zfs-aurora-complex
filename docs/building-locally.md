@@ -6,7 +6,8 @@ If a term is unfamiliar, check the shared glossary first:
 ## Purpose
 
 How the native image build works and how to run it yourself with `podman`,
-plus what to change if you fork this repository onto a different base image.
+what a fork needs to set up before its own workflows will pass, plus what to
+change if you fork this repository onto a different base image.
 Local builds are for iteration only -- they are never signed and no `bootc`
 policy trusts them.
 
@@ -46,6 +47,50 @@ Notes:
 3. local builds do not go through the candidate-before-promote flow or signing; the resulting image tag is ephemeral and is not trusted by any `bootc` policy
 
 For reproducing a specific published image, prefer the CI workflow with `use_input_lock=true` (see [`ci/inputs.lock.json`](../ci/inputs.lock.json)) rather than a local `podman build`. The lock file pins the base image ref, the build container ref, and the OpenZFS version (line plus, if set, the exact patch) from a prior run. It deliberately does **not** pin the akmods fork commit — that comes from `ci/defaults.json` so there is one source of truth — and it does not record the kernel set, which is re-derived from the pinned base image. Replay is therefore close to, but not the same as, a bit-for-bit reproduction.
+
+## Running The Workflows In A Fork
+
+Forking this repository and letting its GitHub Actions workflows run in your
+own namespace needs one setup step that is easy to miss: **the shared akmods
+cache package must be public.**
+
+The workflows publish the pre-built ZFS kernel modules to a GitHub Container
+Registry (GHCR) package of their own, named by `AKMODS_REPO` in
+[`ci/defaults.json`](../ci/defaults.json) — for this repository,
+`ghcr.io/danathar/zfs-aurora-complex-akmods`. GitHub creates a brand-new GHCR
+package as **private**, and two things then read that package with no
+credentials at all:
+
+1. the pull request validation workflow's cache check
+   ([`ci_tools/prepare_validation_build.py`](../ci_tools/prepare_validation_build.py)),
+   which has no registry login and no `packages` permission
+2. the image build itself
+   ([`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](../containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py)),
+   which runs `skopeo copy` from *inside* the build container, where no
+   runner-side registry login reaches it
+
+So a private akmods package does not merely degrade cache reuse — it stops the
+image from building. Fix it once, after the first successful main-workflow run
+has created the package:
+
+> Your profile or organization → **Packages** → the `*-akmods` package →
+> **Package settings** → **Change visibility** → **Public**
+
+Notes:
+
+1. this applies to forks running their own CI. Pull requests opened *against*
+   this repository are unaffected: a `pull_request` run uses the base
+   repository's context, so it reads this repository's already-public package
+   regardless of who opened the pull request
+2. the package does not exist until something publishes it. Seed it by running
+   the main workflow (**Build And Promote Main Image**) once with
+   `rebuild_akmods=true`, then change the visibility
+3. symptoms of missing this step are registry permission errors — a
+   `403 Forbidden` bearer-token failure from `skopeo` — not "cache not found"
+   errors. Rebuilding the cache will not clear them
+4. the published *image* package has the same default. If you intend anyone
+   (including your own machines running `bootc upgrade`) to pull the image
+   without logging in, that package needs to be public too
 
 ## Changing The Base Image
 
