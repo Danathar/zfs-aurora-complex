@@ -102,16 +102,31 @@ def inspect_akmods_cache(
     kernel_release: str,
     zfs_version: str,
     verify_signature: bool = True,
+    creds: str | None = None,
 ) -> AkmodsCacheStatus:
     """
     Inspect one shared akmods cache image and report whether it is reusable.
 
     This helper is shared by the main workflow and the read-only validation
     workflows so they all make the same cache-reuse decision.
+
+    `creds` (a `username:password` pair) authenticates every registry call made
+    here. It is not optional in practice for a repository whose GHCR cache
+    package is private, which is what a fresh fork gets by default: GHCR answers
+    an *anonymous* request for a private-or-nonexistent package with `denied` /
+    `unauthorized` rather than `manifest unknown`, deliberately refusing to
+    confirm whether the package exists. `skopeo_inspect_json_optional` correctly
+    declines to read that as "missing" and re-raises, which aborts the job --
+    including the rebuild step that would have created the cache in the first
+    place. So the very first probe on a fresh fork deadlocks the bootstrap:
+    the check cannot say "rebuild" because it cannot get far enough to look.
+
+    An established deployment hides this. Its cache package is already public,
+    so the anonymous probe succeeds and nothing here ever needed a token.
     """
 
     source_image = f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
-    inspect_json = skopeo_inspect_json_optional(f"docker://{source_image}")
+    inspect_json = skopeo_inspect_json_optional(f"docker://{source_image}", creds=creds)
     if inspect_json is None:
         return AkmodsCacheStatus(
             source_image=source_image,
@@ -129,7 +144,7 @@ def inspect_akmods_cache(
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         akmods_dir = root / "akmods"
-        skopeo_copy(f"docker://{source_image_pinned}", f"dir:{akmods_dir}")
+        skopeo_copy(f"docker://{source_image_pinned}", f"dir:{akmods_dir}", creds=creds)
 
         try:
             layer_files = load_layer_files_from_oci_layout(akmods_dir)
@@ -159,11 +174,23 @@ def inspect_akmods_cache(
     # verify_signature=False: signing runs in a later job, so the image is
     # legitimately unsigned at that point and a cosign call would be a
     # guaranteed failure against an image nobody has signed yet.
+    #
+    # The credentials matter here for a second reason: fetching a signature is
+    # an ordinary registry read, so against a private cache package an
+    # anonymous `cosign verify` fails on auth, not on the signature. Because
+    # any failure is caught below and read as "not signed", that would quietly
+    # reject a perfectly good, correctly signed cache on every single run --
+    # fail-closed, but it would rebuild the kernel modules forever and never
+    # say why.
     signature_verified = False
     if verify_signature:
         signature_verified = True
         try:
-            cosign_verify(source_image_pinned, key_path=str(REPO_ROOT / "cosign.pub"))
+            cosign_verify(
+                source_image_pinned,
+                key_path=str(REPO_ROOT / "cosign.pub"),
+                creds=creds,
+            )
         except CiToolError:
             signature_verified = False
 
@@ -184,6 +211,15 @@ def main() -> None:
     kernel_release = require_env("KERNEL_RELEASE")
     source_repo = require_env("AKMODS_REPO")
     zfs_version = require_env("ZFS_VERSION")
+    # Required, not optional, and deliberately so: falling back to anonymous
+    # access when the workflow forgets to pass a token is how this went
+    # unnoticed. On a public cache package anonymous calls just work, so the
+    # omission stays invisible until someone forks the repo and hits a
+    # `denied` on their first cache probe. Failing here names the real problem
+    # instead. Same pattern as check_stable_signal.py and promote_stable.py.
+    registry_actor = require_env("REGISTRY_ACTOR")
+    registry_token = require_env("REGISTRY_TOKEN")
+    creds = f"{registry_actor}:{registry_token}"
     # Strict mode is used after a rebuild, where "no reusable cache" is not a
     # normal answer but a failure: it means the cache this run just published
     # does not contain the ZFS version this run resolved and is about to label
@@ -198,6 +234,7 @@ def main() -> None:
         kernel_release=kernel_release,
         zfs_version=zfs_version,
         verify_signature=not require_match,
+        creds=creds,
     )
 
     if require_match:
