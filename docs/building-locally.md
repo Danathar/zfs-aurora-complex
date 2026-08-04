@@ -79,9 +79,9 @@ has created the package:
 Notes:
 
 1. this applies to forks running their own CI. Pull requests opened *against*
-   this repository are unaffected: a `pull_request` run uses the base
-   repository's context, so it reads this repository's already-public package
-   regardless of who opened the pull request
+   this repository are unaffected — see
+   ["Why Pull Requests Against This Repository Are Unaffected"](#why-pull-requests-against-this-repository-are-unaffected)
+   below for why, and for the evidence behind that claim
 2. the package does not exist until something publishes it. Seed it by running
    the main workflow (**Build And Promote Main Image**) once with
    `rebuild_akmods=true`, then change the visibility
@@ -91,6 +91,47 @@ Notes:
 4. the published *image* package has the same default. If you intend anyone
    (including your own machines running `bootc upgrade`) to pull the image
    without logging in, that package needs to be public too
+
+### Why Pull Requests Against This Repository Are Unaffected
+
+This is what keeps the private-package problem a fork-only concern rather than
+something every outside contributor would trip over, so it is worth recording
+why it holds — and how that was actually checked.
+
+A `pull_request` run executes in the **base** repository's context, even when
+the pull request comes from a fork. `GITHUB_REPOSITORY_OWNER` is therefore
+`Danathar`, not the contributor's account, so
+[`ci_tools/tagging_context.py`](../ci_tools/tagging_context.py) resolves
+`image_org` to `danathar` and the cache check reads this repository's
+already-public package. The contributor's own GHCR packages are never
+consulted, and their visibility does not matter.
+
+GitHub's own documentation does not state this. The
+[variables reference](https://docs.github.com/en/actions/reference/workflows-and-actions/variables)
+defines `GITHUB_REPOSITORY` as "the owner and repository name" without
+addressing the fork case at all, and the secure-use guide covers
+`pull_request_target` rather than plain `pull_request`. It was confirmed
+empirically instead (checked 2026-08-04):
+
+1. `cli/cli` run `30837915533` is a `pull_request` event whose
+   `head_repository` is the fork `zwick/cli` while the run's `repository` is
+   the base `cli/cli`
+2. in that run's logs, `actions/checkout` resolved `repository: cli/cli` and
+   reported `Syncing repository: cli/cli`
+3. that input's default is `${{ github.repository }}` (see `action.yml` in
+   `actions/checkout`), so `github.repository` — and with it
+   `GITHUB_REPOSITORY_OWNER` — was the base repository, not the fork
+4. separately, `ublue-os/bluefin` run `28942859343`, a pull request from the
+   fork `bashilias/bluefin`, ran the workflow file from the **base**
+   repository, which is consistent with base-repo context throughout
+
+One honest limitation: this repository has never actually received a pull
+request from a fork — every pull request in its history came from a same-repo
+branch. So the behavior above is confirmed by mechanism on other repositories,
+not observed here. Its own run logs cannot settle the question, because with
+the base owner and head owner identical, an `image_org=danathar` line is
+consistent with either interpretation. Do not treat one of this repository's
+own pull request runs as evidence for this.
 
 ## Changing The Base Image
 
