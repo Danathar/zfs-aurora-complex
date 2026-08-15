@@ -37,9 +37,9 @@ is the version it attempts to build and install.
 > [!NOTE]
 > Developed with significant AI assistance. For a simpler, more direct approach to the same
 > problem, see [`aurora-zfs-simple`](https://github.com/Danathar/aurora-zfs-simple) — the minimal
-> expression of the same idea. This repo carries the fuller pipeline: candidate-first promotion,
-> input pinning, digest resolution, shared akmods caching, image signing, and unit tests
-> throughout.
+> expression of the same idea. This repo is the one the author daily-drives, and carries the
+> fuller pipeline: candidate-first promotion, input pinning, digest resolution, shared akmods
+> caching, image signing, and unit tests throughout.
 
 ## Install
 
@@ -79,7 +79,7 @@ Start here depending on what you want:
 | find my way around the code | [`docs/code-reading-guide.md`](./docs/code-reading-guide.md) |
 | understand image signing and bootc trust | [`docs/signing-and-bootc.md`](./docs/signing-and-bootc.md) |
 | fix a broken build | [`docs/upstream-change-response.md`](./docs/upstream-change-response.md) |
-| read the deep design history and validation notes | [`docs/zfs-aurora-testing.md`](./docs/zfs-aurora-testing.md) |
+| read the deep design history and validation notes | [`docs/design-deep-dive.md`](./docs/design-deep-dive.md) |
 | change which akmods commit is built | [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md) |
 | look up a term | [`docs/glossary.md`](./docs/glossary.md) |
 | see the whole documentation map | [`docs/documentation-guide.md`](./docs/documentation-guide.md) |
@@ -90,6 +90,6 @@ before redistributing this image or basing a downstream image on it.
 
 ## References
 
-- `Danathar/aurora-zfs-simple`: https://github.com/Danathar/aurora-zfs-simple (simpler daily-driver approach)
+- `Danathar/aurora-zfs-simple`: https://github.com/Danathar/aurora-zfs-simple (simpler approach to the same problem)
 - `ublue-os/brew`: https://github.com/ublue-os/brew
 - OpenZFS releases: https://github.com/openzfs/zfs/releases

@@ -1,13 +1,13 @@
-# ZFS On Aurora Testing Design
+# ZFS On Aurora Design Deep Dive
 
 If a term is unfamiliar, check the shared glossary first:
 [`docs/glossary.md`](./glossary.md)
 
 ## Purpose
 
-This repository is a controlled testbed for ZFS support on Aurora using a native `Containerfile` build.
+This repository builds the production ZFS-on-Aurora image using a native `Containerfile` build.
 
-The objective is to validate that we can safely:
+The pipeline is built to safely:
 
 1. track the current Aurora/Fedora kernel stream
 2. build ZFS kernel modules against the primary kernel the image is expected to boot first
