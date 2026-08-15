@@ -28,7 +28,7 @@ docs/
   architecture-overview.md    <- high-level design and flow
   signing-and-bootc.md        <- image signing, bootc policy, and cosign compatibility
   upstream-change-response.md <- incident triage and recovery actions
-  zfs-aurora-testing.md       <- deep technical design + issue history
+  design-deep-dive.md         <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how akmods source refs are selected and pinned
   maintenance-watchlist.md    <- pins and decisions on a clock that no automation watches
 .github/scripts/
@@ -54,13 +54,13 @@ docs/
 
 1. [`docs/code-reading-guide.md`](./code-reading-guide.md)
 2. [`.github/scripts/README.md`](../.github/scripts/README.md)
-3. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
+3. [`docs/design-deep-dive.md`](./design-deep-dive.md)
 
 ### Goal: A workflow run failed and I need recovery steps
 
 1. [`docs/upstream-change-response.md`](./upstream-change-response.md)
 2. [`docs/signing-and-bootc.md`](./signing-and-bootc.md)
-3. [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md)
+3. [`docs/design-deep-dive.md`](./design-deep-dive.md)
 
 ### Goal: I need to update the akmods source pin
 
@@ -82,7 +82,7 @@ docs/
 4. Put design reasoning in [`docs/architecture-overview.md`](./architecture-overview.md).
 5. Put signing and bootc trust details in [`docs/signing-and-bootc.md`](./signing-and-bootc.md).
 6. Put runbook and incident-response steps in [`docs/upstream-change-response.md`](./upstream-change-response.md).
-7. Put deeper workflow history and validation notes in [`docs/zfs-aurora-testing.md`](./zfs-aurora-testing.md).
+7. Put deeper workflow history and validation notes in [`docs/design-deep-dive.md`](./design-deep-dive.md).
 8. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).
 9. Put pins or decisions that will need a future human call, and that no automation
    will surface, in [`docs/maintenance-watchlist.md`](./maintenance-watchlist.md).
