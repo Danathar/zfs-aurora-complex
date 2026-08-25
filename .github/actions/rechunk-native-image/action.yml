@@ -46,9 +46,16 @@ runs:
 
         # Chunkah reads the source image's own config (labels, env, etc.) so
         # the rechunked output preserves it instead of starting from a blank
-        # image config.
+        # image config. Pass only the .Config element, which is what Chunkah
+        # documents --config-str as taking; a full `podman inspect` also
+        # carries RootFS.Layers, History and GraphDriver.Data.LowerDir, which
+        # scale with the base image's layer count. The value is exported into
+        # podman's environment below, and Linux caps a single env string at
+        # MAX_ARG_STRLEN (32 pages = 128 KiB), so the full form started
+        # failing exec with E2BIG once the Aurora base grew to 256 layers.
+        # .Config holds no per-layer data and stays ~2 KiB regardless.
         export CHUNKAH_CONFIG_STR
-        CHUNKAH_CONFIG_STR="$(podman inspect "${source_image}")"
+        CHUNKAH_CONFIG_STR="$(podman inspect --format '{{json .Config}}' "${source_image}")"
 
         # Buffer to a compressed OCI archive on / rather than piping straight
         # into `podman load`. Piping would require the source image and the
