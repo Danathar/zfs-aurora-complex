@@ -54,7 +54,7 @@ concurrency:
 jobs:
   preflight:
     name: Evaluate Stable Signal Gate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       should_build: ${{ steps.gate.outputs.should_build }}
       reason: ${{ steps.gate.outputs.reason }}
@@ -89,7 +89,7 @@ jobs:
     name: Build Shared ZFS Akmods Cache
     needs: preflight
     if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       fedora_version: ${{ steps.prepare.outputs.version }}
       kernel_release: ${{ steps.prepare.outputs.kernel_release }}
@@ -180,7 +180,7 @@ jobs:
     # never resolved (the upstream job failed before reaching that output),
     # so this job correctly does not run either.
     if: needs.build-zfs-akmods.outputs.rebuilt == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # The production signing key is expected to live in this environment as an
     # environment secret, with a deployment branch restriction limiting it to
     # `main`. GitHub decides whether to hand over environment secrets based on
@@ -269,7 +269,7 @@ jobs:
       - preflight
       - build-zfs-akmods
     if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Signs the candidate with the production key; same environment scoping as
     # sign-akmods-cache above -- see the comment there.
     environment: production-signing
@@ -381,7 +381,7 @@ jobs:
       && needs.build-candidate-image.result == 'success'
       && (needs.sign-akmods-cache.result == 'success' || needs.sign-akmods-cache.result == 'skipped')
       && (github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write

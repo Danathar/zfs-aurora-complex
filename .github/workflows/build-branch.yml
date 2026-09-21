@@ -27,7 +27,7 @@ concurrency:
 jobs:
   prepare-branch-metadata:
     name: Compute Branch Tag
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -47,7 +47,7 @@ jobs:
 
   build-branch-akmods:
     name: Build Or Reuse Shared ZFS Akmods Cache
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       fedora_version: ${{ steps.prepare.outputs.version }}
       kernel_release: ${{ steps.prepare.outputs.kernel_release }}
@@ -129,7 +129,7 @@ jobs:
     needs:
       - prepare-branch-metadata
       - build-branch-akmods
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
