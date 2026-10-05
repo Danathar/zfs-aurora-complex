@@ -19,7 +19,7 @@ inputs:
       stays current; the digest part is tracked by Renovate's built-in
       digest-pinning support for the `docker` datasource.
     required: false
-    default: quay.io/coreos/chunkah:v0.6.0@sha256:ff8b8b466a942ec6000445d4001fc661e2fc5a952ad9ee29b4de9ab09d1d1708
+    default: quay.io/coreos/chunkah:v0.7.0@sha256:8b56578258d1d10d3e1c7b0f71a4d05317c5fde331c4f483576a1b60e65f0cea
 
 runs:
   # Chunkah re-layers an already-built local image into content-addressed
