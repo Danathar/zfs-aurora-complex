@@ -20,7 +20,7 @@
     "ci_tools/write_build_inputs_manifest.py": 14,
     "ci_tools/write_last_good_build_badge.py": 20,
     "ci_tools/zfs_release.py": 52,
-    "containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py": 108,
+    "containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py": 137,
     "files/scripts/configure_signing_policy.py": 55,
     "shared/__init__.py": 0,
     "shared/kernel_release.py": 5,
