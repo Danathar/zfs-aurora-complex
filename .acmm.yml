@@ -1,0 +1,62 @@
+# ACMM waivers: criteria satisfied where Hive's file check cannot see them.
+#
+# Hive's ACMM evaluation credits a criterion when one of a list of paths
+# exists. That cannot tell "never built this" from "deliberately did this
+# somewhere else". Each entry below states the second case: what provides the
+# capability, and why the file is not in this repository.
+#
+# A waiver cannot advance an ACMM level. Level pass/fail is computed on
+# detected criteria alone; waivers only close the gap between passing a level
+# and showing it fully green. A waiver is consulted only when the file check
+# has failed, so an entry goes inert if the real file is later added. Nothing
+# here claims a level this repository has not earned.
+#
+# Format: hivecommons/hive docs/acmm-waivers.md. See docs/SECURITY-AI.md,
+# "One autonomous path, and it is Hive".
+
+waivers:
+  - id: acmm:ai-fix-workflow
+    satisfied_by: hive
+    reason: >
+      This repository deliberately has no in-repo AI-fix workflow
+      (.github/workflows/ai-fix.yml and its aliases). A job that runs an agent
+      here would need contents/pull-requests write plus a model credential, in
+      a repository where every merge to main starts build.yml, which signs and
+      promotes :latest to a machine the maintainer daily-drives. That would be
+      a second autonomous writer next to Hive, with its own trigger and
+      authority, whose limits would be prompt text rather than a boundary.
+      Hive, outside this repository, is the single autonomous path; its pull
+      requests pass the same required check and ruleset as anyone's. The
+      sibling repository zfs-kinoite-complex has such a workflow; this one
+      intentionally does not. See docs/SECURITY-AI.md.
+
+  - id: acmm:copilot-review-apply
+    satisfied_by: hive
+    reason: >
+      The criterion's file patterns (copilot-review-apply.yml,
+      apply-copilot.yml, ai-fix.yml, auto-review.yml) all name an in-repo
+      workflow that would apply review feedback with write scopes, which this
+      repository deliberately does not have for the reasons given under
+      acmm:ai-fix-workflow. Review feedback is applied by Hive agents opening
+      ordinary pull requests, under the same single autonomous path. See
+      docs/SECURITY-AI.md.
+
+  - id: acmm:github-actions-ai
+    satisfied_by: hive
+    reason: >
+      The AI integration is Hive, not a GitHub Actions workflow in this
+      repository: no workflow here calls a model or holds a model credential,
+      by design (docs/SECURITY-AI.md). Hive credits this criterion itself,
+      from agent activity in the last 30 days, while its agent loop is
+      running for this repository. This waiver covers the periods when the
+      loop is paused and that credit lapses; it does not replace it.
+
+  - id: acmm:risk-assessment-config
+    satisfied_by: docs/risk-tiers.md and .github/labeler.yml
+    reason: >
+      Risk assessment is configured in this repository at paths the criterion
+      does not list. docs/risk-tiers.md defines the tiers by what a change can
+      cause, and .github/labeler.yml applies the area/* labels that implement
+      them, including area/safety-critical for Tier 3 paths. A separate
+      machine-readable risk config would be a second copy that nothing reads
+      and that would drift from the tier document.
