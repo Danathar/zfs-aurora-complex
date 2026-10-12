@@ -63,6 +63,12 @@ jobs:
           LOCK_FILE: ci/inputs.lock.json
           BUILD_CONTAINER_REF: ${{ steps.defaults.outputs.default_build_container_image }}
           AKMODS_REPO: ${{ steps.defaults.outputs.akmods_repo }}
+          # Authenticates the OpenZFS release lookup in ci_tools/zfs_release.py,
+          # as prepare-main-akmods and build.yml's stable-signal step already do.
+          # Unauthenticated api.github.com calls share a 60/hour limit per IP,
+          # and hosted runners share IPs. This job's token is read-only
+          # (permissions: contents: read).
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 -m ci_tools.cli prepare-validation-build
 
