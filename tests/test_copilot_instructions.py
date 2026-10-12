@@ -61,12 +61,6 @@ SHIPPED_TREES = ("ci_tools", "shared", "files/scripts", "containerfiles/zfs-akmo
 # Imports that are neither stdlib nor a module of this repository.
 LOCAL_ROOTS = {"ci_tools", "shared", "tests", "check_coverage", "run_tests"}
 
-# `ci_tools.cli` commands `.github/scripts/README.md` does not name today. Frozen rather than
-# ignored: a new command that goes undocumented grows this set and fails, and documenting one
-# of these shrinks it and fails until it is dropped from here, which is the only way a
-# "documented" list stays honest without this test editing docs.
-UNDOCUMENTED_COMMANDS = {"write-akmods-badge", "write-last-good-build-badge"}
-
 
 def collapse(text: str) -> str:
     """Whitespace-insensitive form, so a wrapped sentence compares as one line."""
@@ -253,12 +247,12 @@ class CopilotClaimTests(unittest.TestCase):
         from ci_tools.cli import command_map
 
         documented = SCRIPTS_README.read_text(encoding="utf-8")
-        absent = {name for name in command_map() if name not in documented}
+        absent = sorted(name for name in command_map() if f"`{name}`" not in documented)
         self.assertEqual(
-            UNDOCUMENTED_COMMANDS,
+            [],
             absent,
-            "the set of ci_tools.cli commands missing from .github/scripts/README.md "
-            "changed; the instructions send Copilot there for the step-to-module map",
+            "ci_tools.cli commands missing from .github/scripts/README.md; "
+            "the instructions send Copilot there for the step-to-module map",
         )
 
 

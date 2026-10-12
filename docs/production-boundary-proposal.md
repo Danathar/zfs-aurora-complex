@@ -10,7 +10,7 @@
 | admin bypass of protection rules | unticked |
 | `SIGNING_SECRET` (repository level) | **deleted** -- repo secret list is empty |
 | `SIGNING_SECRET` (environment) | present in `production-signing` |
-| `main` ruleset / branch protection | still **none** (see "Deliberately not done") |
+| `main` ruleset / branch protection | **none** on 2026-07-29 (see "Deliberately not done"); a ruleset was applied on 2026-10-11, see [`branch-protection.md`](./branch-protection.md) |
 
 Proven by behaviour, not just configuration:
 
@@ -31,7 +31,9 @@ maintainer -- rules in [`install-and-verify.md`](./install-and-verify.md)).
 
 ### Deliberately not done
 
-**No `main` ruleset or branch protection.** This was proposed in section 4 below and the
+**No `main` ruleset or branch protection.** *Superseded on 2026-10-11: a ruleset is now
+applied, and [`branch-protection.md`](./branch-protection.md) is the page that says what it
+enforces. What follows is the 2026-07-29 decision and its reasoning, kept as the record.* This was proposed in section 4 below and the
 maintainer chose not to apply it, on reasoning established during the review: for a
 single-collaborator repository, branch protection does not stop the threat it appears to. A
 leaked write-scoped token can open a pull request *and merge it*, and requiring approvals is
@@ -55,8 +57,8 @@ the "Lockout safety" analysis, should this be revisited.
 ## The problem, in two parts that must be fixed together
 
 *Historical record of the situation this document was written to fix. Both parts are now
-resolved for the secret (see Status above); the branch-protection part was deliberately
-declined.* Verified live against this repository on 2026-07-27:
+resolved for the secret (see Status above); the branch-protection part was declined on
+2026-07-29 and applied on 2026-10-11 (see Status above).* Verified live against this repository on 2026-07-27:
 
 - `main` has no branch protection and no repository ruleset. A direct push to `main` triggers
   build, sign, and promote to `:latest` with nothing in between.
