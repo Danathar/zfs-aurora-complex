@@ -1,0 +1,60 @@
+# https://editorconfig.org
+#
+# Encodes the conventions already in the tree rather than proposing new ones.
+# Every value below was read off the files it applies to: no tracked file has a
+# tab, none has trailing whitespace, and every one ends with a newline. So
+# nothing here asks for a reformat, and adopting it produces no diff.
+#
+# The point is narrower than "formatting". An editor that silently strips a
+# trailing space or converts an indent turns a one-line change into a diff with
+# unrelated noise in it, which CONTRIBUTING's "every changed line traces to the
+# change you set out to make" then has to be argued about in review. This stops
+# that at the editor.
+#
+# Python style is enforced by ruff, configured in pyproject.toml, which CI
+# actually runs. Where the two overlap -- the 100-column limit -- this file
+# follows ruff rather than the other way round.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Matches pyproject.toml's [tool.ruff] line-length. Editors treat this as a
+# guide, not a reformat; ruff is what fails the build.
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.json]
+indent_size = 2
+
+# build_files/build-image.sh continues its long podman/find invocations at two
+# spaces. Declare what shell scripts here do rather than let an editor fight
+# them.
+[*.sh]
+indent_size = 2
+
+[Containerfile]
+indent_size = 4
+
+# Markdown gives meaning to two trailing spaces (a hard line break). This repo
+# does not use them anywhere today, but stripping them silently is the kind of
+# edit that turns a docs change into a formatting argument.
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# The Apache-2.0 text is verbatim upstream; not this repo's to reformat.
+[LICENSE]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false

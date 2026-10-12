@@ -16,6 +16,9 @@ concurrency:
 jobs:
   test:
     name: Python Unit Tests
+    # Lint plus unit tests; they finish in about a minute. The ceiling only turns
+    # a hung run into a fast failure instead of the 360-minute job default.
+    timeout-minutes: 15
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -24,14 +27,49 @@ jobs:
         with:
           persist-credentials: false
 
+      # PyYAML is named here because nothing else brings it: it is not a pytest
+      # dependency. The issue-form tests import it behind `except ImportError`
+      # and skip without it, so an install line that left it to the runner image
+      # would keep this job green while those tests silently stopped running the
+      # day the image changed.
       - name: Install test runner and linter
         shell: bash
-        run: pip install --quiet pytest "ruff==0.16.5"
+        run: pip install --quiet pytest pytest-cov "ruff==0.16.5" pyyaml
 
       - name: Lint with ruff
         shell: bash
         run: ruff check ci_tools/ shared/ tests/ files/ containerfiles/
 
+      # Coverage is reported, not enforced. There is no --cov-fail-under gate:
+      # the point is that a reviewer can read the number and the missing lines
+      # off the job log instead of reconstructing them by hand. The measured
+      # paths are every module this repo's CI decisions actually run through,
+      # including the two outside ci_tools/ and shared/ that AGENTS.md section 0
+      # rule 2 calls out as safety-critical -- the akmods cache installer and
+      # the signing-policy writer. Leaving those out would report a coverage
+      # number that silently excluded exactly the code most worth watching.
       - name: Run tests
         shell: bash
-        run: python3 -m pytest tests/ -v
+        run: |
+          python3 -m pytest tests/ -v \
+            --cov=ci_tools \
+            --cov=shared \
+            --cov=containerfiles/zfs-akmods \
+            --cov=files/scripts \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=json
+
+      # The gate is per module and counts statements, not percent. A repository
+      # percentage moves whenever code is added, and one well-tested module can
+      # mask another that stopped being exercised at all. A covered-statement
+      # count only falls when a test stops reaching lines that used to run,
+      # which is the thing worth failing a pull request over.
+      #
+      # This does not gate on the percentage the step above prints, and there is
+      # still no --cov-fail-under. The floors live in .coverage-thresholds.json;
+      # tests/check_coverage.py explains why raising one is automatic-able and
+      # lowering one is not.
+      - name: Check per-module coverage floors
+        shell: bash
+        run: python3 tests/check_coverage.py

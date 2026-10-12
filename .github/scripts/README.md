@@ -31,6 +31,8 @@ If a term is unfamiliar, check the shared glossary first:
 | Configure target image path for the akmods build wrapper                   | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
 | Build and publish shared self-hosted ZFS akmods image                      | `akmods-build-and-publish`    | `ci_tools.akmods_build_and_publish`    |
 | Classify an akmods build failure for sticky-issue triage                   | `classify-akmods-failure`     | `ci_tools.classify_akmods_failure`     |
+| Build the OpenZFS/kernel compatibility badge payload                       | `write-akmods-badge`          | `ci_tools.write_akmods_badge`          |
+| Build the last-good-build badge payload                                    | `write-last-good-build-badge` | `ci_tools.write_last_good_build_badge` |
 
 ### Akmods Failure Classification
 
