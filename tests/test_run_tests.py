@@ -95,6 +95,23 @@ class RunnerRefusalTests(unittest.TestCase):
         patch.object(run_tests, "pytest_is_available", return_value=True).start()
         self.run_pytest = patch.object(run_tests, "run_pytest", return_value=0).start()
 
+    def test_the_repositorys_fsmonitor_program_is_never_run(self) -> None:
+        # Both `git ls-files` calls run before any refusal, and git runs the
+        # program core.fsmonitor names whenever it enumerates files. A checkout
+        # whose config points that at a script must not get it executed through
+        # the unattended test command.
+        marker = self.repo / "FSMONITOR_RAN"
+        helper = Path(self.tmp.name).resolve() / "fsmonitor.sh"
+        # A valid fsmonitor v2 reply (a NUL-terminated empty token) so git is
+        # satisfied; the touch is the observable side effect.
+        helper.write_text(f'#!/bin/sh\ntouch "{marker}"\nprintf "%s\\0" ""\n')
+        helper.chmod(0o755)
+        git(self.repo, "config", "core.fsmonitor", str(helper))
+
+        self.assertEqual(run_tests.main(["tests"]), 0)
+        self.run_pytest.assert_called_once_with(["tests"])
+        self.assertFalse(marker.exists(), "git ls-files ran core.fsmonitor's program")
+
     def test_a_tracked_selection_runs_with_its_arguments_unchanged(self) -> None:
         # Guard the guard: without this, a runner that refused everything would
         # satisfy every other assertion in this class.
