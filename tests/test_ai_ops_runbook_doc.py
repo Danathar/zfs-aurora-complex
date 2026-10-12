@@ -149,8 +149,8 @@ class AutoIssuesTests(unittest.TestCase):
 
     def test_the_title_and_the_artifact_prefixes_are_the_workflows(self) -> None:
         text = workflow_text("auto-issues.yml")
-        self.assertIn('title="Scheduled run failing: $WORKFLOW"', text)
-        self.assertIn("`Scheduled run failing:`", flat(entries()["auto-issues.yml"]))
+        self.assertIn('title="Run failing on main: $WORKFLOW"', text)
+        self.assertIn("`Run failing on main:`", flat(entries()["auto-issues.yml"]))
         self.assertIn("grep -q '^akmods-failure-'", text)
         self.assertIn("grep -q '^build-inputs-'", text)
         entry = entries()["auto-issues.yml"]
