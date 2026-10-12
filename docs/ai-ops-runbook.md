@@ -262,6 +262,10 @@ Every file in `.github/workflows/` has an entry here.
   activate on-disk pool features that the previous image cannot import, which
   breaks rollback. Do not merge it casually
   ([`review-rubric.md`](./review-rubric.md) section 3).
+- **Conflicts with `main`:** `renovate.json` sets `rebaseWhen` to `conflicted`, so
+  Renovate regenerates a conflicting branch on its next run and leaves a branch that
+  is only behind `main` alone. If it still conflicts after that run, tick the
+  rebase/retry checkbox in the pull request description.
 - **Never:** touch a Renovate branch by hand while its pull request is open; the
   app owns it.
 
