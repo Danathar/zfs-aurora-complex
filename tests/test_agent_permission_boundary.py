@@ -1199,6 +1199,29 @@ class RuffConfigTests(unittest.TestCase):
         # a diff in unrelated files rather than here.
         self.assertEqual(self.config["line-length"], 100)
 
+    def test_renovate_bumps_every_ruff_pin(self) -> None:
+        # Renovate's ruff manager rewrites only the files its patterns name. A
+        # pin outside them stays behind when the others move: the 0.17.0 bump
+        # in #75 changed test.yml alone, and the nightly suite's same-pin test
+        # failed on it.
+        renovate = json.loads((REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+        managers = [m for m in renovate["customManagers"] if m.get("depNameTemplate") == "ruff"]
+        self.assertEqual(len(managers), 1)
+        patterns = [re.compile(p.strip("/")) for p in managers[0]["managerFilePatterns"]]
+        pinned = [
+            path
+            for path in tracked_files()
+            if (REPO_ROOT / path).is_file()
+            and re.search(
+                r"ruff==\d+\.\d+\.\d+",
+                (REPO_ROOT / path).read_text(encoding="utf-8", errors="ignore"),
+            )
+        ]
+        self.assertTrue(pinned)
+        for path in pinned:
+            with self.subTest(path=path):
+                self.assertTrue(any(p.search(path) for p in patterns), f"{path} pins ruff")
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
