@@ -76,6 +76,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 COMMANDS_DIR = REPO_ROOT / ".claude" / "commands"
 CURSOR_RULE = REPO_ROOT / ".cursor" / "rules" / "zfs-aurora-complex.mdc"
+SECURITY_AI = REPO_ROOT / "docs" / "SECURITY-AI.md"
 AGENTS = REPO_ROOT / "AGENTS.md"
 PROMPTS_DIR = REPO_ROOT / ".github" / "prompts"
 DIAGNOSE_PROMPT = PROMPTS_DIR / "diagnose-build-failure.prompt.md"
@@ -642,6 +643,117 @@ class EnforcementDecisionTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertEqual(decide(command, self.permissions), "ask")
+
+
+class SecurityDocBoundaryTests(unittest.TestCase):
+    """The "agent permission boundary" table in docs/SECURITY-AI.md, decided against the rules.
+
+    The doc is the only place the boundary is written down in words and the settings file the
+    only place it is written down in a form a tool obeys. Each phrase the doc's settings row
+    uses is mapped here to commands, so a dropped deny rule or a row reworded without the rule
+    changing fails. A phrase the mapping does not know is a failure, not a skip.
+    """
+
+    # phrase in the `.claude/settings.json` row -> commands that must decide `deny`
+    DENIED: ClassVar[dict[str, tuple[str, ...]]] = {
+        "`cosign sign`": ("cosign sign --key env://K ghcr.io/x@sha256:0",),
+        "`skopeo copy`/`delete`": ("skopeo copy docker://a docker://b", "skopeo delete docker://a"),
+        "`podman push`": ("podman push ghcr.io/x:latest",),
+        "`buildah push`": ("buildah push ghcr.io/x:latest",),
+        "merging": ("gh pr merge 1 --squash",),
+        "workflow dispatch": ("gh workflow run build.yml",),
+        "releases": ("gh release create v1",),
+        "secrets": ("gh secret set X", "gh secret delete X"),
+        "labels": ("gh label create x", "gh label edit x", "gh label delete x"),
+        "force-push": ("git push --force origin main", "git push origin -f HEAD:main"),
+        "`git reset --hard`": ("git reset --hard HEAD~1",),
+        "`git clean`": ("git clean -fdx",),
+        "`zpool`": ("zpool destroy tank", "zpool status"),
+        "`zfs`": ("zfs destroy tank/x", "zfs rollback tank/x@s"),
+    }
+    DENIED_READS: ClassVar[dict[str, str]] = {
+        "`cosign.key`": "Read(./cosign.key)",
+        "`.env` files": "Read(./.env)",
+        "`.pem`": "Read(./**/*.pem)",
+        "`.p12`": "Read(./**/*.p12)",
+        "`id_rsa`": "Read(./**/id_rsa)",
+        "`id_ed25519`": "Read(./**/id_ed25519)",
+    }
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.permissions = json.loads(SETTINGS.read_text(encoding="utf-8"))["permissions"]
+        text = SECURITY_AI.read_text(encoding="utf-8")
+        section = text.split("## The agent permission boundary", 1)[1].split("\n## ", 1)[0]
+        rows = [line for line in section.splitlines() if line.startswith("| [`.claude/settings.json`]")]
+        assert len(rows) == 1, "docs/SECURITY-AI.md no longer has one `.claude/settings.json` row"
+        cls.row = " ".join(rows[0].split())
+        cls.section = section
+
+    def test_every_phrase_the_row_denies_is_denied(self) -> None:
+        denies = self.row.split("`deny` refuses", 1)[1].split("`ask` covers", 1)[0]
+        for phrase, commands in self.DENIED.items():
+            if phrase in ("`zpool`", "`zfs`"):
+                continue  # named below as "destructive `zpool` and `zfs` commands"
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, denies, f"the doc row no longer says {phrase}")
+                for command in commands:
+                    self.assertEqual(decide(command, self.permissions), "deny", command)
+
+    def test_the_destructive_zpool_and_zfs_commands_are_denied(self) -> None:
+        self.assertIn("destructive `zpool` and `zfs` commands", self.row)
+        for command in self.DENIED["`zpool`"] + self.DENIED["`zfs`"]:
+            with self.subTest(command=command):
+                self.assertEqual(decide(command, self.permissions), "deny")
+
+    def test_the_reads_the_row_names_are_denied(self) -> None:
+        for phrase, rule in self.DENIED_READS.items():
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.row)
+                self.assertIn(rule, self.permissions["deny"])
+
+    def test_the_row_says_what_ask_covers_and_the_rules_agree(self) -> None:
+        asks = self.row.split("`ask` covers", 1)[1].split("`allow`", 1)[0]
+        self.assertIn("an ordinary push, commit, pull request and `gh api`", asks)
+        for command in (
+            "git push origin feature",
+            "git commit -m x",
+            "gh pr create --title x",
+            "gh api repos/Danathar/zfs-aurora-complex",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(decide(command, self.permissions), "ask")
+
+    def test_the_row_says_the_settings_file_registers_the_hook(self) -> None:
+        self.assertIn("It also registers the hook", self.row)
+        hooks = json.loads(SETTINGS.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
+        commands = [hook["command"] for entry in hooks for hook in entry["hooks"]]
+        self.assertTrue(any("gate-git-diff.sh" in command for command in commands))
+
+    def test_the_four_files_the_table_lists_exist(self) -> None:
+        for token in re.findall(r"\[`([^`]+)`\]\(\.\./", self.section):
+            with self.subTest(path=token):
+                self.assertTrue((REPO_ROOT / token).exists(), f"{token} is listed but missing")
+
+    def test_push_to_main_is_still_not_expressible_as_a_rule(self) -> None:
+        # The doc says "Push to `main`" is not a prefix rule and rests on `ask` and the ruleset.
+        self.assertIn("is not expressible as a prefix rule", self.section)
+        self.assertEqual(decide("git push origin HEAD:main", self.permissions), "ask")
+        self.assertNotEqual(decide("git push origin +main", self.permissions), "deny")
+
+    def test_the_never_list_dispatch_and_merge_are_denied_not_asked(self) -> None:
+        # "Never ... merge ... dispatch build.yml": a prompt would let the maintainer click
+        # through while distracted, so these must be deny rows.
+        for command in ("gh pr merge 1", "gh workflow run build.yml -f promote_to_stable=true"):
+            with self.subTest(command=command):
+                self.assertEqual(decide(command, self.permissions), "deny")
+
+    def test_the_one_allowed_test_command_is_the_runner(self) -> None:
+        self.assertIn("The one allow-listed test command", self.section)
+        for rule in self.permissions["allow"]:
+            pattern = bash_pattern(rule) or ""
+            self.assertFalse(re.search(r"\b(pytest|unittest)\b", pattern), rule)
+        self.assertIn("Bash(python3 tests/run_tests.py:*)", self.permissions["allow"])
 
 
 class SettingsNotesTests(unittest.TestCase):

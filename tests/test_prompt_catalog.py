@@ -780,6 +780,20 @@ class ReplayAkmodsCaveatTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn(name, source)
 
+    def test_the_tier_cited_for_the_cache_check_is_the_one_risk_tiers_gives_it(self) -> None:
+        cited = re.search(r"\[`risk-tiers\.md`\]\([^)]*\) lists as Tier (\d)", self.lock_section)
+        self.assertIsNotNone(cited, "the runbook no longer cites a tier for the cache check")
+        tier = None
+        for line in (REPO_ROOT / "docs" / "risk-tiers.md").read_text(encoding="utf-8").splitlines():
+            heading = re.match(r"### Tier (\d)\b", line)
+            if heading:
+                tier = heading.group(1)
+            elif line.strip() == f"- `{CHECK_AKMODS_CACHE.relative_to(REPO_ROOT).as_posix()}`":
+                break
+        else:
+            self.fail("docs/risk-tiers.md no longer lists ci_tools/check_akmods_cache.py")
+        self.assertEqual(cited.group(1), tier)
+
 
 class ReplayDispatchTests(unittest.TestCase):
     """Sections 4 and 5 describe what dispatching build.yml costs."""
