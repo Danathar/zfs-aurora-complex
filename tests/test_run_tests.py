@@ -391,6 +391,40 @@ class RunnerRefusalTests(unittest.TestCase):
                 self.run_pytest.assert_not_called()
         self.assertIsNone(run_tests.refused_option("--trace-config"))
 
+    def test_a_dotted_coverage_source_is_refused(self) -> None:
+        # coverage reads a `--cov` value that is not a directory as a package
+        # name and resolves it with importlib.util.find_spec, which imports
+        # every parent package first: `--cov=mod.x` runs `mod`, the primitive
+        # `-W ignore::mod.W` is refused for. Both of pytest-cov's spellings.
+        for arguments in (
+            ["--cov=outside_pkg.anything", "tests"],
+            ["--cov", "outside_pkg.anything", "tests"],
+            ["tests", "--cov=outside_pkg.sub.mod"],
+            ["--cov", "tests/test_ok.py"],
+        ):
+            with self.subTest(arguments=arguments):
+                self.run_pytest.reset_mock()
+                self.assertEqual(run_tests.main(arguments), 2)
+                self.run_pytest.assert_not_called()
+
+    def test_the_documented_coverage_spellings_still_run(self) -> None:
+        # The forms CONTRIBUTING and test.yml use: bare `--cov`, a top-level
+        # package (located by find_spec, not imported), and a directory path,
+        # including one whose name holds a dot.
+        (self.repo / "files" / "scripts").mkdir(parents=True)
+        (self.repo / "dotted.dir").mkdir()
+        for arguments in (
+            ["--cov", "tests"],
+            ["--cov", "--cov-branch", "tests"],
+            ["--cov=ci_tools", "tests"],
+            ["--cov=files/scripts", "tests"],
+            ["--cov=dotted.dir", "tests"],
+        ):
+            with self.subTest(arguments=arguments):
+                self.run_pytest.reset_mock()
+                self.assertEqual(run_tests.main(arguments), 0)
+                self.run_pytest.assert_called_once()
+
     def test_every_refused_option_is_in_exactly_one_list(self) -> None:
         # `REFUSED_OPTIONS` is the concatenation, and `refusal_message` picks
         # its wording by membership. An option in two lists would get the
