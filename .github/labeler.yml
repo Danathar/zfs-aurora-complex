@@ -1,0 +1,120 @@
+---
+# Path-based pull request labels, applied by .github/workflows/labeler.yml.
+#
+# Every label here is in an `area/` namespace, and that is a security decision
+# rather than a naming preference.
+#
+# This repository is connected to an external system ("Hive") that treats a set
+# of ordinary-looking labels as an approval to auto-merge on green CI. As of
+# this writing: `quality`, `security`, `testing`, `hive/*` and `agent/*`. Two of
+# them -- `testing` and `quality` -- are exactly what a path-based labeler would
+# naturally attach to a change under `tests/`, which would hand a pull request
+# an approval signal no human gave it, in a repository where merging to `main`
+# builds, signs, and promotes `:latest`.
+#
+# So this file describes *where* a change lands and nothing else. Nothing here
+# may ever mean "approved". Before adding a label to this file, check what it
+# already means to something else:
+#
+#   gh label list --limit 60 --json name,description
+#
+# See docs/SECURITY-AI.md, "Labels carry authority".
+#
+# Schema is actions/labeler v5+; `dot: true` is the default, so paths beginning
+# with a dot need no special handling.
+
+# The seven files CLAUDE.md section 0 rule 2 names, plus the other Tier 3 paths
+# docs/risk-tiers.md adds. This label is the reason the file is worth having:
+# CONTRIBUTING requires a statement of what could reach a booted machine when
+# any of them changes, and docs/review-rubric.md section 2 treats a missing
+# statement as blocking. A reviewer should not have to notice that by reading
+# the diff.
+'area/safety-critical':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/build.yml'
+          - '.github/actions/publish-native-image/**'
+          - 'ci_tools/sign_image.py'
+          - 'ci_tools/promote_stable.py'
+          - 'ci_tools/check_akmods_cache.py'
+          - 'containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py'
+          - 'files/scripts/configure_signing_policy.py'
+          # Everything else under files/ is copied into the image by
+          # build_files/build-image.sh and lands on every booted machine: the
+          # ZFS module autoload (modules-load.d) and the tmpfiles.d entries.
+          # docs/risk-tiers.md puts files/ in Tier 3.
+          - 'files/**'
+          - 'cosign.pub'
+          # docs/risk-tiers.md classes this file's ZFS line and base-image
+          # values as Tier 3, and a path-based matcher cannot see which key
+          # changed. So the whole file is safety-critical: DEFAULT_ZFS_MINOR_VERSION
+          # is a pool-compatibility decision, and DEFAULT_BUILD_CONTAINER_IMAGE
+          # pins the privileged container that builds the akmods cache.
+          - 'ci/defaults.json'
+          # What each workflow's GITHUB_TOKEN may do. docs/risk-tiers.md puts it
+          # in Tier 3: widening a token is a human decision (docs/SECURITY-AI.md),
+          # and tests/test_workflow_permissions_policy.py makes every widening
+          # an edit to this file.
+          - '.github/policies/workflow-permissions.json'
+          # The ruleset that keeps main behind a pull request. docs/risk-tiers.md
+          # puts it in Tier 3: loosening it reopens a direct push to main, and a
+          # push to main starts the build that signs and promotes.
+          - '.github/rulesets/**'
+          # The agent permission boundary. docs/risk-tiers.md puts it in Tier 3:
+          # settings.json is the allow/deny table and registers the hook, the
+          # hook keeps the allow-listed commands inside that table, run_tests.py
+          # keeps the one allow-listed test command from importing code outside
+          # the diff, and a command file's frontmatter can grant tools. By path
+          # alone they were area/agent-config and area/tests, which is Tier 1.
+          - '.claude/settings.json'
+          - '.claude/hooks/**'
+          - '.claude/commands/**'
+          - 'tests/run_tests.py'
+
+'area/build':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Containerfile'
+          - 'build_files/**'
+          - 'containerfiles/**'
+
+'area/ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/actions/**'
+          - '.github/labeler.yml'
+          - '.github/auto-qa-tuning.json'
+          - 'ci/**'
+          - 'renovate.json'
+
+'area/ci-tools':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'ci_tools/**'
+          - 'shared/**'
+
+'area/tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - '.coverage-thresholds.json'
+
+'area/docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'
+
+# Instructions an agent reads. A change here alters how future agent sessions
+# behave, which is worth seeing on a pull request even though it ships nothing.
+'area/agent-config':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.claude/**'
+          - '.cursor/**'
+          - '.github/copilot-instructions.md'
+          - '.github/prompts/**'
+          - 'AGENTS.md'
+          - 'CLAUDE.md'
+          - 'GEMINI.md'

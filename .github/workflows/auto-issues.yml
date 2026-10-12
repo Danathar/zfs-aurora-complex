@@ -1,0 +1,189 @@
+---
+name: Auto issues
+
+# Opens an issue when an unattended scheduled workflow fails, and closes it
+# when that workflow passes again.
+#
+# Nightly compliance is the only thing that notices the published `:latest`
+# stop verifying against cosign.pub. Both it and the daily production build run
+# on a clock with nobody watching. A red run shows up as a badge at most, and
+# GitHub emails only whoever last edited the cron line. This turns that red run
+# into an issue someone will see. The monthly Agent audit trail is the same: a
+# finding fails a run nobody is watching, and its findings sit in that run's
+# summary.
+#
+# What it watches, and what it deliberately does not:
+#
+#   - `Nightly compliance` (nightly-compliance.yml), `Agent audit trail`
+#     (agent-audit.yml) and `Build And Promote Main Image` (build.yml) are
+#     watched.
+#   - The build needs care because akmods-failure-triage.yml already runs after
+#     every build and keeps a sticky `akmods-failure` issue for a failed akmods
+#     build, and closes it on the next build that really ran. That issue is
+#     the right report for that failure and a second one would only duplicate
+#     it. So for the build, this file applies the same two tests the triage
+#     workflow does, read from the same place -- the run's artifacts:
+#       * a failed build is reported only when it left no `akmods-failure-*`
+#         artifact. That is every other way the daily build goes red -- a
+#         missing signing secret, a base-image pull that dies, the push -- which
+#         left `:latest` not moving with nothing filed;
+#       * a green build closes the issue only when it left a `build-inputs-*`
+#         artifact. A scheduled run that the stable-signal gate skipped reports
+#         success without building anything, and must not close an issue about
+#         a failure nobody has fixed. This is the triage workflow's `build_ran`.
+#     This workflow reads those artifact names; it never downloads or opens one.
+#     It writes no label and changes nothing the build reads.
+#   - Every other workflow runs on a pull request, a push to a branch, or a
+#     person's label or comment. Someone is already looking at it.
+#
+# tests/test_workflow_auto_issues.py fails when a scheduled workflow is neither
+# in `workflows:` below nor named in that test as deliberately unwatched.
+#
+# One open issue per workflow, matched by exact title and by author. The author
+# check matters: the repository is public, anyone can open an issue with the
+# same title, and a failure must never be reported into an issue someone else
+# controls. Issues are listed rather than searched because the search index
+# lags. A further failure comments on the open issue instead of filing another.
+# The next passing scheduled run on the default branch closes it, the same way
+# akmods-failure-triage.yml closes its sticky issue on a green build.
+#
+# Only scheduled runs count, in both directions. A person who dispatches a run
+# is watching it, and so is whoever pushed to main to start a build. A dispatched
+# build can also promote or not, rebuild akmods or not, so a green one is no
+# evidence about what the scheduled run checks.
+#
+# It applies no label. Some labels mean "approved" to the external system this
+# repository is connected to (docs/SECURITY-AI.md, "Labels carry authority"), and
+# a failure report is not a request for anyone to change anything.
+#
+# `workflow_run` always runs this file as it is on the default branch, so a pull
+# request cannot change what this does by editing it. There is no checkout, so
+# no code from the watched run executes. Every field of that run reaches the
+# shell through `env:`, never through `${{ }}` inside `run:`, because a branch
+# name is text someone else chose.
+on:
+  workflow_run:
+    # Matched by each workflow's `name:`, not its file name, so renaming one
+    # silently stops tracking it. The test above fails when they disagree.
+    workflows: ["Nightly compliance", "Agent audit trail", "Build And Promote Main Image"]
+    types:
+      - completed
+
+# Two completions of the same workflow must not both find no issue open and
+# file two, so they run one at a time. `queue: max` keeps every waiting run:
+# with the default `queue: single`, a third completion cancels the one already
+# pending, before its step can check EVENT, so a dispatched run could replace
+# a scheduled failure and no issue would be opened.
+concurrency:
+  group: auto-issues-${{ github.event.workflow_run.name }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  track:
+    name: Open, update or close the tracking issue
+    # A handful of gh calls.
+    timeout-minutes: 5
+    runs-on: ubuntu-26.04
+    # `issues: write` files and closes the report. `actions: read` lists the
+    # watched run's artifact names, which the build case above needs.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - name: Track the scheduled run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+
+          # A run on another branch or from another repository says nothing
+          # about main, so it neither opens nor closes.
+          if [ "$HEAD_BRANCH" != "$DEFAULT_BRANCH" ] || [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "$WORKFLOW ran on $HEAD_REPO@$HEAD_BRANCH, not $REPO@$DEFAULT_BRANCH; nothing to track."
+            exit 0
+          fi
+          if [ "$EVENT" != "schedule" ]; then
+            echo "$WORKFLOW ran on a $EVENT event; only scheduled runs are tracked."
+            exit 0
+          fi
+
+          # A cancelled or skipped run is neither a pass nor a failure. Closing
+          # on one would hide a failure nobody has fixed.
+          case "$CONCLUSION" in
+            failure|timed_out|startup_failure) failed=true ;;
+            success) failed=false ;;
+            *)
+              echo "$WORKFLOW concluded $CONCLUSION; leaving any tracking issue as it is."
+              exit 0
+              ;;
+          esac
+
+          # The daily build has a sticky-issue owner already; see the header.
+          # The artifact list is assigned before it is read, so a failed
+          # listing fails the step rather than reading as "no artifacts".
+          if [ "$WORKFLOW" = "Build And Promote Main Image" ]; then
+            artifacts="$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[].name')"
+            if [ "$failed" = true ] && grep -q '^akmods-failure-' <<<"$artifacts"; then
+              echo "$WORKFLOW failed with an akmods failure payload; akmods-failure-triage.yml owns that issue."
+              exit 0
+            fi
+            if [ "$failed" = false ] && ! grep -q '^build-inputs-' <<<"$artifacts"; then
+              echo "$WORKFLOW succeeded without building (no build-inputs artifact); leaving any tracking issue as it is."
+              exit 0
+            fi
+          fi
+
+          title="Scheduled run failing: $WORKFLOW"
+
+          # Assigned before it is read, so a failed listing fails the step under
+          # `set -eo pipefail` instead of looking like "no issue open" and
+          # filing a duplicate. gh reports the Actions bot as
+          # `app/github-actions`; a person's login cannot contain a `/`.
+          number="$(gh issue list --repo "$REPO" --state open --limit 1000 \
+            --json number,title,author \
+            | jq -r --arg title "$title" \
+              '[.[] | select(.title == $title and .author.login == "app/github-actions")]
+               | sort_by(.number) | first | .number // empty')"
+
+          if [ "$failed" = true ]; then
+            if [ -n "$number" ]; then
+              printf '%s\n' \
+                "Failed again (\`$CONCLUSION\`): $RUN_URL" \
+                "" \
+                "Commit: $HEAD_SHA" \
+                | gh issue comment "$number" --repo "$REPO" --body-file -
+              echo "$WORKFLOW failed again; commented on #$number."
+            else
+              printf '%s\n' \
+                "The scheduled **$WORKFLOW** workflow failed on \`$DEFAULT_BRANCH\`. Nobody watches these runs, so this issue is how the failure gets seen." \
+                "" \
+                "- Run: $RUN_URL" \
+                "- Conclusion: \`$CONCLUSION\`" \
+                "- Commit: $HEAD_SHA" \
+                "" \
+                "Open the run and read the failed step's log. docs/ai-ops-runbook.md says what this workflow checks and what a failure in it means. A failed production build leaves `:latest` where it was, and the image people pull stays the last good one." \
+                "" \
+                "\`.github/workflows/auto-issues.yml\` opened this issue. It comments here on each further scheduled failure, and closes the issue when the next scheduled run on \`$DEFAULT_BRANCH\` passes. A run you dispatch by hand neither opens nor closes it." \
+                | gh issue create --repo "$REPO" --title "$title" --body-file -
+              echo "$WORKFLOW failed; opened a tracking issue."
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --repo "$REPO" \
+              --comment "Passed again: $RUN_URL (commit $HEAD_SHA). Closing."
+            echo "$WORKFLOW passed; closed #$number."
+          else
+            echo "$WORKFLOW passed and no tracking issue is open."
+          fi

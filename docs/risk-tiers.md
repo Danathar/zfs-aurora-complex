@@ -22,8 +22,8 @@ how much of it to do.
 
 ### Tier 3 — can reach a booted machine
 
-**Anything touching the seven files in `CLAUDE.md` / `AGENTS.md` section 0
-rule 2**, plus the ZFS line, anything pool-facing, the files the image installs
+**Anything touching the seven files in `AGENTS.md` section 0 rule 2** (which
+`CLAUDE.md` section 0 repeats), plus the ZFS line, anything pool-facing, the files the image installs
 onto every booted machine, the policy file that says what each workflow's token
 may do, the ruleset that keeps `main` behind a pull request, and the files that
 decide what an agent may run here without a prompt.
