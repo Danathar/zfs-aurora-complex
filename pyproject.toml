@@ -1,5 +1,8 @@
 [tool.ruff]
 line-length = 100
+# Tests use stdlib tomllib and datetime.UTC (3.11+); pin the target so ruff
+# versions with different defaults agree on stdlib import grouping.
+target-version = "py311"
 
 [tool.ruff.lint.per-file-ignores]
 # sys.path must be extended before these imports so the shared/ package is
