@@ -105,8 +105,10 @@ measured module, the number of statements the suite reaches today.
   needs a **reason**, not just a listing — an empty reason is rejected, because
   it records no decision and only silences the check.
 
-Today `unmeasured` holds `Containerfile` and `build_files/build-image.sh`: both
-run only inside an image build, so nothing on the host reaches them. If you add
+Today `unmeasured` holds `Containerfile` and `build_files/build-image.sh`, which
+run only inside an image build, so nothing on the host reaches them, and
+`.claude/hooks/gate-git-diff.sh`, a bash hook coverage.py cannot instrument that
+`tests/test_git_diff_gate.py` runs as a subprocess. If you add
 a shipped file and nothing else, the gate goes red. That is the point — the
 choice gets made once, in the open, rather than drifting.
 

@@ -48,12 +48,19 @@ docs/
   agent-tasks/                <- README.md: tracing a change back to its task
   ai-ops-runbook.md           <- a signal or an agent's output looks wrong: what to do first
   strategy.md                 <- the goal, and the commands that show progress toward it
+.github/
+  pull_request_template.md    <- the risk tier, safety-critical statement and verification a pull request fills in
+  copilot-instructions.md     <- GitHub Copilot's pointer at AGENTS.md section 0
 .github/scripts/
   README.md                   <- workflow step -> command-line interface (CLI) command -> Python module map
 .github/prompts/
   README.md                   <- reusable agent prompts: diagnose a build, replay a build, review a safety-critical change
 .claude/commands/
   README.md                   <- the same procedures as Claude Code slash commands
+.claude/memory/
+  README.md                   <- corrected beliefs (corrections.md): what someone believed that was false
+.claude/
+  session-summary.md          <- state carried between agent sessions; not a changelog
 tests/e2e/
   README.md                   <- the CLI run as a real subprocess: what it covers and what it does not
 ```
@@ -72,6 +79,12 @@ tests/e2e/
 1. [`docs/install-and-verify.md`](./install-and-verify.md)
 2. [`docs/safety-model.md`](./safety-model.md) -- especially the recovery policy
 3. [`docs/licensing.md`](./licensing.md) if you intend to redistribute
+
+### Goal: I want to build it or fork it myself
+
+1. [`docs/building-locally.md`](./building-locally.md)
+2. [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md)
+3. [`AGENTS.md`](../AGENTS.md) section 0 -- a fork's workflows can publish and sign
 
 ### Goal: I want to understand the code end-to-end
 

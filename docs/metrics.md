@@ -236,8 +236,8 @@ python3 tests/check_coverage.py
 reaches more than the recorded floor. Raising it locks that in. See
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) for why lowering one is a decision
 rather than a command. `.coverage-thresholds.json` also lists, with reasons, the
-shipped files coverage cannot reach (the `Containerfile` and
-`build_files/build-image.sh`).
+shipped files coverage cannot reach (the `Containerfile`,
+`build_files/build-image.sh` and `.claude/hooks/gate-git-diff.sh`).
 
 ## What is deliberately not measured
 

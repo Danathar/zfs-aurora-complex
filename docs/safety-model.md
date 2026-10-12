@@ -107,8 +107,8 @@ runs always build. Once a run
 does build, it resolves and pins its inputs, reuses or rebuilds the shared
 akmods cache, builds and signs a candidate image, and only then promotes that
 candidate digest to an audit tag and `latest`. If candidate fails, `latest`
-does not move. See ["Scheduled-Build Gate"](docs/architecture-overview.md#0-scheduled-build-gate)
-and ["Promotion And Signing"](docs/architecture-overview.md#5-promotion-and-signing) in the
+does not move. See ["Scheduled-Build Gate"](./architecture-overview.md#0-scheduled-build-gate)
+and ["Promotion And Signing"](./architecture-overview.md#5-promotion-and-signing) in the
 architecture overview for the full decision tables and promotion ordering.
 
 Published images must be signed, matching the Universal Blue image-template

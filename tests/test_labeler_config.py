@@ -50,23 +50,6 @@ RISK_TIERS = REPO_ROOT / "docs" / "risk-tiers.md"
 
 SAFETY_LABEL = "area/safety-critical"
 
-# Paths the labeler and docs/risk-tiers.md already name that are added by pull requests which had
-# not merged when this file was written (the agent boundary under .claude/, the agent instruction
-# files, tests/run_tests.py). A glob or a Tier 3 path that matches nothing is normally a defect;
-# for these it only means the file has not landed yet. Once those pull requests are in, this set
-# is dead weight and the two tests that read it should lose it.
-NOT_YET_IN_TREE = (
-    ".claude/",
-    ".cursor/",
-    ".github/copilot-instructions.md",
-    ".github/prompts/",
-    "tests/run_tests.py",
-)
-
-
-def not_yet_in_tree(path: str) -> bool:
-    return path.startswith(NOT_YET_IN_TREE)
-
 # The three agent instruction files that each spell out section 0 rule 2. They
 # are meant to say the same thing; this is the line they say it on.
 RULE_2_DOCS = ("AGENTS.md", "CLAUDE.md", "GEMINI.md")
@@ -257,8 +240,6 @@ class LabelerConfigTests(unittest.TestCase):
         for label, patterns in self.globs.items():
             for pattern in patterns:
                 regex = glob_to_regex(pattern)
-                if not_yet_in_tree(pattern.replace("**", "")):
-                    continue
                 if not any(regex.match(f) for f in self.tracked):
                     dead.append(f"{label}: {pattern}")
         self.assertEqual(dead, [], f"globs matching no tracked file: {dead}")
@@ -283,7 +264,7 @@ class LabelerConfigTests(unittest.TestCase):
         # area/safety-critical obliges them to do. It may name more than rule 2
         # (it adds cosign.pub and ci/defaults.json on purpose) but never fewer.
         rule_2 = {resolve(p, self.tracked) for p in rule_2_paths("AGENTS.md")}
-        tier_3 = {resolve(p, self.tracked) for p in tier_3_paths() if not not_yet_in_tree(p)}
+        tier_3 = {resolve(p, self.tracked) for p in tier_3_paths()}
         self.assertEqual(
             sorted(rule_2 - tier_3),
             [],
@@ -298,8 +279,6 @@ class LabelerConfigTests(unittest.TestCase):
         regexes = [glob_to_regex(p) for p in self.globs[SAFETY_LABEL]]
         unlabelled = []
         for named in tier_3_paths():
-            if not_yet_in_tree(named):
-                continue
             path = resolve(named, self.tracked)
             members = files_under(path, self.tracked)
             self.assertNotEqual(members, [], f"{named} resolves to no tracked file")
@@ -322,8 +301,6 @@ class LabelerConfigTests(unittest.TestCase):
         # the Tier 3 list names.
         named = set()
         for token in tier_3_paths():
-            if not_yet_in_tree(token):
-                continue
             named.update(files_under(resolve(token, self.tracked), self.tracked))
         regexes = [glob_to_regex(p) for p in self.globs[SAFETY_LABEL]]
         labelled = {f for f in self.tracked if any(r.match(f) for r in regexes)}

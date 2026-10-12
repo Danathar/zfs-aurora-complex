@@ -43,7 +43,6 @@ from tests.test_labeler_config import (
     REPO_ROOT,
     glob_to_regex,
     label_globs,
-    not_yet_in_tree,
     tracked_files,
 )
 
@@ -205,7 +204,7 @@ class EveryTrackedFileHasATier(unittest.TestCase):
                     continue
                 seen.add(token)
                 target = NOT_ROOT_PATHS.get(token, token)
-                if target is None or not_yet_in_tree(target):
+                if target is None:
                     continue
                 with self.subTest(tier=tier, token=token):
                     self.assertTrue(
