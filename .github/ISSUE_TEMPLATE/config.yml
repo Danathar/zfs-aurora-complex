@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: What this image does and does not guarantee
+    url: https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/safety-model.md
+    about: Production for one maintainer, but CI does not boot the image or import a pool before `:latest` moves. Read this before depending on `:latest`.
+  - name: Install and verify
+    url: https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/install-and-verify.md
+    about: Signature verification and bootc switch steps, for usage questions.
+  - name: Glossary
+    url: https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/glossary.md
+    about: akmods, rechunk, candidate tag, stable signal, and the rest of the vocabulary here.
