@@ -54,10 +54,10 @@ applies as-is. What each rule does:
   means nothing can ever merge, including the change that relaxes the rule.
   What 0 still enforces is that every change arrives as a pull request and is
   merged through one. `dismiss_stale_reviews_on_push` is on, so a review given
-  before a later push does not carry over. `require_extra_approval_for_unattributed_changes`
-  is a field GitHub added to the live ruleset on its own when it was created;
-  the file carries it so the file and the live ruleset agree. With 0 approvals
-  required it adds no gate here.
+  before a later push does not carry over. The file also carries
+  `required_reviewers: []` and `require_extra_approval_for_unattributed_changes: true`,
+  both as GitHub reported them on the live ruleset, so the file and the live
+  ruleset agree.
 - **One required check, `Python Unit Tests`.** It is the only check every pull
   request gets. `test.yml` runs it on every pull request, with no path filter
   and no `if:`. `Build PR Image (No Push)` in `build-pr.yml` is not required,
