@@ -77,6 +77,11 @@
       "description": "Never automerge an OpenZFS minor-line bump. A new minor line can introduce new on-disk pool feature flags, and once those are activated on a pool the previous image can no longer import it -- which would break this repo's rollback-to-previous-image recovery path. Adopting a new line must stay a deliberate decision.",
       "automerge": false,
       "matchPackageNames": ["openzfs/zfs"]
+    },
+    {
+      "description": "The privileged akmods build container is pinned by digest in three places: the `container: image:` literals in build.yml and build-branch.yml (tracked by Renovate's github-actions manager) and DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json (tracked by the custom regex manager above). tests/test_workflow_build_container.py::test_container_literals_match_the_checked_in_default requires all three to be identical. The two managers report different currentValue values, so without grouping Renovate opens two PRs for one digest bump and each fails that test on its own, so neither can merge. A shared groupName puts both updates on one branch and in one PR.",
+      "groupName": "akmods build container",
+      "matchPackageNames": ["ghcr.io/ublue-os/devcontainer"]
     }
   ]
 }
