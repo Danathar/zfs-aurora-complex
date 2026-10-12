@@ -193,6 +193,10 @@ class RenovateEntryTests(unittest.TestCase):
     def test_renovate_sets_automerge_false(self) -> None:
         self.assertIn('"automerge": false', (REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
 
+    def test_renovate_rebases_only_a_conflicting_branch(self) -> None:
+        self.assertIn("`rebaseWhen` to `conflicted`", doc_text())
+        self.assertIn('"rebaseWhen": "conflicted"', (REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+
 
 class QuotedHeadingTests(unittest.TestCase):
     """`[page](./x.md), "Heading"` points at a heading that must exist in that page."""
