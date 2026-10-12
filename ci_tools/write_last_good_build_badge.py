@@ -12,7 +12,7 @@ Goal: Give an always-current answer without tracking any state of our own — th
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ci_tools.common import (
@@ -32,9 +32,9 @@ def build_last_good_build_badge(*, created_iso: str, now: datetime) -> dict | No
     if not created_iso:
         return None
 
-    created = datetime.fromisoformat(created_iso.replace("Z", "+00:00"))
+    created = datetime.fromisoformat(created_iso)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
 
     days = (now.date() - created.date()).days
     if days <= 0:
@@ -64,7 +64,7 @@ def main() -> None:
     inspect_json = skopeo_inspect_json_optional(image_ref, creds=creds)
     created_iso = str((inspect_json or {}).get("Created") or "")
 
-    badge = build_last_good_build_badge(created_iso=created_iso, now=datetime.now(timezone.utc))
+    badge = build_last_good_build_badge(created_iso=created_iso, now=datetime.now(UTC))
 
     if badge is None:
         write_github_outputs({"updated": "false"})
