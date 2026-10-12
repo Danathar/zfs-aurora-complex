@@ -44,7 +44,7 @@ jobs:
       # to go green on one.
       - name: Install test runner and linter
         shell: bash
-        run: pip install --quiet pytest pytest-cov "ruff==0.16.5" pyyaml
+        run: pip install --quiet pytest pytest-cov "ruff==0.17.0" pyyaml
 
       - name: Lint with ruff
         shell: bash
