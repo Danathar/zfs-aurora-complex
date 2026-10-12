@@ -1,7 +1,7 @@
 ---
 name: Auto issues
 
-# Opens an issue when an unattended scheduled workflow fails, and closes it
+# Opens an issue when an unattended workflow run on main fails, and closes it
 # when that workflow passes again.
 #
 # Nightly compliance is the only thing that notices the published `:latest`
@@ -24,7 +24,7 @@ name: Auto issues
 #     it. So for the build, this file applies the same two tests the triage
 #     workflow does, read from the same place -- the run's artifacts:
 #       * a failed build is reported only when it left no `akmods-failure-*`
-#         artifact. That is every other way the daily build goes red -- a
+#         artifact. That is every other way the build goes red -- a
 #         missing signing secret, a base-image pull that dies, the push -- which
 #         left `:latest` not moving with nothing filed;
 #       * a green build closes the issue only when it left a `build-inputs-*`
@@ -44,13 +44,21 @@ name: Auto issues
 # same title, and a failure must never be reported into an issue someone else
 # controls. Issues are listed rather than searched because the search index
 # lags. A further failure comments on the open issue instead of filing another.
-# The next passing scheduled run on the default branch closes it, the same way
+# The next passing tracked run on the default branch closes it, the same way
 # akmods-failure-triage.yml closes its sticky issue on a green build.
 #
-# Only scheduled runs count, in both directions. A person who dispatches a run
-# is watching it, and so is whoever pushed to main to start a build. A dispatched
-# build can also promote or not, rebuild akmods or not, so a green one is no
-# evidence about what the scheduled run checks.
+# Which events count, in both directions:
+#
+#   - Scheduled runs, for every watched workflow.
+#   - Push runs of the build on main. At ACMM L6 Hive merges its own green pull
+#     requests, so the push build a merge starts has nobody watching it, the
+#     same as the cron run. A push build always builds and, when it passes,
+#     always promotes (only a dispatch can turn promotion off), so a green one
+#     is the same evidence a scheduled one is, and the `build-inputs-*` test
+#     below still applies.
+#   - Not dispatched runs. A person who dispatches a run is watching it, and a
+#     dispatched build can promote or not, rebuild akmods or not, so a green one
+#     is no evidence about what the scheduled run checks.
 #
 # It applies no label. Some labels mean "approved" to the external system this
 # repository is connected to (docs/SECURITY-AI.md, "Labels carry authority"), and
@@ -91,7 +99,7 @@ jobs:
       issues: write
       actions: read
     steps:
-      - name: Track the scheduled run
+      - name: Track the unattended run
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -114,10 +122,22 @@ jobs:
             echo "$WORKFLOW ran on $HEAD_REPO@$HEAD_BRANCH, not $REPO@$DEFAULT_BRANCH; nothing to track."
             exit 0
           fi
-          if [ "$EVENT" != "schedule" ]; then
-            echo "$WORKFLOW ran on a $EVENT event; only scheduled runs are tracked."
-            exit 0
-          fi
+          # Scheduled runs of every watched workflow, and push runs of the build
+          # (see the header). Anything else, a dispatch above all, neither opens
+          # nor closes.
+          case "$EVENT" in
+            schedule) ;;
+            push)
+              if [ "$WORKFLOW" != "Build And Promote Main Image" ]; then
+                echo "$WORKFLOW ran on a push; only the build's push runs are tracked."
+                exit 0
+              fi
+              ;;
+            *)
+              echo "$WORKFLOW ran on a $EVENT event; only scheduled runs and the build's push runs are tracked."
+              exit 0
+              ;;
+          esac
 
           # A cancelled or skipped run is neither a pass nor a failure. Closing
           # on one would hide a failure nobody has fixed.
@@ -146,7 +166,7 @@ jobs:
             fi
           fi
 
-          title="Scheduled run failing: $WORKFLOW"
+          title="Run failing on main: $WORKFLOW"
 
           # Assigned before it is read, so a failed listing fails the step under
           # `set -eo pipefail` instead of looking like "no issue open" and
@@ -168,15 +188,15 @@ jobs:
               echo "$WORKFLOW failed again; commented on #$number."
             else
               printf '%s\n' \
-                "The scheduled **$WORKFLOW** workflow failed on \`$DEFAULT_BRANCH\`. Nobody watches these runs, so this issue is how the failure gets seen." \
+                "The **$WORKFLOW** workflow failed on \`$DEFAULT_BRANCH\` (\`$EVENT\` run). Nobody watches these runs, so this issue is how the failure gets seen." \
                 "" \
                 "- Run: $RUN_URL" \
                 "- Conclusion: \`$CONCLUSION\`" \
                 "- Commit: $HEAD_SHA" \
                 "" \
-                "Open the run and read the failed step's log. docs/ai-ops-runbook.md says what this workflow checks and what a failure in it means. A failed production build leaves `:latest` where it was, and the image people pull stays the last good one." \
+                "Open the run and read the failed step's log. docs/ai-ops-runbook.md says what this workflow checks and what a failure in it means. A failed production build leaves \`:latest\` where it was, and the image people pull stays the last good one." \
                 "" \
-                "\`.github/workflows/auto-issues.yml\` opened this issue. It comments here on each further scheduled failure, and closes the issue when the next scheduled run on \`$DEFAULT_BRANCH\` passes. A run you dispatch by hand neither opens nor closes it." \
+                "\`.github/workflows/auto-issues.yml\` opened this issue. It comments here on each further failure, and closes the issue when the next tracked run on \`$DEFAULT_BRANCH\` passes: a scheduled run, or for the build also a push run. A run you dispatch by hand neither opens nor closes it." \
                 | gh issue create --repo "$REPO" --title "$title" --body-file -
               echo "$WORKFLOW failed; opened a tracking issue."
             fi

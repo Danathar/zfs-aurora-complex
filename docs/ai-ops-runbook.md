@@ -169,19 +169,20 @@ Every file in `.github/workflows/` has an entry here.
 
 - **Means:** runs after `nightly-compliance.yml`, `agent-audit.yml` or `build.yml`
   finishes. Its job "Open, update or close the tracking issue" opens one issue when
-  a *scheduled* run on `main` fails, comments on that issue when it fails again,
-  and closes it when the next scheduled run passes. The issue title is `Scheduled
-  run failing:` followed by the workflow's name, and its author is
+  a tracked run on `main` fails, comments on that issue when it fails again, and
+  closes it when the next tracked run passes. Tracked means a *scheduled* run of
+  any of the three, or a *push* run of `build.yml` — the build a merge starts,
+  which nobody watches once Hive merges its own pull requests. The issue title is
+  `Run failing on main:` followed by the workflow's name, and its author is
   `app/github-actions`. It applies no label.
 - **First:** open the run linked in the issue and use that workflow's entry on this
   page. A cancelled run, or a run dispatched by hand, neither opens nor closes the
   issue. An issue with the same title that someone else opened is ignored, and a
   new one is filed.
-- **For `build.yml`:** it reports a failed scheduled build only when the run left
-  no `akmods-failure-*` artifact, because the sticky issue above already covers
-  that case. It closes the issue only when the run left a `build-inputs-*`
-  artifact, so a gate-skipped green run cannot close an issue about a failure
-  nobody fixed.
+- **For `build.yml`:** it reports a failed build only when the run left no
+  `akmods-failure-*` artifact, because the sticky issue above already covers that
+  case. It closes the issue only when the run left a `build-inputs-*` artifact, so
+  a gate-skipped green run cannot close an issue about a failure nobody fixed.
 - **Detail:** the header of `.github/workflows/auto-issues.yml`.
 
 ### `agent-audit.yml` — "Agent audit trail"
@@ -194,7 +195,7 @@ Every file in `.github/workflows/` has an entry here.
 - **Red means a record is missing:** a pull request the Hive app opened with no
   `— hive:` signature line, or a commit on an agent pull request with no
   `Signed-off-by:` trailer. Misses merged before 2026-10-08 are listed but do not
-  fail it. A red scheduled run also opens a `Scheduled run failing: Agent audit
+  fail it. A red scheduled run also opens a `Run failing on main: Agent audit
   trail` issue (see `auto-issues.yml` above).
 - **First:** open the run summary. Each finding names the pull request and the
   commits. Merged history is not rewritten to fix one. Say on the pull request
