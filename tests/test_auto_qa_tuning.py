@@ -74,8 +74,8 @@ class AutoQaTuningTests(unittest.TestCase):
         # empty dicts are equal -- so a regex that stopped matching would turn
         # this whole file green rather than red.
         actual = actual_timeouts()
-        self.assertGreater(len(actual), 3, f"implausibly few timeouts parsed: {actual}")
-        self.assertIn(("nightly-compliance.yml", "suite"), actual)
+        self.assertGreater(len(actual), 5, f"implausibly few timeouts parsed: {actual}")
+        self.assertIn(("test.yml", "test"), actual)
 
     def test_every_workflow_timeout_is_declared(self) -> None:
         missing = sorted(set(actual_timeouts()) - set(declared_timeouts()))

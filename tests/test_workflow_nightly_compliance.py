@@ -455,6 +455,22 @@ class NightlyMatchesThePullRequestSuiteTests(unittest.TestCase):
             raise AssertionError(f"no pinned ruff in installer step body: {body!r}")
         return match.group(1)
 
+    @staticmethod
+    def _cov_targets(body: str) -> set[str]:
+        return set(re.findall(r"--cov=(\S+)", body))
+
+    def test_both_suites_measure_the_same_paths(self) -> None:
+        nightly = self._cov_targets(_run_body(NIGHTLY_TEST_STEP))
+        pull_request = self._cov_targets(_run_body(NIGHTLY_TEST_STEP, TEST_WORKFLOW_PATH))
+        self.assertEqual(
+            nightly,
+            pull_request,
+            "the two runs measure different paths, so they hand tests/check_coverage.py "
+            "different coverage.json files while it checks them against one shared floors "
+            "manifest",
+        )
+        self.assertIn("--cov-branch", _run_body(NIGHTLY_TEST_STEP))
+
     def test_both_suites_pin_the_same_ruff(self) -> None:
         nightly = self._ruff_pin(_run_body(NIGHTLY_LINT_INSTALL_STEP))
         pull_request = self._ruff_pin(_run_body(NIGHTLY_LINT_INSTALL_STEP, TEST_WORKFLOW_PATH))

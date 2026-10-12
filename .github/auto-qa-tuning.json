@@ -68,6 +68,8 @@
   },
 
   "jobs": [
+    { "workflow": "test.yml", "job": "test", "timeout_minutes": 15 },
+
     { "workflow": "auto-issues.yml", "job": "track", "timeout_minutes": 5 },
 
     { "workflow": "labeler.yml", "job": "label", "timeout_minutes": 5 },
