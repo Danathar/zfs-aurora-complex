@@ -57,6 +57,12 @@ point:
     imports `mod` to resolve the warning category, `--pdbcls=mod:Cls` imports
     `mod`, and `--cov-config` names an rc file whose `plugins =` imports and
     whose `data_file =` writes. Each is refused with the import options.
+  * **Closed:** a dotted `--cov` source. pytest-cov hands a `--cov` value
+    that is not a directory to coverage as a package name, and coverage
+    resolves it with `importlib.util.find_spec`, which imports every parent
+    package first -- so `--cov=mod.x` runs `mod`, the same primitive as
+    `-W ignore::mod.W`. A value with a `.` in it that is not a directory is
+    refused; see `refused_coverage_source`.
   * **Closed:** an argument file. pytest's parser is built with
     `fromfile_prefix_chars="@"`, so `@PATH` anywhere in argv is replaced by
     the lines of PATH *inside pytest*, after this script has looked at the
@@ -250,6 +256,46 @@ def refused_option(argument: str) -> str | None:
             if f"-{letter}" in REFUSED_OPTIONS:
                 return f"-{letter}"
             break
+    return None
+
+
+# pytest-cov's option naming what to measure. It is not refused: `--cov`,
+# `--cov=ci_tools` and `--cov=files/scripts` are the spellings CONTRIBUTING and
+# test.yml use. Its value is what matters. pytest-cov passes it to coverage as a
+# `source` entry, and coverage measures a directory if one exists at that path
+# and otherwise treats the value as a package name, which it resolves with
+# `importlib.util.find_spec`. `find_spec` on a dotted name imports every parent
+# package before it looks, so `--cov=mod.x` runs `mod` -- any module installed
+# in the interpreter, by name, which is what `-W ignore::mod.W` does and why
+# `-W` is on the import list above. A top-level name is only located, not
+# run, so `--cov=ci_tools` stays allowed.
+COVERAGE_SOURCE_OPTION = "--cov"
+
+
+def refused_coverage_source(arguments: list[str]) -> str | None:
+    """Return a `--cov` value coverage would import a parent package for, or None.
+
+    Both spellings are read: `--cov=VALUE`, and `--cov VALUE`, where pytest-cov
+    takes the next argument as the value unless it starts with `-` (its
+    `nargs="?"`). A value is refused when it contains a `.` and is not a
+    directory under the repository root, where `run_pytest` starts pytest and
+    so where coverage looks. `--cov tests/test_cli.py` is refused by the same
+    rule; pytest-cov would have taken the test file as the coverage source
+    rather than as a selection, so the invocation never meant what it said.
+    """
+    for index, argument in enumerate(arguments):
+        if argument.startswith(f"{COVERAGE_SOURCE_OPTION}="):
+            value = argument.split("=", 1)[1]
+        elif (
+            argument == COVERAGE_SOURCE_OPTION
+            and index + 1 < len(arguments)
+            and not arguments[index + 1].startswith("-")
+        ):
+            value = arguments[index + 1]
+        else:
+            continue
+        if "." in value and not (REPO_ROOT / value).is_dir():
+            return value
     return None
 
 
@@ -519,6 +565,17 @@ def main(argv: list[str] | None = None) -> int:
         if option is not None:
             print(refusal_message(option), file=sys.stderr)
             return 2
+
+    source = refused_coverage_source(arguments)
+    if source is not None:
+        print(
+            f"--cov {source!r} is refused here: it is not a directory, so coverage "
+            "reads it as a dotted module name and imports each parent package to "
+            "find it, which lets pytest import code from outside this repository. "
+            "Name a directory (--cov=ci_tools) or a top-level package instead.",
+            file=sys.stderr,
+        )
+        return 2
 
     selections = [a for a in arguments if is_selection(a)]
     if not selections:
