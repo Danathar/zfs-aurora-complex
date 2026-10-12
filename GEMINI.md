@@ -41,6 +41,10 @@ override sections 1-5 below when they conflict:
 - **When unsure whether something is risky, stop and ask.** An interrupted task is cheap
   here; a bad published image is not.
 
+## Where the rest lives
+
+Read `.claude/session-summary.md` before starting and update it if you leave work unfinished. Procedures for diagnosing a red build, replaying one, and reviewing a safety-critical diff are in `.github/prompts/`. The test command that is safe to run unattended is `python3 tests/run_tests.py`; it refuses collection outside `tests/`.
+
 ## Preferred Task Shape
 
 For non-trivial work, anchor the response around this structure:

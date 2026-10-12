@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(python3 tests/run_tests.py:*)",
+      "Bash(ruff check)",
+      "Bash(ruff check ci_tools/ shared/ tests/ files/ containerfiles/)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git blame:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(skopeo inspect:*)",
+      "Bash(cosign verify:*)"
+    ],
+    "ask": [
+      "Bash(gh api:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git rebase:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh run rerun:*)",
+      "Bash(podman build:*)",
+      "Bash(podman run:*)",
+      "Bash(buildah:*)",
+      "Bash(sudo:*)"
+    ],
+    "deny": [
+      "Read(./cosign.key)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.p12)",
+      "Read(./**/id_rsa)",
+      "Read(./**/id_ed25519)",
+      "Bash(cosign sign:*)",
+      "Bash(cosign generate-key-pair:*)",
+      "Bash(skopeo copy:*)",
+      "Bash(skopeo delete:*)",
+      "Bash(podman push:*)",
+      "Bash(buildah push:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh release:*)",
+      "Bash(gh secret set:*)",
+      "Bash(gh secret delete:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh label edit:*)",
+      "Bash(gh label delete:*)",
+      "Bash(gh label clone:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git push * --force:*)",
+      "Bash(git push * -f:*)",
+      "Bash(git push * --delete:*)",
+      "Bash(git push * --force-with-lease:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git tag -d:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(podman system prune:*)",
+      "Bash(podman image prune:*)",
+      "Bash(podman rmi -a:*)",
+      "Bash(podman rmi --all:*)",
+      "Bash(zpool:*)",
+      "Bash(zfs destroy:*)",
+      "Bash(zfs rollback:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/gate-git-diff.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r \".tool_input.file_path // empty\"); case \"$f\" in *.py) command -v ruff >/dev/null 2>&1 || exit 0; out=$(cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || exit 0; ruff check \"$f\" 2>&1) || { printf \"%s\\n\" \"$out\" >&2; exit 2; };; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  },
+  "_note_deny_publishing": "Everything that moves a published artifact is denied outright rather than gated behind `ask`: cosign sign, skopeo copy/delete, podman/buildah push, gh release, tag deletion, and force push. AGENTS.md section 0 rule 6 says registry tags and git history here are outward-facing and an agent proposes rather than does. `gh pr merge` and `gh workflow run` are on this list for the same reason and it is not obvious why: merging to main triggers build.yml, which builds, signs with this repo's key, and promotes to :latest, and a workflow_dispatch of build.yml defaults to promote_to_stable=true. Both are one command away from moving :latest, so neither is a prompt the maintainer should be able to click through while distracted.",
+  "_note_test_runners": "The allowed test command is `python3 tests/run_tests.py`, not `python3 -m pytest` or `python3 -m unittest`, and the reason is not style. A test runner imports every module it collects, and an import is not a tool call, so no rule in this file is consulted for what that module then does -- a module calling subprocess with `cosign sign` or `skopeo copy` reaches an operation the deny list above says is denied outright. An unrestricted runner on the allow list is therefore unbounded local code execution behind one approved command, and it makes every deny row conditional on which files that runner is willing to import. run_tests.py narrows that to files already in the diff: it refuses a selection resolving outside tests/, refuses the options that relocate collection, load a plugin, rewrite the ini configuration that pytest splices into the command line, or import a module by name (`--pyargs`, `-p`, `--rootdir`, `--confcutdir`, `-c`, `--import-mode`, `-o`/`--override-ini`, `-W`/`--pythonwarnings`, `--pdbcls`, `--cov-config`), in every spelling pytest accepts, refuses any argument starting with `@`, which pytest replaces with the lines of the file it names after the runner has looked, and refuses to run while the checkout holds any untracked file Python or pytest could load: a `.py`, `.pyc` or `.so` anywhere, any file under tests/, or a pytest or coverage config file at the root. It refuses a second family for an unrelated reason: the options that write to a path the caller names (`--junitxml`, `--log-file`, `--debug`, `--basetemp`, and the plugin reports `--report-log` and `--cov-report`). Those have nothing to do with imports -- they are the write primitive `_note_git_diff_gate` describes for `git --output=FILE`, reached through a different allow-listed command. `--junitxml=cosign.pub` overwrites the trust anchor and `--basetemp=.claude` empties the directory holding this file, and neither a Read(...) deny row nor a command-prefix rule can see it. And a third: the options that open pytest's interactive debugger (`--trace` before every test, `--pdb` at the first failure). pdb runs any Python statement it reads from standard input, and the caller chooses that input, so `printf '!stmt\\nc\\n' | python3 tests/run_tests.py --trace tests` ran `stmt` with nothing written to the checkout for the untracked-file refusal to find. What it does not do is stop a *tracked* test from running -- an agent may add a test, so a committed module runs by design and review is the control for it. Running pytest directly is not denied, only unlisted, so it prompts. The same bound applies to every other Python row, and it is why there is no `python3 -m` row at all: `python3 -m <module>` puts the working directory first on sys.path, so an untracked root module named after a stdlib one (argparse, json) runs before the module's first line and no check inside the module can come earlier. `python3 -m ci_tools.cli --help` was allowed until that was shown with a marker file; it prompts now, and ci_tools/cli.py lists the same commands to a Read.",
+  "_note_gh_api": "gh api is in `ask`, never `allow`. Permission rules match by command prefix, and `gh api` switches to POST as soon as -f/-F is present and honours -X for any method. An allow rule such as Bash(gh api repos/:*) would therefore approve mutations, including the workflow-dispatch endpoint that gh workflow run is denied for.",
+  "_note_push_orderings": "The git push deny entries are best-effort, not a boundary. Permission rules match by command prefix, and git accepts the remote before the option -- `git push origin --force HEAD:main` matches none of the `git push --force` prefixes. The `git push * --force` forms above catch the common orderings, but a leading `+` in a refspec (`git push origin +main`) forces an update with no flag at all, and no prefix rule can see it. The same holds for deletion, which is why it is called out separately from the denied-outright rows: the `git push --delete` and `git push * --delete` entries catch the flag spellings, but a refspec with an empty source side (`git push origin :main`, `git push origin :refs/tags/v1.0.0`) deletes the remote ref with no option at all. The fully-qualified spellings could be denied with `git push * :refs/heads/*` and `git push * :refs/tags/*`; the short `git push origin :main` could not, because a trailing `:*` in this rule language means \"this command with any arguments\" and a pattern ending in a literal colon-glob collides with that idiom. A partial rule that let the table read \"denied\" again would be worth less than the accurate row. The real control is that plain `git push` sits in `ask`, so a human reads the whole command before it runs. This note says so rather than implying force-push or ref deletion is impossible.", "_note_labels": "gh label create/edit/delete/clone are denied because a label is an input to tooling outside the tree -- the area/* labeler applies labels from changed paths, and Hive, the one autonomous path here, reads labels on issues and pull requests -- so minting or renaming one is a way to manufacture a signal that process then acts on. Which labels Hive treats as approval is configured in Hive, not in this repository, and nothing here can verify it. `gh label list` stays allowed -- reading them is how you check what one means before using it. `gh issue edit` and `gh pr edit` can also attach a label and are left in `ask` rather than denied, because both have ordinary uses and a human reads the command before it runs.", "_note_zpool": "zpool is denied wholesale rather than by subcommand. This repository is about ZFS, so a pool is plausibly attached to whatever machine an agent is running on, and the read-only subcommands are not worth the risk of a prefix rule that also matches zpool destroy or zpool labelclear.",
+  "_note_git_diff_gate": "The PreToolUse hook exists because this boundary cannot be expressed as a permission rule. `git diff`, `git log`, `git show` and `git blame` are on the allow list above, and the Read(...) rows in `deny` gate a different tool: they say nothing about what an allowed Bash command opens or writes. `git diff` compares its operands as plain files as soon as two are given and either one is not a revision, so it prints any file this uid can read past those rows -- and it needs no flag to do it, `--` does not end the mode, and a lone `-` counts as the second operand. The same family writes: `--output=FILE` sends the diff to a path instead of stdout, so `git log -p --output=cosign.pub -1` overwrites the trust anchor this repository ships, and `git show --output=.claude/settings.json HEAD` overwrites this file. A prefix rule can match none of that -- the read half has no flag to match and the write half is a flag in the middle of an otherwise ordinary command -- so `.claude/hooks/gate-git-diff.sh` inspects the operands git would actually receive and refuses with exit 2. It fails closed when jq is missing rather than letting calls through uninspected, per AGENTS.md section 0 rule 1. The hook's own comments state what it still cannot see: arguments built at runtime, a cd out of the repository first, and anything a command does once it has started.",
+  "_note_ruff": "The two ruff rows have no trailing `:*`, which is the whole point of them. `ruff check` takes `-o`/`--output-file`, which sends the report to a path instead of stdout and creates the file even when the lint is clean, so `Bash(ruff check:*)` -- the linter with any arguments -- overwrote cosign.pub, ci/inputs.lock.json, this file or .claude/hooks/gate-git-diff.sh with no prompt. That is the same write primitive _note_git_diff_gate describes for `git --output=FILE`, and the same two reasons apply: the Read(...) rows gate a different tool, and a prefix rule cannot see a flag in the middle of an otherwise ordinary command. Unlike the git family it needs no hook, because every ruff invocation this repository documents is a fixed string: a rule with no `:*` matches that command and nothing after it, so a spelling carrying `--output-file` is unlisted and prompts. The second row is the exact command .github/workflows/test.yml and .github/copilot-instructions.md both name, so nothing an agent is told to run starts prompting. Linting one file after editing it is unaffected: the PostToolUse hook below runs `ruff check` on it, and a hook does not go through the permission layer.",
+  "_note_gated_writes": "The same PreToolUse hook also re-gates the allow rows that are not git's, because the write primitive _note_git_diff_gate describes is not git's alone. A rule ending in `:*` means \"this command with any arguments\", and a shell output redirection is part of the string that rule matches, so `python3 tests/run_tests.py >cosign.pub` truncated the trust anchor before a single test was collected and `gh run view 1 --log >.claude/settings.json` overwrote this file, both with no prompt -- the Read(...) rows gate a different tool and the runner's own refusal list only covers pytest options, never a redirection it is never passed. `cosign verify` carries the flag spelling as well: `--output-file` is a persistent flag on cosign's root command, so every subcommand has it, and cosign creates and truncates the path before it verifies anything, so `cosign verify --output-file cosign.pub --key cosign.pub <ref>` empties the anchor and then exits non-zero. Unlike the ruff rows this one cannot be narrowed to an exact command, because the image reference is an argument, so the refusal lives in .claude/hooks/gate-git-diff.sh next to git's: an output redirection inside one of these commands, and `--output-file` in a cosign invocation, are refused with exit 2. Descriptor forms (2>&1) and pipes are untouched, which is what a `gh run view ... 2>&1 | sed` pipeline needs. tests/test_git_diff_gate.py derives the list of gated commands from this file, so a rule added here with a trailing `:*` fails that test until the hook lists it.",
+  "_note_hook": "The PostToolUse hook runs ruff on any .py file just written, and exits 2 so the finding is fed back rather than merely printed. It no-ops when ruff is absent, so it never blocks work on a machine without it -- CI is where the lint is enforced, per .github/workflows/test.yml."
+}

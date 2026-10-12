@@ -66,6 +66,12 @@ So the bar for changes here is higher than "tests pass."
 
 ---
 
+## Where the rest lives
+
+- Agent permissions are in `.claude/settings.json`; the unattended test command is `python3 tests/run_tests.py`, which refuses collection outside `tests/`. Do not widen it.
+- Read `.claude/session-summary.md` before starting; update it if you leave work unfinished. Wrong beliefs that cost time go in `.claude/memory/corrections.md`.
+- Slash commands in `.claude/commands/` point at the procedures in `.github/prompts/`.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
