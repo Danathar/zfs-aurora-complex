@@ -1,0 +1,66 @@
+name: Coverage gap
+description: A code path missed by the unit suite, by production execution, or by both
+title: "[quality] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [`CONTRIBUTING.md` → Coverage](https://github.com/Danathar/zfs-aurora-complex/blob/main/CONTRIBUTING.md#coverage) first.
+        All three tiers in its priority order belong here, not only the top one.
+        Two things are explicitly **not** worth filing: the coverage percentage moving,
+        and coverage obtained by weakening a fail-closed guard.
+  - type: input
+    id: path
+    attributes:
+      label: The path
+      description: File, function, and the specific branch or guard. Not a percentage.
+      placeholder: ci_tools/resolve_build_inputs.py — the use_input_lock=true replay guards
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Which tier misses it?
+      description: >-
+        The priority order in CONTRIBUTING. "Covered by neither" is the top of the list;
+        a percentage alone is not a finding.
+      options:
+        - Covered by neither — no unit test and no production execution
+        - Runs in production, no unit test
+        - Unit-tested only, where a real call would behave differently
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence for the tier claim
+      description: >-
+        How you established it. For "no production execution", the trigger mix from
+        `gh run list` or the job logs you read. For "a real call would behave
+        differently", the actual error shape the mock does not produce.
+    validations:
+      required: true
+  - type: textarea
+    id: consequence
+    attributes:
+      label: What breaks silently if this guard is wrong
+      description: >-
+        Specifically. A guard that only runs during incident replay fails at the worst
+        possible moment; a guard on the signing path can strand a machine.
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Before filing
+      options:
+        - label: >-
+            The fix I have in mind does not weaken the guard to make it testable
+            (AGENTS.md section 0 rule 1).
+          required: true
+        - label: >-
+            The test I have in mind pins the message or the specific guard, not just
+            `assertRaises(CiToolError)` — which passes for any reason at all.
+          required: true

@@ -81,6 +81,14 @@ Start here depending on what you want:
 | fix a broken build | [`docs/upstream-change-response.md`](./docs/upstream-change-response.md) |
 | read the deep design history and validation notes | [`docs/design-deep-dive.md`](./docs/design-deep-dive.md) |
 | change which akmods commit is built | [`docs/akmods-fork-maintenance.md`](./docs/akmods-fork-maintenance.md) |
+| submit a change | [`CONTRIBUTING.md`](./CONTRIBUTING.md), and [`tests/e2e/README.md`](./tests/e2e/README.md) for the CLI end-to-end tests |
+| know how much scrutiny a change gets, and how it is reviewed | [`docs/risk-tiers.md`](./docs/risk-tiers.md), [`docs/review-rubric.md`](./docs/review-rubric.md) |
+| read what the badges, gates and numbers mean | [`docs/quality.md`](./docs/quality.md), [`docs/metrics.md`](./docs/metrics.md) |
+| work with an AI agent here, or judge its output | [`docs/SECURITY-AI.md`](./docs/SECURITY-AI.md), [`docs/agent-boundaries.md`](./docs/agent-boundaries.md), [`docs/multi-agent.md`](./docs/multi-agent.md), [`docs/ai-ops-runbook.md`](./docs/ai-ops-runbook.md) |
+| run a recurring agent procedure, or trace a change to its task | [`.github/prompts/README.md`](./.github/prompts/README.md), [`.claude/commands/README.md`](./.claude/commands/README.md), [`docs/agent-tasks/README.md`](./docs/agent-tasks/README.md) |
+| see how `main` is protected | [`docs/branch-protection.md`](./docs/branch-protection.md) |
+| learn from past incidents, and see where the project is headed | [`docs/reflections/`](./docs/reflections/README.md), [`docs/strategy.md`](./docs/strategy.md) |
+| see which pins and decisions need a human later, and why `main` and runtime testing are set up as they are | [`docs/maintenance-watchlist.md`](./docs/maintenance-watchlist.md), [`docs/production-boundary-proposal.md`](./docs/production-boundary-proposal.md), [`docs/runtime-validation-proposal.md`](./docs/runtime-validation-proposal.md) |
 | look up a term | [`docs/glossary.md`](./docs/glossary.md) |
 | see the whole documentation map | [`docs/documentation-guide.md`](./docs/documentation-guide.md) |
 

@@ -1,0 +1,114 @@
+---
+name: Nightly compliance
+
+# Checks that hold on a clock rather than on a pull request.
+#
+# Everything in test.yml runs when someone changes something. These do not have
+# that trigger: the published image can stop verifying without anyone touching
+# the repository -- a tag moved, a signature pruned, a registry problem -- and a
+# job timeout goes stale because upstream grew, not because we edited anything.
+#
+# It reports rather than repairs. Nothing here rewrites a threshold or republishes
+# an image; .github/auto-qa-tuning.json says why that asymmetry is deliberate.
+#
+# Two jobs so a registry problem and a code regression cannot be mistaken for
+# each other in the run list.
+
+on:
+  schedule:
+    # 05:00 UTC, an hour before build.yml's 06:00 run, so a failure here is
+    # visible before the production build starts rather than tangled up with it.
+    - cron: "00 05 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: suite
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # PyYAML for the same reason test.yml names it: the workflow tests skip
+      # without it, and this job exists to notice a changed runner image, not
+      # to go green on one.
+      - name: Install test runner and linter
+        shell: bash
+        run: pip install --quiet pytest pytest-cov "ruff==0.16.5" pyyaml
+
+      - name: Lint with ruff
+        shell: bash
+        run: ruff check ci_tools/ shared/ tests/ files/ containerfiles/
+
+      # The same suite test.yml runs. Repeated here on a schedule because a
+      # dependency of the *runner* can break it with no commit on our side --
+      # a Python point release, a changed image. That failure is worth seeing
+      # on its own rather than on whoever opens the next pull request.
+      - name: Run tests
+        shell: bash
+        run: |
+          python3 -m pytest tests/ -q \
+            --cov=ci_tools --cov=shared \
+            --cov=containerfiles/zfs-akmods --cov=files/scripts \
+            --cov-branch --cov-report=json
+
+      - name: Check per-file coverage decisions
+        shell: bash
+        run: python3 tests/check_coverage.py | tee "${GITHUB_STEP_SUMMARY}"
+
+  published-image:
+    name: published-image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
+      # The check nothing else performs. Every other signature check in this
+      # repository runs at publish time, against an image the same run just
+      # built. This one asks a different question: does the artifact a user
+      # would pull *right now* still verify against the committed public key?
+      #
+      # `--new-bundle-format=false` is required and is not a style choice --
+      # this repo signs with the legacy format, and docs/install-and-verify.md
+      # tells users to pass it. Verifying differently from the documented
+      # command would test something users are not doing.
+      - name: Verify the published :latest signature
+        shell: bash
+        env:
+          IMAGE: ghcr.io/danathar/zfs-aurora-complex:latest
+        run: |
+          set -euo pipefail
+          digest="$(skopeo inspect --format '{{ .Digest }}' "docker://${IMAGE}")"
+          echo "### Published image" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "\`${IMAGE}\` is \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+          # Verify the digest that was just inspected, not the tag. If `:latest`
+          # moves between the two commands -- a concurrent production run is
+          # enough -- the summary would record digest A while cosign resolved
+          # and verified digest B, and the job would claim the recorded artifact
+          # verified without ever checking it.
+          cosign verify \
+            --key cosign.pub \
+            --new-bundle-format=false \
+            "${IMAGE%:*}@${digest}"
+
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Signature verifies against the committed \`cosign.pub\`." \
+            >> "${GITHUB_STEP_SUMMARY}"

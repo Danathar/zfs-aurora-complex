@@ -6,5 +6,15 @@ docs/private/
 cosign.key
 .DS_Store
 .codex
-.claude/
-.claude/*.lock
+# Everything under .claude/ is per-machine state, except the shared files and
+# directories negated below, which are reviewed like any other file.
+# settings.local.json stays ignored on purpose: it is the per-machine override
+# of the shared settings.json, so tracking it would defeat the split.
+.claude/*
+!.claude/commands/
+!.claude/hooks/
+!.claude/memory/
+!.claude/settings.json
+!.claude/session-summary.md
+.coverage
+coverage.json
