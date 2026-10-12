@@ -1,0 +1,79 @@
+name: Bug report
+description: A reproducible problem with the published image, a booted machine, or ZFS
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This image is daily-driven in production by its maintainer, but CI does not boot it or import a pool before `:latest` moves — see [`docs/safety-model.md`](https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/safety-model.md).
+        Do not paste signing keys, tokens, or pool passphrases into this form.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: The observed behavior, and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did it happen?
+      options:
+        - bootc upgrade or rollback on a booted machine
+        - First boot after install
+        - ZFS behavior (import, mount, module load)
+        - Signature verification or policy
+        - Local build (see docs/building-locally.md)
+        - Somewhere else
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Image digest
+      description: >-
+        Required for anything running on a machine; leave blank only for a local
+        build that failed before producing an image. The digest, not the tag:
+        `:latest` moves, so a tag does not identify what you actually booted.
+        `bootc status` reports it as `Digest:`.
+      placeholder: sha256:...
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel release
+      description: Output of `uname -r`.
+      placeholder: 7.0.12-201.fc44.x86_64
+  - type: input
+    id: zfs
+    attributes:
+      label: ZFS version
+      description: Output of `zfs version`, or "module did not load".
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: The smallest sequence that reproduces it.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant output
+      description: >-
+        Complete errors where possible. `journalctl -b -u zfs-import-cache` and
+        `dmesg | grep -i zfs` are usually the useful ones.
+      render: shell
+  - type: checkboxes
+    id: data
+    attributes:
+      label: Before filing
+      options:
+        - label: I removed credentials, signing material, and pool passphrases from this report.
+          required: true
+        - label: >-
+            If a pool is involved, I have said whether it imports under the previous
+            image — an image that activates newer pool features can leave the previous
+            one unable to import.
+          required: true

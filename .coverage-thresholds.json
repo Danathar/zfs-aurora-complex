@@ -1,0 +1,34 @@
+{
+  "floors": {
+    "ci_tools/__init__.py": 0,
+    "ci_tools/akmods_build_and_publish.py": 50,
+    "ci_tools/akmods_clone_pinned.py": 25,
+    "ci_tools/akmods_configure_zfs_target.py": 24,
+    "ci_tools/check_akmods_cache.py": 80,
+    "ci_tools/check_stable_signal.py": 64,
+    "ci_tools/classify_akmods_failure.py": 69,
+    "ci_tools/cli.py": 31,
+    "ci_tools/common.py": 143,
+    "ci_tools/export_repo_defaults.py": 12,
+    "ci_tools/pin_akmods_cache.py": 18,
+    "ci_tools/prepare_validation_build.py": 34,
+    "ci_tools/promote_stable.py": 38,
+    "ci_tools/resolve_build_inputs.py": 139,
+    "ci_tools/sign_image.py": 28,
+    "ci_tools/tagging_context.py": 33,
+    "ci_tools/write_akmods_badge.py": 23,
+    "ci_tools/write_build_inputs_manifest.py": 14,
+    "ci_tools/write_last_good_build_badge.py": 20,
+    "ci_tools/zfs_release.py": 52,
+    "containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py": 108,
+    "files/scripts/configure_signing_policy.py": 55,
+    "shared/__init__.py": 0,
+    "shared/kernel_release.py": 5,
+    "shared/oci_layout.py": 24
+  },
+  "unmeasured": {
+    ".claude/hooks/gate-git-diff.sh": "A PreToolUse hook run by Claude Code, not by anything the suite imports, and bash rather than Python -- coverage.py has nothing to instrument here. It is not unexercised: tests/test_git_diff_gate.py runs this exact script as a subprocess against real tool payloads and asserts exit 2 for each spelling that reads or writes an arbitrary file, exit 0 for the ordinary forms, and a fail-closed refusal when jq is absent.",
+    "Containerfile": "Executes only inside an image build. Nothing on the host reaches it, so there is no seam to measure. Its happy path runs on every build.yml, build-pr.yml and build-branch.yml run; its failure branches do not.",
+    "build_files/build-image.sh": "Same: a RUN step in the Containerfile, against a real RPM database and module tree. It does its work at the top level, so sourcing it would execute the whole file. The decisions it delegates -- ZFS install, signing policy -- live in the Python modules above, which are measured."
+  }
+}

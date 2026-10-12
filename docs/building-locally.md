@@ -23,8 +23,8 @@ kernel, treats only the newest as the supported primary kernel, and installs
 just that kernel's `kmod-zfs` package — older bundled kernels are not treated
 as supported ZFS targets, matching the recovery policy above. For the full
 build steps, the Fedora-version detection details, and the Chunkah rechunk
-mechanics, see ["Input Resolution"](docs/architecture-overview.md#1-input-resolution) through
-["Content-Based Layering With Chunkah"](docs/architecture-overview.md#content-based-layering-with-chunkah) in the
+mechanics, see ["Input Resolution"](./architecture-overview.md#1-input-resolution) through
+["Content-Based Layering With Chunkah"](./architecture-overview.md#content-based-layering-with-chunkah) in the
 architecture overview. The install logic itself lives in
 [`containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py`](../containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py).
 

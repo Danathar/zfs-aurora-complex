@@ -113,12 +113,13 @@ Docs-only changes do not trigger image builds.
 #### Running Tests
 
 ```bash
-pip install pytest
+pip install pytest pytest-cov pyyaml
 python3 -m pytest tests/ -v
 ```
 
 Tests use `unittest.TestCase` with `unittest.mock.patch` and have no external
-dependencies beyond `pytest` as the test runner. Every CI tool module in
+dependencies beyond `pytest` as the test runner (`pyyaml` is installed so the
+YAML-schema tests run instead of skipping; `pytest-cov` feeds the coverage floors). Every CI tool module in
 `ci_tools/` has a corresponding `tests/test_<module_name>.py` file. All external
 calls (subprocess, registry, filesystem) are mocked so tests run without network
 access or container tooling.

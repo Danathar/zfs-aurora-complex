@@ -1,0 +1,61 @@
+name: Build or pipeline failure
+description: A workflow run failed, or published something that looks wrong
+title: "[build] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A persistent akmods failure is filed automatically by
+        [`akmods-failure-triage.yml`](https://github.com/Danathar/zfs-aurora-complex/blob/main/.github/workflows/akmods-failure-triage.yml)
+        under the `akmods-failure` label. Check for an existing sticky issue first.
+  - type: input
+    id: run
+    attributes:
+      label: Failing run URL
+      description: Link the specific run, not the workflow. Say which job and step failed.
+      placeholder: https://github.com/Danathar/zfs-aurora-complex/actions/runs/...
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Workflow
+      options:
+        - build.yml
+        - build-pr.yml
+        - build-branch.yml
+        - akmods-failure-triage.yml
+        - test.yml
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: failure
+    attributes:
+      label: What failed
+      description: >-
+        Paste the error, including the fail-closed guard message if one fired —
+        the ZFS/kernel mismatch, digest mismatch, signature, or akmods cache checks
+        all report which condition they refused on.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: cause
+    attributes:
+      label: Suspected cause
+      description: >-
+        Optional. If an upstream change is involved (base image, kernel, akmods,
+        ZFS release), name it and link it.
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Before proposing a fix
+      options:
+        - label: >-
+            I understand a fail-closed check that fires is reporting a real condition.
+            The fix is the underlying cause — not relaxing the check, adding a fallback,
+            or making it best-effort (AGENTS.md section 0 rule 1).
+          required: true

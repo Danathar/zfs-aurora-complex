@@ -1,0 +1,63 @@
+{
+  "$comment": "The GITHUB_TOKEN permissions each workflow in .github/workflows/ is allowed to request. tests/test_workflow_permissions_policy.py reads every workflow and fails when one asks for anything not written here, when a workflow is missing from this file, or when an entry here names a workflow or job that no longer exists. So widening a token's reach takes two edits a reviewer sees side by side: the workflow, and this file. `workflow` is the top-level permissions block; null means the file declares none. `jobs` lists only jobs that declare their own block; a job not listed must not declare one. Where `workflow` is null every job must be listed, because a job with no block at all gets the repository's default token, which this file cannot record. This file is Tier 3 in docs/risk-tiers.md. See docs/SECURITY-AI.md.",
+  "workflows": {
+    "agent-audit.yml": {
+      "workflow": null,
+      "jobs": {
+        "audit": {"contents": "read", "pull-requests": "read"}
+      }
+    },
+    "akmods-failure-triage.yml": {
+      "workflow": null,
+      "jobs": {
+        "triage": {"contents": "write", "issues": "write", "actions": "read", "packages": "read"}
+      }
+    },
+    "auto-issues.yml": {
+      "workflow": null,
+      "jobs": {
+        "track": {"issues": "write", "actions": "read"}
+      }
+    },
+    "build-branch.yml": {
+      "workflow": null,
+      "jobs": {
+        "prepare-branch-metadata": {"contents": "read"},
+        "build-branch-akmods": {"contents": "read", "packages": "write"},
+        "build-branch-image": {"contents": "read", "packages": "write"}
+      }
+    },
+    "build-pr.yml": {
+      "workflow": null,
+      "jobs": {
+        "build-pr-image": {"contents": "read"}
+      }
+    },
+    "build.yml": {
+      "workflow": null,
+      "jobs": {
+        "preflight": {"contents": "read", "packages": "read"},
+        "build-zfs-akmods": {"contents": "read", "packages": "write"},
+        "sign-akmods-cache": {"contents": "read", "packages": "write"},
+        "build-candidate-image": {"contents": "read", "packages": "write"},
+        "promote-stable": {"contents": "read", "packages": "write"}
+      }
+    },
+    "labeler.yml": {
+      "workflow": null,
+      "jobs": {
+        "label": {"contents": "read", "pull-requests": "write"}
+      }
+    },
+    "nightly-compliance.yml": {
+      "workflow": {"contents": "read"},
+      "jobs": {}
+    },
+    "test.yml": {
+      "workflow": null,
+      "jobs": {
+        "test": {"contents": "read"}
+      }
+    }
+  }
+}
