@@ -1,0 +1,80 @@
+{
+  "_comment": [
+    "Declared CI job timeouts, and the policy for deciding when a threshold no",
+    "longer matches reality.",
+    "",
+    "Two consumers, deliberately split by whether they need a network:",
+    "",
+    "  tests/test_auto_qa_tuning.py runs in the ordinary suite and asserts that",
+    "  every timeout declared here matches the workflow YAML, in both",
+    "  directions. That is the half that rots silently, because changing a",
+    "  timeout in YAML leaves this file stale with nothing to notice.",
+    "",
+    "  .github/workflows/nightly-compliance.yml does the half that needs a",
+    "  network: it re-verifies the published :latest signature against the",
+    "  committed public key, which nothing else checks after publish time.",
+    "",
+    "The statistic is the MAXIMUM observed duration, not a percentile. A timeout",
+    "has to cover the worst run, not the typical one -- a p95 that fits tells",
+    "you nothing about the 1-in-20 run that gets killed at the cap.",
+    "",
+    "Duration sampling is deliberately NOT automated. A per-job maximum needs",
+    "the jobs API for every run, and a fragile script reporting a number nobody",
+    "acts on is worse than a command someone runs when the question comes up.",
+    "docs/metrics.md carries that command and treats it the way it treats every",
+    "other number here: reproducible, with an honest account of what it is",
+    "worth, rather than a collector nobody reads.",
+    "",
+    "This repository has numeric quality thresholds: the per-module coverage",
+    "floors in .coverage-thresholds.json, checked by tests/check_coverage.py.",
+    "They are deliberately NOT tuned from here. Raising one is evidenced and",
+    "the gate already prints `could raise` when it is possible; lowering one is",
+    "evidenced only by an absence, and a deleted test and a removed code path",
+    "look identical from the count alone.",
+    "",
+    "build.yml, build-branch.yml, build-pr.yml and akmods-failure-triage.yml set",
+    "no timeout-minutes on their jobs today, so they have no entry. They are",
+    "production-path files (CLAUDE.md section 0): adding a cap there is a",
+    "deliberate, separately reviewed change, because a cap that is too tight",
+    "kills a daily build, and the cost of that falls on the published image.",
+    "Once one sets a timeout, tests/test_auto_qa_tuning.py fails until the entry",
+    "is added here."
+  ],
+
+  "policy": {
+    "statistic": "max",
+    "sample_size": 20,
+
+    "_direction": [
+      "Nothing in this repository rewrites a threshold on a schedule. A bot",
+      "adjusting the quality gate on its own would be automating precisely the",
+      "decision the gate exists to force. Pinned by tests/test_auto_qa_tuning.py."
+    ],
+    "direction": "report-only",
+
+    "_at_risk_ratio": [
+      "Report when the slowest recent run exceeds this fraction of the timeout.",
+      "At 0.75 a job that has grown to three quarters of its cap is surfaced",
+      "while there is still room to react, rather than after the first run dies."
+    ],
+    "at_risk_ratio": 0.75,
+
+    "_loose_ratio": [
+      "Advisory only, never a failure. A timeout more than five times the",
+      "slowest observed run is not harmful; it just means a hung job burns that",
+      "long before the runner reclaims it."
+    ],
+    "loose_ratio": 0.2
+  },
+
+  "jobs": [
+    { "workflow": "auto-issues.yml", "job": "track", "timeout_minutes": 5 },
+
+    { "workflow": "labeler.yml", "job": "label", "timeout_minutes": 5 },
+
+    { "workflow": "nightly-compliance.yml", "job": "suite", "timeout_minutes": 15 },
+    { "workflow": "nightly-compliance.yml", "job": "published-image", "timeout_minutes": 15 },
+
+    { "workflow": "agent-audit.yml", "job": "audit", "timeout_minutes": 15 }
+  ]
+}
