@@ -291,8 +291,13 @@ def tracked_python_files() -> set[Path]:
     reviewer gets, and it reports the index, so a file staged in this commit
     counts and a file merely written into the working tree does not.
     """
+    # `-c core.fsmonitor=false`: git runs the program a repository names in
+    # core.fsmonitor whenever `ls-files` enumerates files, so a checkout whose
+    # .git/config sets it would run that program before any refusal here --
+    # code outside the diff, under the unattended allow rule. Same guard as
+    # tests/check_coverage.py.
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--", "*.py"],
+        ["git", "-c", "core.fsmonitor=false", "-C", str(REPO_ROOT), "ls-files", "-z", "--", "*.py"],
         capture_output=True,
         text=True,
         check=True,
@@ -400,7 +405,18 @@ def untracked_loadable_files() -> list[str]:
         *(f":(top){name}" for name in ROOT_CONFIG_NAMES),
     ]
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--others", "--", *pathspecs],
+        [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-C",
+            str(REPO_ROOT),
+            "ls-files",
+            "-z",
+            "--others",
+            "--",
+            *pathspecs,
+        ],
         capture_output=True,
         text=True,
         check=True,
