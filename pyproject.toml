@@ -1,5 +1,10 @@
 [tool.ruff]
 line-length = 100
+# The oldest Python this code is written for: it uses tomllib and datetime.UTC
+# (3.11). Without a fixed target, ruff picks its own default, and 0.16.5 and
+# 0.17.0 disagree on whether tomllib is standard library, so the two sorted the
+# same imports two different ways.
+target-version = "py311"
 
 [tool.ruff.lint.per-file-ignores]
 # sys.path must be extended before these imports so the shared/ package is

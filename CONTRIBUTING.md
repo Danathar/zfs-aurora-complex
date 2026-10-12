@@ -47,7 +47,8 @@ ruff check ci_tools/ shared/ tests/ files/ containerfiles/
 `ruff` is pinned because an unpinned local copy can enable or disable different
 rules release to release and disagree with CI in either direction; a Renovate
 custom manager in [`renovate.json`](./renovate.json) tracks that pin. Its
-settings (a 100-column line length and one per-file `E402` exemption) live in
+settings (a 100-column line length, a fixed `py311` target so the rules do not
+follow ruff's changing default, and one per-file `E402` exemption) live in
 [`pyproject.toml`](./pyproject.toml), and
 [`.editorconfig`](./.editorconfig) follows them for editors. `pyyaml` is what
 the issue-form tests parse YAML with; they import it behind `except ImportError`

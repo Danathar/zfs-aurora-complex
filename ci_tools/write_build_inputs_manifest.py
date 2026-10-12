@@ -9,7 +9,7 @@ Goal: Save an exact input record for each run.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ci_tools.common import require_env
@@ -19,7 +19,7 @@ ARTIFACT_PATH = ARTIFACT_DIR / "build-inputs.json"
 
 
 def main() -> None:
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     document = {
         "schema_version": 1,

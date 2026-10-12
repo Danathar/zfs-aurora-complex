@@ -66,11 +66,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from typing import ClassVar
-
-import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
