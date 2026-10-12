@@ -35,7 +35,7 @@ def flat(text: str) -> str:
 class NoTaskLogTests(unittest.TestCase):
     def test_the_directories_the_page_says_are_absent_are_absent(self) -> None:
         self.assertIn("no `.agent/tasks/` directory and no `.github/agent-log/` directory", flat(page()))
-        for path in (".agent/tasks", ".agent", ".github/agent-log"):
+        for path in (".agent/tasks", ".github/agent-log"):
             with self.subTest(path=path):
                 self.assertFalse((REPO_ROOT / path).exists())
 
