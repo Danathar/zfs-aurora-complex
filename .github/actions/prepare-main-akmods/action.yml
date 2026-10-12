@@ -165,7 +165,7 @@ runs:
     # Upload the manifest as an artifact so a later investigation can answer
     # "what exactly did this successful or failed run try to build?"
     - name: Upload build inputs manifest
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: build-inputs-${{ github.run_id }}
         path: artifacts/build-inputs.json
@@ -310,7 +310,7 @@ runs:
     # visibility workflow can read it without needing access to job state.
     - name: Upload akmods failure payload
       if: failure() && steps.akmods_build.outcome == 'failure'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: akmods-failure-${{ github.run_id }}
         path: artifacts/akmods-failure.json
