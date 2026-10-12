@@ -1,0 +1,96 @@
+---
+description: Orientation and hard rules for the zfs-aurora-complex bootc image pipeline
+alwaysApply: true
+---
+
+# zfs-aurora-complex
+
+Read AGENTS.md section 0 first — it is the maintained orientation document.
+These rules are the short form and deliberately do not restate it, so there is
+one copy to keep current. Documentation here has drifted from the code before.
+
+## Context
+
+An Aurora DX bootc image with ZFS. It builds the ZFS kmod rather than
+reusing one: a self-hosted akmods cache image is built from a pinned upstream
+fork, and containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py installs
+the RPMs for one kernel out of it.
+
+The decision-making is Python, not YAML. Every workflow step that decides
+anything runs `python3 -m ci_tools.cli <command>`; .github/scripts/README.md
+maps step to command to module.
+
+## Before proposing anything
+
+This publishes a signed :latest that `bootc upgrade` pulls, and there is no
+staging tier between a merge and a machine booting it. The maintainer
+daily-drives this image on real hardware with multi-terabyte ZFS pools attached,
+and other systems track it (docs/safety-model.md). Merging to main triggers the
+production workflow, which builds, signs with this repo's key, and promotes.
+
+- A green pipeline is not a good image. It proves the build completed. Say which
+  run you actually read.
+- "It compiled" is not evidence a ZFS module is safe. It sits between the user
+  and pooled data.
+- Rollback is a data question. An image that activates newer pool features can
+  leave the previous image unable to import those pools. Never propose a ZFS
+  line bump without saying that.
+
+## Never weaken a fail-closed check
+
+The build deliberately fails when ZFS does not match the primary kernel, when a
+signature cannot be verified, when a digest does not match, or when the akmods
+cache does not cover the required kernel and ZFS line. A guard that fires is
+reporting a real condition. Fix the cause or stop and report it. Do not relax
+it, add a fallback, make it best-effort, or reach for `|| true` — including to
+make a test easier to write.
+
+This is the most likely wrong suggestion here, because the guard looks like an
+obstacle and the "fix" looks like robustness.
+
+Safety-critical files: build.yml, .github/actions/publish-native-image,
+ci_tools/sign_image.py, ci_tools/promote_stable.py,
+ci_tools/check_akmods_cache.py,
+containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py, and
+files/scripts/configure_signing_policy.py. Changing any of them requires an
+explicit statement of what could reach a booted machine if the change is wrong.
+
+## Code
+
+- Python 3, standard library only. Nothing here is built, published, or
+  installed as a package; ci_tools/ and shared/ run as modules from workflow
+  steps. Do not add a dependency.
+- `ruff check ci_tools/ shared/ tests/ files/ containerfiles/` must be clean,
+  at the version pinned in .github/workflows/test.yml.
+- Tests are unittest.TestCase throughout; pytest is only a runner, so
+  `python3 -m unittest discover -s tests` works with nothing installed.
+- Raise CiToolError for a known refusal. ci_tools/cli.py turns it into exit 1
+  with the message on stderr, and every workflow step runs under `set -e`.
+
+## Tests
+
+Never `assertRaises(CiToolError)` on its own — it passes for any reason at all,
+including an unrelated missing environment variable, so it reports a guard as
+covered when the guard never ran. Pin the message or the specific guard.
+
+Tests under tests/ mock the external calls (registry, cosign, skopeo) the code
+under test makes. A per-module coverage floor, where one exists, may be raised
+freely; lowering one is a decision with a reason in the commit message.
+
+## Comments
+
+Comments here explain why, especially why something that looks wrong is
+deliberate. Several encode a specific past incident. Do not strip or tidy them;
+write in the same register.
+
+## Testing reality
+
+The Containerfile and build_files/build-image.sh execute only inside an image
+build against a real RPM database and module tree. Nothing on a developer
+machine reaches them, so a green local suite is not evidence for a change to
+either. State how it was verified, or that it was not.
+
+The image-side Python is different: install_zfs_from_akmods_cache.py and
+configure_signing_policy.py have host-side tests with external calls mocked, and
+both carry coverage floors. What a green suite does not prove about them is
+whatever the mock stood in for.

@@ -27,6 +27,7 @@
     "shared/oci_layout.py": 24
   },
   "unmeasured": {
+    ".claude/hooks/gate-git-diff.sh": "A PreToolUse hook run by Claude Code, not by anything the suite imports, and bash rather than Python -- coverage.py has nothing to instrument here. It is not unexercised: tests/test_git_diff_gate.py runs this exact script as a subprocess against real tool payloads and asserts exit 2 for each spelling that reads or writes an arbitrary file, exit 0 for the ordinary forms, and a fail-closed refusal when jq is absent.",
     "Containerfile": "Executes only inside an image build. Nothing on the host reaches it, so there is no seam to measure. Its happy path runs on every build.yml, build-pr.yml and build-branch.yml run; its failure branches do not.",
     "build_files/build-image.sh": "Same: a RUN step in the Containerfile, against a real RPM database and module tree. It does its work at the top level, so sourcing it would execute the whole file. The decisions it delegates -- ZFS install, signing policy -- live in the Python modules above, which are measured."
   }
