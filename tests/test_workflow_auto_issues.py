@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - exercised only where PyYAML is absent
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 WORKFLOW_PATH = WORKFLOW_DIR / "auto-issues.yml"
-STEP = "Track the scheduled run"
+STEP = "Track the unattended run"
 
 # Scheduled workflows this one deliberately does not watch, by `name:`, with the reason. A new
 # scheduled workflow must land in `workflows:` or here, so the choice is made in a diff.
@@ -46,8 +46,9 @@ BUILD = "Build And Promote Main Image"
 GITHUB_BASH = ["bash", "--noprofile", "--norc", "-eo", "pipefail"]
 
 REPO = "Danathar/zfs-aurora-complex"
-TITLE = "Scheduled run failing: Nightly compliance"
-BUILD_TITLE = "Scheduled run failing: Build And Promote Main Image"
+TITLE = "Run failing on main: Nightly compliance"
+BUILD_TITLE = "Run failing on main: Build And Promote Main Image"
+PUSH_BUILD_TITLE = "Push build failing on main: Build And Promote Main Image"
 BOT = {"login": "app/github-actions", "is_bot": True}
 HUMAN = {"login": "someone", "is_bot": False}
 
@@ -212,6 +213,10 @@ class TrackStepTests(unittest.TestCase):
         body = self._body(2)
         self.assertIn("actions/runs/42", body)
         self.assertIn("0123abcd", body)
+        # A backtick inside the double-quoted printf argument is command
+        # substitution; `:latest` once ran as a command and vanished.
+        self.assertNotIn("leaves  where", body)
+        self.assertIn("`:latest`", body)
 
     def test_a_timeout_counts_as_a_failure(self) -> None:
         self._run(conclusion="timed_out")
@@ -233,7 +238,7 @@ class TrackStepTests(unittest.TestCase):
         self.assertEqual([call[:2] for call in writes], [["issue", "create"]])
 
     def test_another_workflows_issue_is_not_used(self) -> None:
-        issues = [{"number": 5, "title": "Scheduled run failing: Prune registry", "author": BOT}]
+        issues = [{"number": 5, "title": "Run failing on main: Prune registry", "author": BOT}]
         self._run(conclusion="failure", open_issues=issues)
         self.assertEqual([call[:2] for call in self._writes()], [["issue", "create"]])
 
@@ -262,7 +267,7 @@ class TrackStepTests(unittest.TestCase):
         cases = {
             "another branch": {"head_branch": "feature"},
             "another repository": {"head_repo": "someone/zfs-aurora-complex"},
-            "a push": {"event": "push"},
+            "a push of a workflow other than the build": {"event": "push"},
             "a pull request": {"event": "pull_request"},
         }
         for label, overrides in cases.items():
@@ -316,6 +321,110 @@ class TrackStepTests(unittest.TestCase):
         result = self._run(conclusion="success", workflow=BUILD, open_issues=issues, artifacts="")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._writes(), [])
+
+    def test_a_failed_push_build_on_main_opens_its_own_issue(self) -> None:
+        # At L6 Hive merges its own pull requests; the push build that starts has nobody watching.
+        # An open scheduled-build issue is not the one to comment on: it tracks other evidence.
+        issues = [{"number": 9, "title": BUILD_TITLE, "author": BOT}]
+        result = self._run(
+            conclusion="failure",
+            workflow=BUILD,
+            event="push",
+            open_issues=issues,
+            artifacts="build-inputs-42\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        writes = self._writes()
+        self.assertEqual([call[:2] for call in writes], [["issue", "create"]])
+        self.assertIn(PUSH_BUILD_TITLE, writes[0])
+        # Call 1 lists the run's artifacts, call 2 the open issues, call 3 creates.
+        self.assertIn("`push` run", self._body(3))
+
+    def test_a_further_push_failure_comments_on_the_push_issue(self) -> None:
+        issues = [
+            {"number": 9, "title": BUILD_TITLE, "author": BOT},
+            {"number": 11, "title": PUSH_BUILD_TITLE, "author": BOT},
+        ]
+        result = self._run(
+            conclusion="failure",
+            workflow=BUILD,
+            event="push",
+            open_issues=issues,
+            artifacts="build-inputs-42\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[:3] for call in self._writes()], [["issue", "comment", "11"]])
+
+    def test_a_failed_push_build_with_an_akmods_payload_is_left_to_the_triage_workflow(self) -> None:
+        result = self._run(
+            conclusion="failure",
+            workflow=BUILD,
+            event="push",
+            artifacts="build-inputs-42\nakmods-failure-42\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._writes(), [])
+
+    def test_a_green_push_build_closes_only_the_push_issue(self) -> None:
+        # A scheduled build always rebuilds the akmods cache and a push build reuses it, so a
+        # green push run says nothing about a failure in the schedule-only rebuild path.
+        issues = [
+            {"number": 9, "title": BUILD_TITLE, "author": BOT},
+            {"number": 11, "title": PUSH_BUILD_TITLE, "author": BOT},
+        ]
+        result = self._run(
+            conclusion="success",
+            workflow=BUILD,
+            event="push",
+            open_issues=issues,
+            artifacts="build-inputs-42\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[:3] for call in self._writes()], [["issue", "close", "11"]])
+
+    def test_a_green_scheduled_build_closes_both_build_issues(self) -> None:
+        # It did everything a push build does, and the akmods rebuild besides.
+        issues = [
+            {"number": 9, "title": BUILD_TITLE, "author": BOT},
+            {"number": 11, "title": PUSH_BUILD_TITLE, "author": BOT},
+        ]
+        result = self._run(
+            conclusion="success", workflow=BUILD, open_issues=issues, artifacts="build-inputs-42\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            [call[:3] for call in self._writes()],
+            [["issue", "close", "9"], ["issue", "close", "11"]],
+        )
+
+    def test_a_green_push_build_the_gate_would_skip_still_needs_build_inputs(self) -> None:
+        issues = [{"number": 11, "title": PUSH_BUILD_TITLE, "author": BOT}]
+        result = self._run(
+            conclusion="success", workflow=BUILD, event="push", open_issues=issues, artifacts=""
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._writes(), [])
+
+    def test_a_push_build_on_another_branch_is_ignored(self) -> None:
+        result = self._run(
+            conclusion="failure", workflow=BUILD, event="push", head_branch="feature"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._calls(), [])
+
+    def test_a_dispatched_build_neither_opens_nor_closes(self) -> None:
+        issues = [{"number": 9, "title": BUILD_TITLE, "author": BOT}]
+        for conclusion in ("failure", "success"):
+            with self.subTest(conclusion=conclusion):
+                result = self._run(
+                    conclusion=conclusion,
+                    workflow=BUILD,
+                    event="workflow_dispatch",
+                    open_issues=issues,
+                    artifacts="build-inputs-42\n",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self._calls(), [])
 
     def test_a_failed_artifact_listing_fails_the_step_instead_of_guessing(self) -> None:
         result = self._run(conclusion="failure", workflow=BUILD, api_rc=1)
