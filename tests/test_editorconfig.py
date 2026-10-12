@@ -48,11 +48,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tomllib
 import unittest
 from pathlib import Path
 from typing import ClassVar
-
-import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EDITORCONFIG = REPO_ROOT / ".editorconfig"
