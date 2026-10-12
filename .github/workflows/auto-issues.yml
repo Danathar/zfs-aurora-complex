@@ -52,10 +52,14 @@ name: Auto issues
 #   - Scheduled runs, for every watched workflow.
 #   - Push runs of the build on main. At ACMM L6 Hive merges its own green pull
 #     requests, so the push build a merge starts has nobody watching it, the
-#     same as the cron run. A push build always builds and, when it passes,
-#     always promotes (only a dispatch can turn promotion off), so a green one
-#     is the same evidence a scheduled one is, and the `build-inputs-*` test
-#     below still applies.
+#     same as the cron run. But a push build is not the same evidence: a
+#     scheduled build always rebuilds the akmods cache (build.yml passes
+#     `rebuild_akmods` true on schedule), while a push build reuses the cache
+#     when it exists and skips that work. So a push failure files its own
+#     `Push build failing on main:` issue, a green push build closes only that
+#     one, and a green scheduled build that built closes both, because it did
+#     everything a push build does and more. The `build-inputs-*` test below
+#     applies to both.
 #   - Not dispatched runs. A person who dispatches a run is watching it, and a
 #     dispatched build can promote or not, rebuild akmods or not, so a green one
 #     is no evidence about what the scheduled run checks.
@@ -166,19 +170,36 @@ jobs:
             fi
           fi
 
+          # Push failures of the build file under their own title; see the
+          # header for why a green push build must not close a scheduled
+          # failure while a green scheduled build may close a push one.
           title="Run failing on main: $WORKFLOW"
+          push_title="Push build failing on main: $WORKFLOW"
+          if [ "$EVENT" = push ]; then
+            own="$push_title"
+            closable=("$push_title")
+          else
+            own="$title"
+            closable=("$title")
+            if [ "$WORKFLOW" = "Build And Promote Main Image" ]; then
+              closable+=("$push_title")
+            fi
+          fi
 
           # Assigned before it is read, so a failed listing fails the step under
           # `set -eo pipefail` instead of looking like "no issue open" and
           # filing a duplicate. gh reports the Actions bot as
           # `app/github-actions`; a person's login cannot contain a `/`.
-          number="$(gh issue list --repo "$REPO" --state open --limit 1000 \
-            --json number,title,author \
-            | jq -r --arg title "$title" \
+          open_issues="$(gh issue list --repo "$REPO" --state open --limit 1000 \
+            --json number,title,author)"
+          find_issue() {
+            jq -r --arg title "$1" \
               '[.[] | select(.title == $title and .author.login == "app/github-actions")]
-               | sort_by(.number) | first | .number // empty')"
+               | sort_by(.number) | first | .number // empty' <<<"$open_issues"
+          }
 
           if [ "$failed" = true ]; then
+            number="$(find_issue "$own")"
             if [ -n "$number" ]; then
               printf '%s\n' \
                 "Failed again (\`$CONCLUSION\`): $RUN_URL" \
@@ -196,14 +217,22 @@ jobs:
                 "" \
                 "Open the run and read the failed step's log. docs/ai-ops-runbook.md says what this workflow checks and what a failure in it means. A failed production build leaves \`:latest\` where it was, and the image people pull stays the last good one." \
                 "" \
-                "\`.github/workflows/auto-issues.yml\` opened this issue. It comments here on each further failure, and closes the issue when the next tracked run on \`$DEFAULT_BRANCH\` passes: a scheduled run, or for the build also a push run. A run you dispatch by hand neither opens nor closes it." \
-                | gh issue create --repo "$REPO" --title "$title" --body-file -
+                "\`.github/workflows/auto-issues.yml\` opened this issue. It comments here on each further \`$EVENT\` failure, and closes the issue when a later run on \`$DEFAULT_BRANCH\` passes: a scheduled run closes any of its issues, a push run of the build closes only a push-build issue. A run you dispatch by hand neither opens nor closes it." \
+                | gh issue create --repo "$REPO" --title "$own" --body-file -
               echo "$WORKFLOW failed; opened a tracking issue."
             fi
-          elif [ -n "$number" ]; then
-            gh issue close "$number" --repo "$REPO" \
-              --comment "Passed again: $RUN_URL (commit $HEAD_SHA). Closing."
-            echo "$WORKFLOW passed; closed #$number."
           else
-            echo "$WORKFLOW passed and no tracking issue is open."
+            closed=false
+            for candidate in "${closable[@]}"; do
+              number="$(find_issue "$candidate")"
+              if [ -n "$number" ]; then
+                gh issue close "$number" --repo "$REPO" \
+                  --comment "Passed again: $RUN_URL (\`$EVENT\` run, commit $HEAD_SHA). Closing."
+                echo "$WORKFLOW passed; closed #$number."
+                closed=true
+              fi
+            done
+            if [ "$closed" = false ]; then
+              echo "$WORKFLOW passed and no tracking issue it may close is open."
+            fi
           fi

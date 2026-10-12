@@ -181,8 +181,11 @@ Every file in `.github/workflows/` has an entry here.
   new one is filed.
 - **For `build.yml`:** it reports a failed build only when the run left no
   `akmods-failure-*` artifact, because the sticky issue above already covers that
-  case. It closes the issue only when the run left a `build-inputs-*` artifact, so
-  a gate-skipped green run cannot close an issue about a failure nobody fixed.
+  case. It closes an issue only when the run left a `build-inputs-*` artifact, so
+  a gate-skipped green run cannot close an issue about a failure nobody fixed. A
+  failed push run files a separate `Push build failing on main:` issue. A scheduled
+  build always rebuilds the akmods cache and a push build reuses it, so a green
+  push run closes only that push issue, while a green scheduled run closes both.
 - **Detail:** the header of `.github/workflows/auto-issues.yml`.
 
 ### `agent-audit.yml` — "Agent audit trail"
