@@ -188,6 +188,13 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
         self.assertIn("--creds ***REDACTED***", message)
         self.assertIn("--src-creds=***REDACTED***", message)
 
+    def test_run_cmd_shares_the_ci_tools_redactor(self) -> None:
+        # One flag list for both helpers: a credential flag added for the CI
+        # side must reach this helper's error text redacted too.
+        from ci_tools.common import redact_command_args
+
+        self.assertIs(helper.redact_command_args, redact_command_args)
+
     def test_image_kernels_from_modules_root_uses_natural_sort(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             modules_root = Path(temp_dir)
