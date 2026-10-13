@@ -3,7 +3,7 @@
 Where the signal about this repository actually comes from, and what each source
 can and cannot tell you.
 
-There is no dashboard service here. The dashboard is three badges in
+There is no dashboard service here. The dashboard is five status badges in
 [`README.md`](../README.md), a handful of gates, and a set of fail-closed checks.
 The useful thing to write down is what each one *means*, because the badges are
 routinely misread and the most important gates are the ones that stop a bad image
@@ -26,11 +26,15 @@ refuse to let a green signal stand in for it.
 | Badge | Source | Answers |
 | --- | --- | --- |
 | **build** | Actions status for `build.yml` on `main` | Did the last production run pass? |
+| **tests** | Actions status for `test.yml` on `main` | Did ruff, the unit suite and the per-module coverage floors pass on `main`? |
+| **nightly compliance** | Actions status for `nightly-compliance.yml` on `main` | Does the suite still pass, and does the published `:latest` still verify against the committed `cosign.pub`? |
 | **last good build** | `status` branch payload written from the published `:latest` image | Is there a usable signed image, and how old is it? |
 | **OpenZFS/kernel status** | `status` branch payload written by `akmods-failure-triage.yml` | If the build is red, is it because ZFS cannot be built for the current kernel? |
 
-`test.yml` and `nightly-compliance.yml` have no badge. Read their status from the
-Actions tab (`gh run list --workflow test.yml`).
+The README also carries Ask DeepWiki, Hive, ACMM, AI-assisted and licence badges. They
+are not status signals, so they are not tabulated here. The ACMM and AI badges lead to the
+README's "Maintained with Hive" and "About this project" sections.
+Run history for the workflow badges is on the Actions tab (`gh run list --workflow test.yml`).
 
 **Read the badges together.** A red **build** with a recent **last good build**
 means the published image is still there and has not been refreshed. It does
