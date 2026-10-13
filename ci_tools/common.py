@@ -16,6 +16,10 @@ import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+# `redact_command_args` and its flag list live in `shared/` because the
+# image-build ZFS helper redacts its failed commands too, and can import only
+# from there. Every `ci_tools` caller keeps importing it from this module.
+from shared.command_args import redact_command_args
 from shared.kernel_release import kernel_release_sort_key
 
 
@@ -26,13 +30,6 @@ class CiToolError(RuntimeError):
 FEDORA_FROM_KERNEL_RE = re.compile(r".*fc([0-9]+).*")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPO_DEFAULTS_FILE = REPO_ROOT / "ci" / "defaults.json"
-SECRET_ARG_FLAGS = {
-    "--creds",
-    "--src-creds",
-    "--dest-creds",
-    "--registry-username",
-    "--registry-password",
-}
 
 
 def require_env(name: str) -> str:
@@ -67,27 +64,6 @@ def load_repo_defaults() -> dict[str, str]:
     for key, value in data.items():
         defaults[str(key)] = str(value)
     return defaults
-
-
-def redact_command_args(args: Sequence[str]) -> list[str]:
-    """Return command args with known secret values replaced for error messages."""
-    redacted: list[str] = []
-    redact_next = False
-    for arg in args:
-        if redact_next:
-            redacted.append("***REDACTED***")
-            redact_next = False
-            continue
-        flag, separator, _value = arg.partition("=")
-        if flag in SECRET_ARG_FLAGS:
-            if separator:
-                redacted.append(f"{flag}=***REDACTED***")
-            else:
-                redacted.append(arg)
-                redact_next = True
-            continue
-        redacted.append(arg)
-    return redacted
 
 
 def require_env_or_default(name: str) -> str:
