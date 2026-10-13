@@ -241,6 +241,28 @@ runs:
       run: |
         python3 -m ci_tools.cli akmods-configure-zfs-target
 
+    # The akmods Justfile starts with `set lists`, which needs `just` >= 1.57.
+    # The runner image ships an older `just` that fails with "Unknown setting
+    # `lists`", so install a pinned, checksum-verified release into a directory
+    # placed first on PATH for the later steps in this job.
+    - name: Install pinned just for the akmods Justfile
+      if: inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
+      shell: bash
+      env:
+        JUST_VERSION: "1.58.0"
+        JUST_SHA256: "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d"
+      run: |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        curl -fsSL --retry 3 -o "${tmp}/just.tar.gz" \
+          "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        echo "${JUST_SHA256}  ${tmp}/just.tar.gz" | sha256sum --check --strict -
+        bindir="${RUNNER_TEMP}/just-bin"
+        mkdir -p "${bindir}"
+        tar -xzf "${tmp}/just.tar.gz" -C "${bindir}" just
+        echo "${bindir}" >> "${GITHUB_PATH}"
+        "${bindir}/just" --version
+
     # This is the expensive step. It builds the precompiled ZFS kernel module
     # cache only when the caller explicitly requested a rebuild or when the
     # existing cache does not match the current primary kernel.
