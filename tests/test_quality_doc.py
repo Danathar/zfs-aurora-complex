@@ -1,7 +1,7 @@
 """
 Script: tests/test_quality_doc.py
 What: Joins docs/quality.md to the README badges, workflows, jobs, guard messages and coverage manifest it describes.
-Doing: Checks that the three badges the page tabulates are the three in README.md, that the concurrency block and `paths-ignore` list it quotes are build.yml's, that every workflow, job and step it names exists, that each gate's trigger matches the workflow's `on:`, that the refusal messages this repository raises appear in the code, and that the `unmeasured` entries it counts are the manifest's.
+Doing: Checks that the five status badges the page tabulates are the five in README.md, that the concurrency block and `paths-ignore` list it quotes are build.yml's, that every workflow, job and step it names exists, that each gate's trigger matches the workflow's `on:`, that the refusal messages this repository raises appear in the code, and that the `unmeasured` entries it counts are the manifest's.
 Why: The page is what a reader opens to decide whether a red badge or a green run matters. It names jobs and messages a reader will search for in a log; a renamed job or reworded refusal makes the page point at nothing, and a count of manifest entries goes stale when a file is added.
 Goal: Make a renamed job, a reworded refusal, a changed trigger, a badge added or removed, or an `unmeasured` entry added without the page, fail here.
 
@@ -51,14 +51,19 @@ def table_rows(text: str) -> list[list[str]]:
 
 
 class BadgeTests(unittest.TestCase):
-    def test_the_table_lists_the_three_badges_the_readme_carries(self) -> None:
-        in_readme = re.findall(r"!\[(build|last good build|OpenZFS/kernel status)\]", README.read_text("utf-8"))
+    def test_the_table_lists_the_five_status_badges_the_readme_carries(self) -> None:
+        in_readme = re.findall(r"!\[(build|tests|nightly compliance|last good build|OpenZFS/kernel status)\]", README.read_text("utf-8"))
         in_page = [re.sub(r"[*]", "", row[0]) for row in table_rows(section("The badges"))]
         self.assertEqual(sorted(in_page), sorted(in_readme))
-        self.assertEqual(len(in_page), 3)
+        self.assertEqual(len(in_page), 5)
 
     def test_the_build_badge_is_for_build_yml_on_main(self) -> None:
         self.assertIn("actions/workflows/build.yml/badge.svg?branch=main", README.read_text("utf-8"))
+
+    def test_the_tests_and_nightly_compliance_badges_are_for_their_workflows_on_main(self) -> None:
+        readme = README.read_text("utf-8")
+        for workflow in ("test.yml", "nightly-compliance.yml"):
+            self.assertIn(f"actions/workflows/{workflow}/badge.svg?branch=main", readme)
 
     def test_the_two_status_badges_read_the_status_branch_payloads_the_workflow_writes(self) -> None:
         readme = README.read_text("utf-8")

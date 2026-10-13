@@ -1,12 +1,15 @@
 # zfs-aurora-complex
 
 [![build](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/build.yml)
-
+[![tests](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/test.yml)
+[![nightly compliance](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/nightly-compliance.yml/badge.svg?branch=main)](https://github.com/Danathar/zfs-aurora-complex/actions/workflows/nightly-compliance.yml)
 [![last good build](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FDanathar%2Fzfs-aurora-complex%2Fstatus%2Flast-good-build-badge.json)](https://github.com/Danathar/zfs-aurora-complex/pkgs/container/zfs-aurora-complex)
-
 [![OpenZFS/kernel status](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FDanathar%2Fzfs-aurora-complex%2Fstatus%2Fakmods-badge.json)](https://github.com/Danathar/zfs-aurora-complex/issues?q=is%3Aissue+is%3Aopen+label%3Aakmods-failure)
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Danathar/zfs-aurora-complex)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-1f6feb)](https://deepwiki.com/Danathar/zfs-aurora-complex)
+[![Maintenance assisted by Hivecommons Hive](https://img.shields.io/badge/maintenance%20assisted%20by-Hivecommons%20Hive-1f6feb)](https://github.com/hivecommons/hive)
+[![ACMM L6 Fully Autonomous](https://img.shields.io/badge/ACMM-L6%20Fully%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
+[![AI assisted](https://img.shields.io/badge/AI-assisted-d29922)](#about-this-project)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 ## Why This Repo Exists
 
@@ -95,6 +98,39 @@ Start here depending on what you want:
 The CDDL/GPLv2 position on redistributing a binary ZFS module is recorded in
 [`docs/licensing.md`](./docs/licensing.md). It is not legal advice; read it
 before redistributing this image or basing a downstream image on it.
+
+## About this project
+
+> [!NOTE]
+> **This project was developed with significant AI assistance and should be treated
+> cautiously.** Read its output the way you would read any unreviewed contribution.
+>
+> It is a third-party image built on `ghcr.io/ublue-os/aurora-dx` (see [`Containerfile`](./Containerfile)).
+> It is not an official Universal Blue or Aurora image, is not an official Fedora image, and is not
+> affiliated with OpenZFS.
+>
+> It is provided as-is, with no promise that it is safe for your machines, your pools, or your
+> data. [`docs/safety-model.md`](./docs/safety-model.md) states what this pipeline actually
+> proves and what it does not.
+
+## Maintained with Hive (ACMM L6)
+
+Maintenance is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive) at ACMM level 6
+(Fully Autonomous). The repository is maintained by [@Danathar](https://github.com/Danathar).
+
+What L6 permits here:
+
+- Agents file issues and open pull requests, and agent pull requests merge once their required
+  checks pass unless they carry `hold`. Merging to `main` publishes a signed image, so those checks
+  are the gate. [`docs/branch-protection.md`](./docs/branch-protection.md) lists the required checks
+  and [`docs/risk-tiers.md`](./docs/risk-tiers.md) says which changes need a human.
+- The reviewer agent backs each finding with a file and line and never merges, approves or closes
+  a pull request.
+- Labels carry approval authority and automation must never apply one. See
+  [Labels carry authority](./docs/SECURITY-AI.md#labels-carry-authority--automation-must-not-apply-them)
+  in `docs/SECURITY-AI.md`.
+
+Learn more: [Hive](https://github.com/hivecommons/hive) · [Hive Hub](https://hive.kubestellar.io) · [ACMM levels](https://github.com/hivecommons/hive#acmm-levels) · [full ACMM policy matrix](https://github.com/hivecommons/hive/blob/v4/src/docs/acmm-policy-matrix.md)
 
 ## References
 
