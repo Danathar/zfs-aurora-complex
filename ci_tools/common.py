@@ -8,12 +8,15 @@ Goal: Keep behavior consistent across all helper modules.
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import json
 import os
 import re
 import subprocess
+import tempfile
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
 # `redact_command_args` and its flag list live in `shared/` because the
@@ -227,18 +230,112 @@ def normalize_owner(owner: str) -> str:
     return owner.lower()
 
 
+# `skopeo` transports that never reach a registry. A credential is meaningless
+# for these, so a reference using one contributes no entry to the auth file
+# below -- a `dir:` copy destination must not invent a registry named `dir:`.
+_LOCAL_TRANSPORT_PREFIXES = (
+    "dir:",
+    "oci:",
+    "oci-archive:",
+    "docker-archive:",
+    "docker-daemon:",
+    "containers-storage:",
+    "tarball:",
+)
+_REGISTRY_TRANSPORT_PREFIX = "docker://"
+# What Docker's own config file calls Docker Hub. Only reachable if a caller
+# passes a short reference; every reference this repo builds names ghcr.io.
+_DOCKER_HUB_AUTH_KEY = "https://index.docker.io/v1/"
+
+
+def registry_host(image_ref: str) -> str:
+    """
+    Return the registry hostname an image reference authenticates against.
+
+    Returns `""` when the reference is not a registry read or write, so
+    `registry_auth_dir` can build an auth file for the registry end of a copy
+    without inventing an entry for the local end.
+    """
+    if image_ref.startswith(_REGISTRY_TRANSPORT_PREFIX):
+        remainder = image_ref[len(_REGISTRY_TRANSPORT_PREFIX) :]
+    elif image_ref.startswith(_LOCAL_TRANSPORT_PREFIXES):
+        return ""
+    else:
+        remainder = image_ref
+
+    host, separator, _path = remainder.partition("/")
+    if not separator:
+        return _DOCKER_HUB_AUTH_KEY
+    if host != "localhost" and "." not in host and ":" not in host:
+        # `library/fedora`: the first segment is a Docker Hub namespace, not a host.
+        return _DOCKER_HUB_AUTH_KEY
+    return host
+
+
+def registry_auth_file(auth_dir: str) -> str:
+    """Return the `config.json` path inside a `registry_auth_dir` directory."""
+    return str(Path(auth_dir) / "config.json")
+
+
+@contextlib.contextmanager
+def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
+    """
+    Yield a directory holding a `config.json` carrying `creds`, or `""`.
+
+    This is how a registry credential reaches `skopeo` and `cosign` without
+    ever appearing in a command line. `/proc/<pid>/cmdline` is world-readable
+    for the lifetime of a process, so a token passed as `--creds` or
+    `--registry-password` is readable by anything else running on the runner
+    while the child is alive -- including a process left behind by a step this
+    repository did not write. A `0600` file in a per-call temporary directory
+    is readable only by the uid that created it and is deleted when the call
+    returns. That is what gotcha 6 in `docs/signing-and-bootc.md` ("do not pass
+    registry secrets in command argv") asks for.
+
+    One directory serves both tools because both read the ordinary
+    Docker/containers auth format: `skopeo` takes the file path through
+    `--authfile` / `--src-authfile` / `--dest-authfile`, and `cosign` reads
+    `config.json` out of the directory named by `DOCKER_CONFIG`.
+
+    Yields `""` when `creds` is empty, so the anonymous callers keep their
+    exact current behavior: no flag, no `DOCKER_CONFIG` override, and
+    therefore whatever `docker/login-action` already left in the job.
+    """
+    if not creds:
+        yield ""
+        return
+
+    hosts = [host for host in (registry_host(ref) for ref in image_refs) if host]
+    encoded = base64.b64encode(creds.encode("utf-8")).decode("ascii")
+    auths = {host: {"auth": encoded} for host in dict.fromkeys(hosts)}
+    with tempfile.TemporaryDirectory() as auth_dir:
+        # Create the file with its mode already set instead of writing it and
+        # then chmod-ing: the credential must never sit on disk under the
+        # default umask, not even for the instant between the two calls.
+        descriptor = os.open(
+            registry_auth_file(auth_dir), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump({"auths": auths}, handle)
+        yield auth_dir
+
+
 def skopeo_inspect_json(image_ref: str, *, creds: str | None = None) -> dict:
     """
     Return JSON metadata for one image reference.
 
     `skopeo` reads image metadata directly from the registry without pulling and
     running a container image.
+
+    `creds` is an `actor:token` pair. It reaches `skopeo` as an `--authfile`,
+    never as `--creds`; see `registry_auth_dir` for why.
     """
-    command = ["skopeo", "inspect"]
-    if creds:
-        command.extend(["--creds", creds])
-    command.append(image_ref)
-    return run_json_cmd(command)
+    with registry_auth_dir(creds, image_ref) as auth_dir:
+        command = ["skopeo", "inspect"]
+        if auth_dir:
+            command.extend(["--authfile", registry_auth_file(auth_dir)])
+        command.append(image_ref)
+        return run_json_cmd(command)
 
 
 def skopeo_inspect_digest(image_ref: str, *, creds: str | None = None) -> str:
@@ -297,16 +394,25 @@ def skopeo_copy(
     list would change that file's shape. Callers that promote a tag to another
     tag in the same registry (where the destination digest must match the
     source) should pass both.
+
+    `creds` is an `actor:token` pair. It reaches `skopeo` as an authfile path
+    on each end, never as `--src-creds`/`--dest-creds`; see `registry_auth_dir`
+    for why. Both ends are still authenticated whenever `creds` is given, the
+    same as the flags it replaces: a promotion copies between two references in
+    the same private registry and needs the credential on each side. A local
+    `dir:` end simply ignores the file it is handed.
     """
-    command = ["skopeo", "copy", "--retry-times", str(retry_times)]
-    if creds:
-        command.extend(["--src-creds", creds, "--dest-creds", creds])
-    if preserve_digests:
-        command.append("--preserve-digests")
-    if multi_arch:
-        command.append(f"--multi-arch={multi_arch}")
-    command.extend([source, destination])
-    run_cmd(command, capture_output=False)
+    with registry_auth_dir(creds, source, destination) as auth_dir:
+        command = ["skopeo", "copy", "--retry-times", str(retry_times)]
+        if auth_dir:
+            auth_file = registry_auth_file(auth_dir)
+            command.extend(["--src-authfile", auth_file, "--dest-authfile", auth_file])
+        if preserve_digests:
+            command.append("--preserve-digests")
+        if multi_arch:
+            command.append(f"--multi-arch={multi_arch}")
+        command.extend([source, destination])
+        run_cmd(command, capture_output=False)
 
 
 def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) -> None:
@@ -325,10 +431,14 @@ def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) ->
     error, which a caller that treats any failure as "unsigned" would silently
     misread as "this cache is untrustworthy" and rebuild forever. Supplying
     credentials explicitly also avoids depending on an ambient `docker login`
-    having happened earlier in the same job. Verified directly that both cosign
-    versions below accept `--registry-username`/`--registry-password` on
-    `verify`; `redact_command_args` masks both, so a failure cannot leak the
-    token into a workflow log.
+    having happened earlier in the same job.
+
+    The credential is written to a `0600` auth file and pointed at with
+    `DOCKER_CONFIG`, not passed as `--registry-username`/`--registry-password`;
+    see `registry_auth_dir` for why. The env override is scoped to this one
+    command, so a job that authenticated with `docker/login-action` and calls
+    this without credentials still resolves them from its own Docker config
+    exactly as before.
 
     Deliberately does not pass `--new-bundle-format=false`, unlike
     `sign_image.py`'s sign step. This function runs in more than one
@@ -342,14 +452,9 @@ def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) ->
     with no format flag, and both correctly fail (nonzero exit, "no signatures
     found") against an actually-unsigned image.
     """
-    command = ["cosign", "verify", "--key", key_path]
-    if creds:
-        # Split on the first colon only: a GHCR username cannot contain one,
-        # and a token that did would still rejoin correctly here.
-        username, _separator, password = creds.partition(":")
-        command.extend(["--registry-username", username, "--registry-password", password])
-    command.append(image_ref)
-    run_cmd(command)
+    with registry_auth_dir(creds, image_ref) as auth_dir:
+        command = ["cosign", "verify", "--key", key_path, image_ref]
+        run_cmd(command, env={"DOCKER_CONFIG": auth_dir} if auth_dir else None)
 
 
 def sort_kernel_releases(kernel_releases: Sequence[str]) -> list[str]:
