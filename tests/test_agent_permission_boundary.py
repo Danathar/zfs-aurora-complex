@@ -1058,6 +1058,8 @@ class DiagnoseGuardTableTests(unittest.TestCase):
     # decision the sentence in the command file summarises.
     FIXABLE_HERE: ClassVar[dict[str, bool]] = {
         "does not provide a kmod-zfs": False,  # upstream ZFS/kernel disagreement
+        "needs AKMODS_IMAGE_PINNED": True,  # action wiring, ours to fix
+        "Refusing to check akmods cache ref": True,  # the pin handed over is ours
         "Promoted digest mismatch": True,  # escalate, and the guard is ours
         "Failed to resolve digest": False,  # transient registry/CDN failure
         "SIGNING_SECRET is empty": False,  # wrong trigger context, not a defect
