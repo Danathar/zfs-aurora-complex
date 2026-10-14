@@ -304,7 +304,11 @@ the trust policy is supposed to enforce.
      of the one command: `skopeo` reads it through
      `--authfile`/`--src-authfile`/`--dest-authfile`, and `cosign` reads it
      through `DOCKER_CONFIG`. This is what the akmods cache check, the stable
-     signal check and the promotion helpers do.
+     signal check and the promotion helpers do. The `podman push` in
+     `.github/actions/publish-native-image/action.yml` writes the same shape
+     inline in bash and passes it as `--authfile`; that step *does* sit under a
+     job-level login, but naming the file keeps a login that quietly stopped
+     working a denied push rather than an anonymous one.
 
    `redact_command_args` in `shared/command_args.py` is a backstop for *error
    text* only. It cannot satisfy this rule, because it does nothing about the

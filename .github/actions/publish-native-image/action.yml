@@ -67,8 +67,8 @@ runs:
       run: |
         echo "::warning::Publishing WITHOUT a cosign signature (allow_unsigned=true, no key available). This image is a throwaway test artifact: machines enforcing this repository's signature policy will refuse to pull it, and it must never be promoted or switched to durably."
 
-    # The `podman push` below authenticates with its own explicit --creds, but
-    # the later `skopeo copy`/`skopeo inspect` calls in this file do not pass
+    # The `podman push` below authenticates from its own per-command auth file,
+    # but the later `skopeo copy`/`skopeo inspect` calls in this file do not pass
     # credentials at all -- they rely on this login's Docker config file via
     # containers/image's fallback lookup. Authenticate here so those calls can
     # talk to GHCR as the current workflow actor.
@@ -95,11 +95,20 @@ runs:
     # (though the repo itself is still active), and buildah/podman share the
     # same local container storage, so a plain `podman push` of the tag
     # buildah just built and the previous step retagged works the same way.
-    # --creds is passed explicitly (matching what the wrapper action did for
-    # this single-image, non-manifest case) rather than relying on the
-    # `docker/login-action` credentials above; that login is still needed for
-    # the later skopeo calls in this file, which read it via the containers/image
-    # library's fallback to the Docker config file.
+    #
+    # The credential reaches podman in a `0600` auth file, never as `--creds`:
+    # `/proc/<pid>/cmdline` is mode 0444, so a token in argv is readable by every
+    # uid on the runner for as long as the push runs. That is what gotcha 6 in
+    # `docs/signing-and-bootc.md` prohibits, and this is the same file hand-off
+    # `ci_tools/common.py`'s `registry_auth_dir` performs for skopeo and cosign.
+    #
+    # The file is named explicitly with `--authfile` rather than leaning on
+    # podman's own fallback to the `docker/login-action` Docker config above,
+    # which would authenticate today but would also turn a login that quietly
+    # stopped working into an anonymous push instead of a denied one. Passing the
+    # credential keeps the failure mode this step already had. That login is
+    # still needed for the later skopeo calls in this file, which read it via the
+    # containers/image library's fallback to the Docker config file.
     - name: Push transient tag with podman
       shell: bash
       env:
@@ -110,9 +119,26 @@ runs:
         REGISTRY_PASSWORD: ${{ inputs.registry_password }}
       run: |
         set -euo pipefail
+        # umask before the file exists rather than chmod after it does: the token
+        # must never sit on disk under the default umask, not even for the
+        # instant between the two calls.
+        umask 077
+        auth_dir="$(mktemp -d)"
+        trap 'rm -rf "${auth_dir}"' EXIT
+        auth_file="${auth_dir}/config.json"
+        # `printf` is a bash builtin and `base64` reads the pair on stdin, so the
+        # credential never becomes argv of anything, here or in podman. The
+        # encode lands in a variable first so that `set -e` sees a failure here:
+        # inlined in printf's arguments, a failed substitution would write an
+        # empty credential and push on.
+        encoded_credential="$(printf '%s' "${REGISTRY_USER}:${REGISTRY_PASSWORD}" | base64 -w0)"
+        printf '{"auths":{"%s":{"auth":"%s"}}}\n' \
+          "${IMAGE_REGISTRY%%/*}" \
+          "${encoded_credential}" \
+          > "${auth_file}"
         podman push \
           --tls-verify=true \
-          --creds "${REGISTRY_USER}:${REGISTRY_PASSWORD}" \
+          --authfile "${auth_file}" \
           "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}" \
           "${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
 

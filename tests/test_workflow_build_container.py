@@ -18,8 +18,12 @@ real YAML parse.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
+import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -176,6 +180,75 @@ class BranchIsolationTests(unittest.TestCase):
             "publish-native-image must refuse to push when there is no key unless the "
             "caller explicitly opted into unsigned publication.",
         )
+
+    def test_publish_action_pushes_without_the_token_in_argv(self) -> None:
+        # Gotcha 6 in docs/signing-and-bootc.md: `/proc/<pid>/cmdline` is mode
+        # 0444, so `podman push --creds USER:TOKEN` shows the token to every uid
+        # on the runner while the push runs. Runs the step's own shell with a
+        # stub podman and checks what podman was actually handed: no token in
+        # argv, and an `--authfile` that is 0600 and really carries the
+        # credential, so a step that silently stopped authenticating fails too.
+        action = (
+            REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
+        ).read_text(encoding="utf-8")
+        step = action.split("- name: Push transient tag with podman", 1)[1]
+        body = step.split("      run: |\n", 1)[1].split("\n\n", 1)[0]
+        script = textwrap.dedent(body)
+        token = "ghs_not-a-real-token"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            bindir = root / "bin"
+            bindir.mkdir()
+            seen = root / "seen"
+            stub = bindir / "podman"
+            stub.write_text(
+                "#!/bin/bash\n"
+                'printf "%s\\n" "$@" > "${STUB_SEEN}.argv"\n'
+                'prev=""\n'
+                'for arg in "$@"; do\n'
+                '  if [ "${prev}" = "--authfile" ]; then\n'
+                '    stat -c "%a" "${arg}" > "${STUB_SEEN}.mode"\n'
+                '    cat "${arg}" > "${STUB_SEEN}.auth"\n'
+                "  fi\n"
+                "  prev=${arg}\n"
+                "done\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            env = {
+                "PATH": f"{bindir}:/usr/bin:/bin",
+                "HOME": str(root),
+                "TMPDIR": str(root),
+                "STUB_SEEN": str(seen),
+                "IMAGE_REGISTRY": "ghcr.io/example",
+                "IMAGE_NAME": "image",
+                "TRANSIENT_IMAGE_TAG": "latest-unsigned-1",
+                "REGISTRY_USER": "actor",
+                "REGISTRY_PASSWORD": token,
+            }
+            completed = subprocess.run(
+                ["bash", "-c", script],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+            argv = Path(f"{seen}.argv").read_text(encoding="utf-8")
+            self.assertNotIn(token, argv)
+            self.assertNotIn("--creds", argv)
+            self.assertIn("--authfile", argv)
+            self.assertEqual(Path(f"{seen}.mode").read_text(encoding="utf-8").strip(), "600")
+            auths = json.loads(Path(f"{seen}.auth").read_text(encoding="utf-8"))["auths"]
+            self.assertEqual(
+                auths,
+                {"ghcr.io": {"auth": base64.b64encode(f"actor:{token}".encode()).decode()}},
+            )
+            # The temporary directory holding the credential is gone afterwards.
+            self.assertEqual([path for path in root.iterdir() if path.name.startswith("tmp")], [])
+            self.assertNotIn(token, completed.stdout + completed.stderr)
 
     def test_prepare_action_supports_denying_cache_rebuild(self) -> None:
         action = (
