@@ -290,8 +290,25 @@ the trust policy is supposed to enforce.
 4. Local builds are not automatically trusted by a strict bootc policy.
 5. The policy is repository-specific. Renaming the image repository requires
    updating the image policy and registries.d scope.
-6. Do not pass registry secrets in command argv. This repo authenticates with
-   Docker login first, then lets cosign use the existing registry credentials.
+6. Do not pass registry secrets in command argv. `/proc/<pid>/cmdline` is
+   world-readable for the lifetime of a process, so a token passed as
+   `--creds` or `--registry-password` is readable by anything else running on
+   the runner at that moment, including a step this repository did not write.
+   There are two ways a job here satisfies that rule:
+   - Authenticate the whole job with `docker/login-action` first and let
+     `skopeo`/`cosign` pick the credential up from the Docker config. This is
+     what `sign-akmods-cache` and `promote-stable` do.
+   - Where a helper is handed the credential directly, hand it over in a file.
+     `ci_tools/common.py`'s `registry_auth_dir` writes a `0600` Docker-format
+     `config.json` into a temporary directory that lives only for the duration
+     of the one command: `skopeo` reads it through
+     `--authfile`/`--src-authfile`/`--dest-authfile`, and `cosign` reads it
+     through `DOCKER_CONFIG`. This is what the akmods cache check, the stable
+     signal check and the promotion helpers do.
+
+   `redact_command_args` in `shared/command_args.py` is a backstop for *error
+   text* only. It cannot satisfy this rule, because it does nothing about the
+   argv of a running process.
 7. Keep `cosign.key` out of git. Only `cosign.pub` belongs in the repository.
 
 ## References

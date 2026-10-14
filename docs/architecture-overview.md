@@ -240,6 +240,14 @@ against a real signed image before relying on it. `build-pr.yml`'s validation
 job does not run inside that container, so it installs cosign explicitly via
 `install-signing-tools` instead.
 
+The GHCR credential this check uses reaches `cosign` through `DOCKER_CONFIG`,
+pointed at a `0600` auth file that `ci_tools/common.py`'s `registry_auth_dir`
+writes for the duration of that one command -- not through
+`--registry-username` / `--registry-password`, which would put the token in
+`/proc/<pid>/cmdline` for every other process on the runner to read.
+`skopeo_inspect_json` and `skopeo_copy` use the same file via `--authfile`.
+See gotcha 6 in [`docs/signing-and-bootc.md`](signing-and-bootc.md).
+
 Even when the shared cache is reusable, the workflows still clone the resolved
 `Danathar/akmods` commit once per run.
 
