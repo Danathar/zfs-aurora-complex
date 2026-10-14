@@ -4,7 +4,7 @@
     "ci_tools/akmods_build_and_publish.py": 50,
     "ci_tools/akmods_clone_pinned.py": 25,
     "ci_tools/akmods_configure_zfs_target.py": 24,
-    "ci_tools/check_akmods_cache.py": 80,
+    "ci_tools/check_akmods_cache.py": 91,
     "ci_tools/check_stable_signal.py": 64,
     "ci_tools/classify_akmods_failure.py": 69,
     "ci_tools/cli.py": 31,

@@ -369,6 +369,11 @@ runs:
     #
     # Only runs on the rebuild path. The reuse path already proved this, since
     # that is exactly what the earlier check step tests for.
+    #
+    # AKMODS_IMAGE_PINNED hands this check the digest the step above pinned,
+    # which is the digest the candidate build consumes and the signing job
+    # signs. Without it the check would resolve the shared tag a second time
+    # and could verify a different image than the one this run then uses.
     - name: Verify the rebuilt cache matches the resolved ZFS version
       if: success() && (inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true')
       shell: bash
@@ -377,6 +382,7 @@ runs:
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
+        AKMODS_IMAGE_PINNED: ${{ steps.pin_akmods.outputs.akmods_image_pinned }}
         REQUIRE_MATCH: "true"
         # The build step's `just login` has already run by this point, so these
         # were incidentally covered by the credentials it left behind. Passed

@@ -77,6 +77,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `AKMODS_IMAGE`: exact shared akmods cache image ref used by the final image build to install ZFS RPMs. In CI this is digest-pinned.
 - `AKMODS_IMAGE_TEMPLATE`: fallback cache-image template containing `{fedora}` for local builds that do not pass `AKMODS_IMAGE`.
 - `AKMODS_REPO`: GHCR repository name for the shared akmods cache image.
+- `AKMODS_IMAGE_PINNED`: digest-pinned akmods cache ref that `check-akmods-cache` strict mode (`REQUIRE_MATCH=true`, the post-rebuild verification) checks; the one `pin-akmods-cache` published. Required in strict mode, so the check never re-resolves the shared tag.
 - `AKMODS_UPSTREAM_REPO`: Git URL for the akmods fork this repo builds from.
 - `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
 - `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
