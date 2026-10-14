@@ -1060,6 +1060,9 @@ class DiagnoseGuardTableTests(unittest.TestCase):
         "does not provide a kmod-zfs": False,  # upstream ZFS/kernel disagreement
         "needs AKMODS_IMAGE_PINNED": True,  # action wiring, ours to fix
         "Refusing to check akmods cache ref": True,  # the pin handed over is ours
+        "Refusing to pin the akmods cache: AKMODS_BUILT_IMAGE_ID": True,  # the action's wiring
+        # Escalate: a moved shared tag, or a push that rewrote the config. The guard is ours.
+        "Refusing to pin akmods cache": True,
         "Promoted digest mismatch": True,  # escalate, and the guard is ours
         "Failed to resolve digest": False,  # transient registry/CDN failure
         "SIGNING_SECRET is empty": False,  # wrong trigger context, not a defect

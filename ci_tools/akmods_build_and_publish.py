@@ -18,9 +18,16 @@ from ci_tools.common import (
     optional_env,
     require_env,
     run_cmd,
+    write_github_outputs,
 )
 
 AKMODS_WORKTREE = Path("/tmp/akmods")
+
+# The architecture `just build` produces on the runner. The fork's Justfile
+# tags the local image with `arch()`, which is `x86_64` on the hosted runners
+# this workflow uses, and `pin_akmods_cache` checks the amd64 child of the
+# pushed manifest list against the ID recorded here.
+BUILT_IMAGE_ARCH = "x86_64"
 
 
 def kernel_name_for_flavor(kernel_flavor: str) -> str:
@@ -115,6 +122,33 @@ def write_kernel_cache_file(*, kernel_release: str) -> None:
     print(f"Seeded {cache_json_path}")
 
 
+def record_built_image_id() -> str:
+    """
+    Record the ID of the image `just build` left in local storage, before it is pushed.
+
+    The ID is the sha256 of the image config, and the config names every layer
+    by its uncompressed digest, so it identifies the content this run built.
+    `pin_akmods_cache` compares it with the config the shared tag resolves to
+    after the push and refuses to pin anything else. Without it, the pin would
+    record whatever the mutable tag pointed at by then, which a concurrent
+    branch run holding a registry write token can move.
+    """
+
+    # Same name the fork's `push` recipe pushes from:
+    # localhost/<akmods_name>:<kernel_flavor>-<version>-<arch>, where
+    # akmods_name is the images.yaml `name` the configure step set to AKMODS_REPO.
+    local_ref = (
+        f"localhost/{require_env('AKMODS_REPO')}:"
+        f"{require_env('AKMODS_KERNEL')}-{require_env('AKMODS_VERSION')}-{BUILT_IMAGE_ARCH}"
+    )
+    # A malformed or empty value is refused by `pin_akmods_cache`, which is the
+    # step that acts on it.
+    image_id = run_cmd(["podman", "image", "inspect", "--format", "{{.Id}}", local_ref]).strip()
+    write_github_outputs({"built_image_id": image_id})
+    print(f"Recorded built akmods image {local_ref} with ID {image_id}")
+    return image_id
+
+
 def build_and_push_kernel_release(kernel_release: str) -> None:
     """
     Build and push one akmods payload for the supported primary kernel.
@@ -129,6 +163,9 @@ def build_and_push_kernel_release(kernel_release: str) -> None:
     # Upstream tooling reads the cache.json file we just wrote and publishes the
     # shared Fedora-wide tag plus the architecture-specific inspection tag.
     run_cmd(["just", "build"], cwd=str(AKMODS_WORKTREE), capture_output=False)
+    # Taken between build and push, so it names what this run built rather
+    # than anything the registry says afterwards.
+    record_built_image_id()
     run_cmd(["just", "push"], cwd=str(AKMODS_WORKTREE), capture_output=False)
 
 

@@ -78,6 +78,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `AKMODS_IMAGE_TEMPLATE`: fallback cache-image template containing `{fedora}` for local builds that do not pass `AKMODS_IMAGE`.
 - `AKMODS_REPO`: GHCR repository name for the shared akmods cache image.
 - `AKMODS_IMAGE_PINNED`: digest-pinned akmods cache ref that `check-akmods-cache` strict mode (`REQUIRE_MATCH=true`, the post-rebuild verification) checks; the one `pin-akmods-cache` published. Required in strict mode, so the check never re-resolves the shared tag.
+- `AKMODS_BUILT_IMAGE_ID`: local image ID (the sha256 of the image config) that `akmods-build-and-publish` records between `just build` and `just push` and publishes as the `built_image_id` step output. `pin-akmods-cache` refuses to pin the rebuilt cache unless the amd64 config behind the digest the shared tag resolves to hashes to this value, and refuses when it is empty or not a sha256 ID.
 - `AKMODS_UPSTREAM_REPO`: Git URL for the akmods fork this repo builds from.
 - `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
 - `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
