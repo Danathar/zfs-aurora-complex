@@ -228,6 +228,13 @@ and rejected by every later consumer anyway. When a `main` run does rebuild,
 a dedicated `sign-akmods-cache` job (in `build.yml`, running in the
 `production-signing` environment) signs the freshly published digest, reusing
 `ci_tools/sign_image.py` unchanged.
+That digest is pinned only if it is the image this run built:
+`akmods-build-and-publish` records the local image ID (the sha256 of the image
+config) between `just build` and `just push`, and `pin-akmods-cache` refuses to
+pin unless the amd64 config behind the digest the shared tag resolves to hashes
+to that ID (`AKMODS_BUILT_IMAGE_ID`). An image another run pushed to the shared
+tag in between is therefore never pinned or signed, and a missing ID is a
+refusal too, never a fallback to the tag.
 
 One environment detail worth knowing: this signature check runs inside the
 same `ghcr.io/ublue-os/devcontainer` container as the rest of the akmods job,
