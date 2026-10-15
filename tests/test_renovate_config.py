@@ -78,7 +78,10 @@ DEVCONTAINER_DIGEST_FILES = {
 # table is what makes deleting a manager fail: a manager that is simply gone
 # breaks no regex and matches no file, so nothing else here would notice.
 EXPECTED_MANAGERS = {
-    "quay.io/coreos/chunkah": {".github/actions/rechunk-native-image/action.yml"},
+    "quay.io/coreos/chunkah": {
+        ".github/actions/rechunk-native-image/action.yml",
+        "docs/architecture-overview.md",
+    },
     "openzfs/zfs": {"ci/defaults.json"},
     "ghcr.io/ublue-os/devcontainer": {"ci/defaults.json"},
     "ruff": RUFF_PIN_FILES,
@@ -443,22 +446,23 @@ class DocumentationJoinTests(unittest.TestCase):
         cls.doc = ARCHITECTURE_DOC.read_text(encoding="utf-8")
 
     def test_every_chunkah_version_the_doc_names_is_the_pinned_one(self) -> None:
-        """The paragraph names the version twice inline, so a bump has to reach both.
+        """The paragraph names the version once, where Renovate's manager rewrites it.
 
         Renovate's chunkah update (#78) moved the action to v0.7.0 and left
-        this paragraph saying v0.6.0 in both places.
+        this paragraph saying v0.6.0. The paragraph used to name the version
+        twice; it now names it once, inside the manager's doc matchString, so
+        a Renovate bump rewrites the doc in the same pull request.
         """
         start = self.doc.find("The Chunkah container image (currently `")
         self.assertNotEqual(start, -1, "the architecture overview stopped naming a Chunkah version")
         end = self.doc.find("\n\n", start)
         paragraph = self.doc[start : end if end != -1 else len(self.doc)]
         stated = re.findall(r"`(v\d+\.\d+\.\d+)`", paragraph)
-        groups = sole_capture(
-            self.managers["quay.io/coreos/chunkah"],
-            ".github/actions/rechunk-native-image/action.yml",
-        )
-        self.assertEqual(len(stated), 2, paragraph)
-        self.assertEqual(set(stated), {groups["currentValue"]})
+        manager = self.managers["quay.io/coreos/chunkah"]
+        action = sole_capture(manager, ".github/actions/rechunk-native-image/action.yml")
+        doc = sole_capture(manager, "docs/architecture-overview.md")
+        self.assertEqual(stated, [doc["currentValue"]], paragraph)
+        self.assertEqual(doc["currentValue"], action["currentValue"])
 
     def test_the_dependencies_the_doc_claims_are_tracked_have_managers(self) -> None:
         """The doc tells a reader ruff and the OpenZFS line are Renovate's job."""

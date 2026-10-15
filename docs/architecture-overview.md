@@ -412,7 +412,7 @@ root [`renovate.json`](../renovate.json) whose regex captures both
 `currentValue` and `currentDigest`. It is digest-pinned, not just
 version-pinned, because this step rewrites the locally built image
 immediately before it is pushed and signed -- a moved tag under the same
-`v0.7.0` version would let unreviewed content in right before this repo's own
+version would let unreviewed content in right before this repo's own
 key signs it. Renovate owns essentially every other version bump in this
 repo, including the GitHub Actions commit-SHA pins used throughout
 `.github/actions/` and `.github/workflows/`, the `ruff` version pinned for CI
