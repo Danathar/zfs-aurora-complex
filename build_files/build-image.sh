@@ -37,6 +37,11 @@ install -m 0644 /ctx/cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 # `rpm-ostree install distrobox`
 # dnf5 -y install <package>
 
+# crun-krun provides /usr/bin/krun, the OCI runtime that lets Podman run a
+# container inside a libkrun microVM (`podman run --runtime krun ...`). It sits
+# beside the default `crun` runtime and does not replace it.
+dnf5 -y install crun-krun
+
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
 python3 /ctx/containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
 

@@ -329,10 +329,12 @@ buildah.
 1. installs the committed `cosign.pub` public key into the image trust-material path
 2. enables brew setup/update services via `systemctl preset`
 3. keeps Distrobox from the upstream Aurora DX image
-4. runs the ZFS install helper against the resolved akmods cache image reference
-5. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
-6. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
-7. removes build-only runtime/container state
+4. installs `crun-krun` with `dnf5`, which adds the `krun` OCI runtime
+   (`podman run --runtime krun ...`) next to the default `crun`
+5. runs the ZFS install helper against the resolved akmods cache image reference
+6. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
+7. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
+8. removes build-only runtime/container state
 
 There is no explicit `ostree container commit` step: the `RUN bootc container
 lint` that follows already performs the equivalent validation/finalization, so
