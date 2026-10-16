@@ -86,6 +86,11 @@
       "description": "The privileged akmods build container is pinned by digest in three places: the `container: image:` literals in build.yml and build-branch.yml (tracked by Renovate's github-actions manager) and DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json (tracked by the custom regex manager above). tests/test_workflow_build_container.py::test_container_literals_match_the_checked_in_default requires all three to be identical. The two managers report different currentValue values, so without grouping Renovate opens two PRs for one digest bump and each fails that test on its own, so neither can merge. A shared groupName puts both updates on one branch and in one PR.",
       "groupName": "akmods build container",
       "matchPackageNames": ["ghcr.io/ublue-os/devcontainer"]
+    },
+    {
+      "description": "docs/architecture-overview.md names the Chunkah version in prose so the Chunkah manager can keep it in step with the action. Prose has no digest, but config:best-practices digest-pins every docker dependency, so without this rule Renovate queues a pinDigest update for the sentence that can never be applied (#173). Version updates for the doc are unaffected and still share the action's branch.",
+      "matchFileNames": ["docs/architecture-overview.md"],
+      "pinDigests": false
     }
   ]
 }
