@@ -133,8 +133,9 @@ gh issue list -R Danathar/zfs-aurora-complex --state open --search 'author:app/d
 ACMM is Hive's maturity model for how autonomously a repository can be maintained.
 Its checks test that a file exists, so a gap issue closing says nothing about
 whether anything changed. This page exists to be read, not to raise a score.
-Hive is paused for this repository, so those issues are the maintainer's to work
-or close ([`multi-agent.md`](./multi-agent.md)).
+Hive is active for this repository, so its agents work these issues as well as
+the maintainer. An agent claims an issue in a comment before it starts, so read
+the comments before taking one ([`multi-agent.md`](./multi-agent.md)).
 
 ### Whether the pipeline itself is healthy
 

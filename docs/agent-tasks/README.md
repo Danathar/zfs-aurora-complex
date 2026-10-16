@@ -75,17 +75,24 @@ issues as `app/danathar-atomic-hive` and writes a signature as the last line:
 — hive: agent=<role> backend=<tool> model=<model>
 ```
 
-The one instance that exists in this repository today is the shorter line on the
-ACMM gap issues Hive's dashboard opened (for example #91, #92 and #93):
+Hive's pull requests carry the full line. For example, #174 ends:
+
+```text
+— hive: agent=architect backend=claude model=claude-opus-5-5 effort=high claude=2.1.301
+```
+
+The ACMM gap issues Hive's dashboard opened (for example #91, #92 and #93) carry a
+shorter one:
 
 ```text
 — hive: agent=dashboard
 ```
 
-Hive is paused for this repository, and no pull request here has been opened by it
-or carries a `— hive:` line, so there is no agent role to look up. What each role
-does is Hive's to say. When a Hive pull request appears, `agent` names the role that
-wrote it and its branch prefix usually matches.
+Hive is active for this repository: on 2026-10-16, 21 merged pull requests (#133
+to #174) had been opened by it, and each carries a `— hive:` line. What each role
+does is Hive's to say. `agent` names the role that wrote the pull request, and its
+branch prefix usually matches: the roles seen so far are `scanner`, `quality` and
+`architect`, each on a branch prefixed with its own name, and `sec-check`, on `sec/`.
 
 The signature is **a hint, not proof**. Anyone can type that line into a comment.
 Check the author, not the text. `.github/workflows/agent-audit.yml` checks the
@@ -96,9 +103,10 @@ that commits on agent pull requests carry a `Signed-off-by:` trailer.
 
 A branch prefix is a habit, not a rule. Nothing in the repository enforces it. The
 prefixes in this repository's history, read from its pull requests, are the
-maintainer's own (`docs/`, `fix/`, `harden/`, `feat/`, `refactor/`, `acmm/`) and the
-apps' (`renovate/`, `dependabot/`). Read the prefix together with the pull request
-author. The command to see the real pairs today is in the next section.
+maintainer's own (`docs/`, `fix/`, `harden/`, `feat/`, `refactor/`, `acmm/`), Hive's
+(`scanner/`, `quality/`, `architect/`, `sec/`) and the other apps' (`renovate/`,
+`dependabot/`). Read the prefix together with the pull request author. The
+command to see the real pairs today is in the next section.
 
 ## Commands
 

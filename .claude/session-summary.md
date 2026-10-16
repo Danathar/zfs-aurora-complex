@@ -23,25 +23,28 @@ act on it. When in doubt, delete the section rather than leave it uncertain.
 
 ## Current state
 
-Last updated: 2026-10-11.
+Last updated: 2026-10-16.
 
 `:latest` is published and carries ZFS 2.4.4 (its
 `org.zfs-aurora-complex.zfs-version` label, read from the registry on
-2026-10-11), the 2.4 line that `ci/defaults.json` configures. The 25 most recent
-`build.yml` runs, 2026-09-18 to 2026-10-11, all concluded `success`; the nightly
-schedule is `00 06` UTC.
+2026-10-16), the 2.4 line that `ci/defaults.json` configures. Of the 36 completed
+`build.yml` runs from 2026-10-12 to 2026-10-16, 28 concluded `success`, 7
+`cancelled` and 1 `failure` (the 2026-10-13 scheduled run; the next scheduled run
+succeeded). A newer run on `main` cancels an older one, so a `cancelled` run after
+quick merges is expected. The nightly schedule is `00 06` UTC.
 
 That is the pipeline completing, not the image being good. Say which run you
 read when you report on one (AGENTS.md section 0 rule 4).
 
+Hive has been active for this repository since 2026-10-12, and its app merges its
+own pull requests ([`docs/multi-agent.md`](../docs/multi-agent.md)).
+
 ## In flight
 
-The Hive ACMM gap issues (#79 to #121) are being landed as slice pull requests
-that target a staging branch, `acmm/integration`, rather than `main`, so that
-only one production `build.yml` run results from the whole series. Check the
-open pull requests before starting overlapping work. Update this section when
-leaving work unfinished, with enough to resume: branch, what is done, what is
-not, and what you were about to check.
+Nothing is recorded as in flight. Check the open pull requests and the issue
+comments (Hive agents claim an issue in a comment) before starting overlapping
+work. Update this section when leaving work unfinished, with enough to resume:
+branch, what is done, what is not, and what you were about to check.
 
 ## Standing constraints a session should not rediscover
 

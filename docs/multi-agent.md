@@ -103,14 +103,16 @@ findings with a severity badge. It opens nothing and merges nothing.
 
 **Hive's agents.** Hive's pull requests and issues end with a signature line of
 the form `— hive: agent=<role> backend=... model=...`, and its pull requests come
-from `app/danathar-atomic-hive`. **Hive is currently paused for this
-repository**, so no such pull request exists yet: of the 67 pull requests up to
-#78, none was opened by that app or carries that signature. The one trace Hive
-has left here is the set of ACMM gap issues (numbers #79 to #121), whose last line
-reads `— hive: agent=dashboard` and which come from a Hive evaluation, not from
-an agent role. This page does not describe Hive's roles; read the signature on a
-real pull request when one appears. [`agent-tasks/README.md`](./agent-tasks/README.md)
-has the commands.
+from `app/danathar-atomic-hive`. **Hive has been active for this repository since
+2026-10-12.** On 2026-10-16, 21 merged pull requests (#133 to #174) had been
+opened by that app, and every one carries that signature. The roles named in
+them were `scanner`, `quality`, `architect` and `sec-check`. Hive's agents also
+file issues here, titled with the role in brackets (for example `[architect]`).
+The first trace Hive left was the set of ACMM gap issues (numbers #79 to #121),
+whose last line reads `— hive: agent=dashboard` and which come from a Hive
+evaluation, not from an agent role. This page does not describe Hive's roles;
+read the signature on a real pull request.
+[`agent-tasks/README.md`](./agent-tasks/README.md) has the commands.
 
 To see the current picture instead of trusting this page:
 
@@ -130,8 +132,7 @@ those apps' own.
 
 ## How work reaches an agent
 
-There are two routes. Only the first exists today, and neither lives in a
-workflow.
+There are two routes. Both are in use, and neither lives in a workflow.
 
 **Route 1: the maintainer starts a session.** The maintainer opens an agent on
 a clone (or a worktree) of the repository and hands it a task. The record is the
@@ -140,10 +141,10 @@ one. Nothing in the repository receives the request.
 
 **Route 2: Hive, outside the repository.** Hive looks at the repository and at
 its own backlog, starts an agent, and the agent pushes a branch. Nothing here
-receives that request, so nothing here can be asked about it. What would be
-visible here is the result: a branch, a pull request, and labels. While Hive is
-paused, no work arrives this way, and a pull request for an ACMM gap issue is a
-person's (or the maintainer's agent's) work like any other.
+receives that request, so nothing here can be asked about it. What is visible
+here is the result: an issue the agent filed, a branch, a pull request with a
+`— hive:` signature, and labels. The agent claims an issue by commenting on it
+before it starts, so read an issue's comments before taking it.
 
 There is no label that hands work to an agent here. No workflow reacts to a
 label, and a label on an issue is a description, not a request.
@@ -236,36 +237,49 @@ gh api repos/Danathar/zfs-aurora-complex/rulesets
 
 ## Who merges
 
-The maintainer, `Danathar`, merges. All 60 merged pull requests up to #78 were
-merged by that login, including every Renovate and Dependabot one, and the
-repository has no automerge: `renovate.json` sets `automerge` to `false`
+Two logins merge here: the maintainer, `Danathar`, and the Hive app,
+`app/danathar-atomic-hive`. On 2026-10-16, of the 95 merged pull requests up to
+#174, `Danathar` had merged 69 and the Hive app 26. Every merge before
+2026-10-12 was the maintainer's. From that day the Hive app merged all 21 of its
+own agents' merged pull requests, two the maintainer opened (#143 and #145), and
+three of Renovate's (#75, #78 and #123). Renovate does not merge its own:
+`renovate.json` sets `automerge` to `false`
 ([`branch-protection.md`](./branch-protection.md)). Check:
 
 ```bash
 gh pr list --state merged --limit 1000 --json mergedBy \
-  -q 'map(.mergedBy.login) | unique'
+  -q 'group_by(.mergedBy.login) | .[] | [.[0].mergedBy.login, length] | @tsv'
 ```
 
 A merge to `main` builds, signs and promotes the image, so the required checks are
-the gate and the review is the maintainer's. The ruleset requires a pull request
-and a passing `Python Unit Tests`; it requires no approving review, and it allows
-no bypass actors.
+the gate. The ruleset requires a pull request and a passing `Python Unit Tests`;
+it requires no approving review, and it allows no bypass actors. It applies to the
+Hive app as to anyone else.
 
-Agent sessions working in this repository do not merge on their own initiative.
+Agent sessions the maintainer runs do not merge on their own initiative.
 [`AGENTS.md`](../AGENTS.md) section 0 rule 6 says not to push, promote, tag, or
 delete published artifacts on your own initiative, and
 [`SECURITY-AI.md`](./SECURITY-AI.md) lists what no agent may do on any instruction.
 The evidence for any one pull request is a `merged` event whose actor is a person
-or an app:
+or an app (the Hive app shows there as `danathar-atomic-hive[bot]`):
 
 ```bash
 gh api repos/Danathar/zfs-aurora-complex/issues/<number>/events \
   --jq '.[] | select(.event == "merged") | .actor.login'
 ```
 
-If Hive resumes and is given merge rights, that is a change to who may publish an
-image, and it belongs in [`SECURITY-AI.md`](./SECURITY-AI.md) and
-[`risk-tiers.md`](./risk-tiers.md) before it happens, not on this page after.
+The Hive app's merges include pull requests the labeler marked
+`area/safety-critical` (Tier 3 in [`risk-tiers.md`](./risk-tiers.md)): #139, #149,
+#158 and #159. [`SECURITY-AI.md`](./SECURITY-AI.md) still names "a human on the
+merge button for anything in Tier 3" among the things standing in place of an
+in-repo agent. Which of the two is intended is the maintainer's decision, and it
+belongs in that page and in `risk-tiers.md`, not here. To list those pull
+requests today:
+
+```bash
+gh pr list --state merged --limit 1000 --json number,mergedBy,labels \
+  -q '[.[] | select(.mergedBy.login == "app/danathar-atomic-hive" and any(.labels[]; .name == "area/safety-critical")) | .number] | sort'
+```
 
 What to read next:
 

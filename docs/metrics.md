@@ -58,7 +58,7 @@ The classes are:
 | --- | --- | --- |
 | `human` | `Danathar` (and any contributor without an `app/` prefix) | Hand-written, including commits written with an agent in the maintainer's own session |
 | `renovate` | `app/renovate` | Dependency and digest bumps |
-| `hive` | `app/danathar-atomic-hive` | Hive's agents (see [`multi-agent.md`](./multi-agent.md)). Hive is paused for this repository, so this class may read zero |
+| `hive` | `app/danathar-atomic-hive` | Hive's agents (see [`multi-agent.md`](./multi-agent.md)). Active since 2026-10-12. The Hive app merges these itself, so their wait time below measures Hive, not a reviewer |
 | other `app/*` | for example `app/dependabot` | Printed under their own login |
 
 The acceptance rate that does carry information is **per class**. A Renovate pull
