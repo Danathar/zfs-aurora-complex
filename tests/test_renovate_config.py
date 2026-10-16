@@ -398,6 +398,30 @@ class PackageRuleTests(unittest.TestCase):
         self.assertIn("BASE_IMAGE", args)
         self.assertIn("DEFAULT_BASE_IMAGE", read("ci_tools/resolve_build_inputs.py"))
 
+    def test_a_docker_match_with_no_digest_is_exempt_from_digest_pinning(self) -> None:
+        """`config:best-practices` digest-pins every docker dependency a manager reports.
+
+        A match that captures no `currentDigest` has nowhere to write one, so
+        Renovate queues a pinDigest update that can never apply (#173). Every
+        such file must be named by a `pinDigests: false` rule, and every file a
+        rule exempts must still hold a digest-less match, so the exemption cannot
+        outlive its reason or spread to a real digest pin.
+        """
+        tracked = tracked_files()
+        digestless: set[str] = set()
+        for manager in self.managers.values():
+            if manager["datasourceTemplate"] != "docker":
+                continue
+            for name in selected_files(manager, tracked):
+                if any(not found.get("currentDigest") for found in captures(manager, name)):
+                    digestless.add(name)
+        exemptions = [rule for rule in self.rules if rule.get("pinDigests") is False]
+        exempt = {name for rule in exemptions for name in rule.get("matchFileNames", [])}
+        self.assertEqual(digestless, exempt)
+        for rule in exemptions:
+            with self.subTest(rule=rule["description"][:60]):
+                self.assertEqual(set(rule), {"description", "matchFileNames", "pinDigests"})
+
 
 class PresetTests(unittest.TestCase):
     """The inherited presets, and the property in the tree that proves one is applied."""
