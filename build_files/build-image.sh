@@ -40,7 +40,14 @@ install -m 0644 /ctx/cosign.pub "/etc/pki/containers/${SIGNING_KEY_FILENAME}"
 # crun-krun provides /usr/bin/krun, the OCI runtime that lets Podman run a
 # container inside a libkrun microVM (`podman run --runtime krun ...`). It sits
 # beside the default `crun` runtime and does not replace it.
-dnf5 -y install crun-krun
+# `crun-krun` Requires the exact `crun` version-release, so an unversioned
+# install would upgrade the base image's `crun` whenever Fedora updates is ahead
+# of Aurora. Pin it to the `crun` the base already ships; the base's Updates
+# Archive repo keeps that build available. `rpm -q` fails (and `set -e` stops the
+# build) if `crun` is missing, and `dnf5` fails if the pinned build is gone, so
+# the build fails instead of drifting.
+crun_evr="$(rpm -q --qf '%{EPOCHNUM}:%{VERSION}-%{RELEASE}' crun)"
+dnf5 -y install "crun-krun-${crun_evr}"
 
 # Install ZFS userspace + module payloads from the self-hosted akmods cache.
 python3 /ctx/containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py
