@@ -6,10 +6,10 @@ Two kinds of thing act on this repository without a person typing: GitHub
 Actions workflows, and agents. Agents run in the maintainer's own sessions, and
 in an external system called Hive. Hive opens issues and pull requests here as
 `app/danathar-atomic-hive`, and ends the body with a signature line that starts
-`— hive: agent=`; **Hive is currently paused for this repository**, so the only
-trace it has left is the ACMM gap issues. [`docs/SECURITY-AI.md`](./SECURITY-AI.md)
-says what an agent may do. This page says what you do when one of them, or one of
-the workflows, tells you something.
+`— hive: agent=`. **Hive has been active for this repository since 2026-10-12**,
+and its app merges its own pull requests ([`multi-agent.md`](./multi-agent.md)).
+[`docs/SECURITY-AI.md`](./SECURITY-AI.md) says what an agent may do. This page
+says what you do when one of them, or one of the workflows, tells you something.
 
 This repository is in production: a merge to `main` that touches any
 non-Markdown file starts `build.yml`, which can move `:latest` on a machine
@@ -194,7 +194,9 @@ Every file in `.github/workflows/` has an entry here.
   back merged agent pull requests" lists every one merged in the last 31 days in
   the run summary: who opened and merged it, its signature line, the issue it
   closes, its sign-offs, and whether the labeler marked it safety-critical
-  (Tier 3). It writes nothing else. With Hive paused it may list none.
+  (Tier 3). It writes nothing else. With Hive active since 2026-10-12, its rows
+  include the pull requests the Hive app opened and merged; the "Merged by" and
+  "Tier 3" columns together show which safety-critical ones it merged.
 - **Red means a record is missing:** a pull request the Hive app opened with no
   `— hive:` signature line, or a commit on an agent pull request with no
   `Signed-off-by:` trailer. Misses merged before 2026-10-08 are listed but do not
