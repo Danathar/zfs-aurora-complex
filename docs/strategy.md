@@ -113,10 +113,14 @@ Read it with three cautions:
 
 ### What is waiting on a person
 
-Every pull request here is merged by the maintainer, so the queue is simply the
-open pull requests. Renovate's wait for the maintainer to get to them; the
-OpenZFS line bump is the one that must stay a deliberate decision
-([`review-rubric.md`](./review-rubric.md) section 3):
+Two logins merge here, the maintainer and the Hive app
+([`multi-agent.md`](./multi-agent.md#who-merges)), so not every open pull
+request is waiting on a person. One opened by Hive's agents can be merged by the
+Hive app once its required checks pass. Renovate does not merge its own, and the
+Hive app has merged only three of them, so treat Renovate's as the maintainer's.
+The OpenZFS line bump is the one that must stay a deliberate decision by the
+maintainer ([`review-rubric.md`](./review-rubric.md) section 3). The command
+lists every open pull request with its author, so you can tell them apart:
 
 ```bash
 gh pr list -R Danathar/zfs-aurora-complex --state open --json number,title,author,createdAt \
