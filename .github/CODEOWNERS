@@ -26,6 +26,11 @@
 /containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py   @Danathar
 /files/scripts/configure_signing_policy.py                    @Danathar
 
+# The only local action the two signing jobs in build.yml run. It installs the
+# cosign binary that receives the signing key, so it is owned like the key
+# itself (#177, option B).
+/.github/actions/install-signing-tools/                       @Danathar
+
 # What the image installs onto every booted machine, the signing key, and the
 # ZFS line and base-image values.
 /files/                                                       @Danathar

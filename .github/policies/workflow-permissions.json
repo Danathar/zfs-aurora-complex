@@ -32,6 +32,7 @@
         "build-zfs-akmods": {"contents": "read", "packages": "write"},
         "sign-akmods-cache": {"contents": "read", "packages": "write"},
         "build-candidate-image": {"contents": "read", "packages": "write"},
+        "sign-candidate-image": {"contents": "read", "packages": "write"},
         "promote-stable": {"contents": "read", "packages": "write"}
       }
     },

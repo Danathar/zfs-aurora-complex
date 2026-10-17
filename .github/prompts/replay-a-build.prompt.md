@@ -132,7 +132,7 @@ any other ref, such as a `replay/*` branch:
 - `build-zfs-akmods` runs only when `github.ref` is `refs/heads/main`, and every
   later job needs it. On another ref the whole build is skipped and nothing is
   built, signed or published.
-- `sign-akmods-cache` and `build-candidate-image` declare `environment:
+- `sign-akmods-cache` and `sign-candidate-image` declare `environment:
   production-signing`.
   [`production-boundary-proposal.md`](../../docs/production-boundary-proposal.md)
   records that environment as restricted to `main` (adopted 2026-07-29).

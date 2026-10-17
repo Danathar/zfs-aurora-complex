@@ -53,17 +53,26 @@ all of them.
 
 The main workflow avoids leaving user-facing tags on unsigned content.
 
-For the candidate image, `.github/actions/publish-native-image/action.yml` does
-this:
+For the candidate image, two jobs in `.github/workflows/build.yml` do this.
 
-1. builds the local image with the requested candidate tag
-2. retags it to a transient non-publishable tag:
+`build-candidate-image` holds no signing key and uses
+`.github/actions/publish-native-image/action.yml` to:
+
+1. build the local image with the requested candidate tag
+2. retag it to a transient non-publishable tag:
    `candidate-<sha>-<fedora>-unsigned-<run_id>`
-3. pushes only the transient tag first
-4. resolves the transient tag to a digest
-5. signs that digest
-6. verifies that digest signature
-7. copies the same digest to the requested candidate tag
+3. push only the transient tag and output the pushed digest
+
+`sign-candidate-image` runs in the `production-signing` environment and:
+
+1. confirms the transient tag in the registry resolves to the pushed digest
+2. signs that digest and verifies the signature
+   (`python3 -I ci_tools/sign_image.py`, standard library only)
+3. copies the same digest to the requested candidate tag
+
+Only code-owned code runs in a job that holds the key: `build.yml` itself,
+pinned third-party actions, the code-owned `install-signing-tools` action, and
+`ci_tools/sign_image.py` (issue #177).
 
 Then the promote job copies the same digest to:
 
@@ -297,7 +306,7 @@ the trust policy is supposed to enforce.
    There are two ways a job here satisfies that rule:
    - Authenticate the whole job with `docker/login-action` first and let
      `skopeo`/`cosign` pick the credential up from the Docker config. This is
-     what `sign-akmods-cache` and `promote-stable` do.
+     what `sign-akmods-cache`, `sign-candidate-image` and `promote-stable` do.
    - Where a helper is handed the credential directly, hand it over in a file.
      `ci_tools/common.py`'s `registry_auth_dir` writes a `0600` Docker-format
      `config.json` into a temporary directory that lives only for the duration
@@ -306,9 +315,8 @@ the trust policy is supposed to enforce.
      through `DOCKER_CONFIG`. This is what the akmods cache check, the stable
      signal check and the promotion helpers do. The `podman push` in
      `.github/actions/publish-native-image/action.yml` writes the same shape
-     inline in bash and passes it as `--authfile`; that step *does* sit under a
-     job-level login, but naming the file keeps a login that quietly stopped
-     working a denied push rather than an anonymous one.
+     inline in bash and passes it as `--authfile`. That job has no
+     `docker/login-action` login, so the file is the push's only credential.
 
    `redact_command_args` in `shared/command_args.py` is a backstop for *error
    text* only. It cannot satisfy this rule, because it does nothing about the

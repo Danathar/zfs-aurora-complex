@@ -113,15 +113,14 @@ This page defines terms used across this repository's docs and workflow comments
 
 ### Signing And Registry
 
-- `SIGNING_SECRET`: repository secret containing the cosign private key.
-- `COSIGN_PRIVATE_KEY`: environment variable used by the signing helper to pass the private key to cosign.
+- `SIGNING_SECRET`: secret of the `production-signing` environment containing the cosign private key.
+- `COSIGN_PRIVATE_KEY`: environment variable used by `ci_tools/sign_image.py` to pass the private key to cosign.
 - `REGISTRY_ACTOR`: GitHub actor used as the registry username.
 - `REGISTRY_TOKEN`: token used for GHCR authentication in helper commands.
 - `REGISTRY_USER`: workflow-local registry username used by the Docker login step.
 - `REGISTRY_PASSWORD`: workflow-local registry password or token used by the Docker login step.
 - `IMAGE_ORG`: normalized image-owner portion used in GHCR paths.
 - `IMAGE_NAME`: final OS image repository name.
-- `IMAGE_TAG`: image tag being pushed, signed, or promoted.
 - `HAS_SIGNING_SECRET`: workflow-local boolean that records whether `SIGNING_SECRET` is configured.
 
 ### Workflow Control And Audit

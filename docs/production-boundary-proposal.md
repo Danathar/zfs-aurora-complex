@@ -22,10 +22,11 @@ Proven by behaviour, not just configuration:
   branch genuinely could not sign. A verifying signature there would have meant the boundary
   leaked. The branch workflow that published it has since been removed (issue #181).
 
-The workflow half: `build.yml`'s `build-candidate-image` and `sign-akmods-cache` declare
-`environment: production-signing`; branch runs were barred from rebuilding the shared akmods
-cache after one swapped the shared tag mid-flight. Today a branch push publishes nothing, and
-the akmods job in `build.yml` runs only on `main`.
+The workflow half: `build.yml`'s `sign-candidate-image` and `sign-akmods-cache` declare
+`environment: production-signing` (issue #177 moved the candidate signing out of
+`build-candidate-image`, which now builds and pushes without the key); branch runs were barred
+from rebuilding the shared akmods cache after one swapped the shared tag mid-flight. Today a
+branch push publishes nothing, and the akmods job in `build.yml` runs only on `main`.
 
 ### Deliberately not done
 
@@ -161,7 +162,8 @@ workflow file cannot forge the ref a job runs on.
 Every job in that file that references `secrets.SIGNING_SECRET` today can add
 `environment: production-signing` with no behavior change for the common case:
 
-- `build-candidate-image` (signs the candidate OS image)
+- `sign-candidate-image` (signs the candidate OS image; the original proposal named
+  `build-candidate-image`, before #177 split building from signing)
 - `sign-akmods-cache` (added in PR #44)
 
 A manual `workflow_dispatch` on a non-`main` ref now builds nothing: the akmods job runs only

@@ -31,6 +31,8 @@ Labelled `area/safety-critical`.
 
 - `.github/workflows/build.yml`
 - `.github/actions/publish-native-image/`
+- `.github/actions/install-signing-tools/`, the only local action the signing
+  jobs run: it installs the cosign binary that receives the signing key
 - `ci_tools/sign_image.py`
 - `ci_tools/promote_stable.py`
 - `ci_tools/check_akmods_cache.py`

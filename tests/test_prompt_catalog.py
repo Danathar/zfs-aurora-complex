@@ -570,11 +570,11 @@ class DiagnoseWorkflowClaimTests(unittest.TestCase):
         self.assertIn("`cancel-in-progress: true`", self.text)
         self.assertRegex(self.workflow, r"(?m)^\s*cancel-in-progress:\s*true\s*$")
 
-    def test_the_three_jobs_named_as_installing_cosign_are_exactly_those_jobs(self) -> None:
+    def test_the_four_jobs_named_as_installing_cosign_are_exactly_those_jobs(self) -> None:
         # Step 4 tells the reader to work out how much of the run completed from
-        # *which* job's cosign install failed. A fourth job installing it, or
-        # one of these three dropping it, makes that inference wrong.
-        named = {"preflight", "sign-akmods-cache", "promote-stable"}
+        # *which* job's cosign install failed. A fifth job installing it, or
+        # one of these four dropping it, makes that inference wrong.
+        named = {"preflight", "sign-akmods-cache", "sign-candidate-image", "promote-stable"}
         self.assertEqual(
             named,
             job_uses(self.jobs, "install-signing-tools"),
@@ -583,14 +583,12 @@ class DiagnoseWorkflowClaimTests(unittest.TestCase):
         for job in named:
             self.assertIn(f"`{job}`", self.text)
 
-    def test_the_action_that_installs_cosign_after_publishing_still_does(self) -> None:
-        # The same step's "and again inside publish-native-image, which runs
-        # after the transient image has been pushed".
-        action = REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
-        self.assertIn(
-            "uses: ./.github/actions/install-signing-tools",
-            action.read_text(encoding="utf-8"),
-        )
+    def test_the_candidate_is_signed_by_a_job_that_runs_after_the_push(self) -> None:
+        # Step 4's "built and pushed under a transient tag but not signed" for a
+        # sign-candidate-image failure holds only while that job needs the push.
+        body = [line.strip() for line in self.jobs["sign-candidate-image"]]
+        self.assertIn("- build-candidate-image", body[body.index("needs:") :])
+        self.assertIn("uses: ./.github/actions/install-signing-tools", body)
 
 
 class ReplayLockFileTests(unittest.TestCase):
@@ -853,7 +851,7 @@ class ReplayDispatchTests(unittest.TestCase):
             for job, body in self.jobs.items()
             if any(line.strip() == "environment: production-signing" for line in body)
         }
-        self.assertEqual({"sign-akmods-cache", "build-candidate-image"}, gated)
+        self.assertEqual({"sign-akmods-cache", "sign-candidate-image"}, gated)
         for job in gated:
             self.assertIn(f"`{job}`", self.text)
 

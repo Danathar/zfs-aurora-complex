@@ -39,6 +39,9 @@
           # .github/CODEOWNERS owns it.
           - '.github/workflows/**'
           - '.github/actions/publish-native-image/**'
+          # The only local action build.yml's signing jobs run; it installs the
+          # cosign that receives the signing key (#177, option B).
+          - '.github/actions/install-signing-tools/**'
           - 'ci_tools/sign_image.py'
           - 'ci_tools/promote_stable.py'
           - 'ci_tools/check_akmods_cache.py'

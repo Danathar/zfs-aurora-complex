@@ -1,6 +1,10 @@
 name: Publish Native Image
 
-description: Push one locally built image tag to GitHub Container Registry (GHCR) and sign it.
+description: >-
+  Push one locally built image to GitHub Container Registry (GHCR) under a
+  transient, unsigned tag and report its digest. Nothing here signs. Signing,
+  and moving the requested tag to the signed digest, happen in build.yml's
+  sign-candidate-image job, the only job the signing key reaches.
 
 inputs:
   image_registry:
@@ -10,7 +14,7 @@ inputs:
     description: Image name under the registry owner path.
     required: true
   image_tag:
-    description: Image tag to push and sign.
+    description: Image tag the caller will later point at the signed digest.
     required: true
   registry_username:
     description: Registry username.
@@ -18,42 +22,23 @@ inputs:
   registry_password:
     description: Registry password or token.
     required: true
-  image_org:
-    description: Lowercase registry owner used for signing lookups.
-    required: true
-  cosign_private_key:
-    description: >-
-      Private signing key used to sign the pushed image digest. GitHub does not
-      actually enforce `required:` on action inputs -- an omitted input silently
-      becomes an empty string -- so the guard step below, not this field, is
-      what protects the production path.
-    required: true
+
+outputs:
+  transient_tag:
+    description: The unsigned tag this action pushed, `<image_tag>-unsigned-<run_id>`.
+    value: ${{ steps.push.outputs.transient_tag }}
+  digest:
+    description: The registry digest of the pushed image, as `sha256:<64 hex>`.
+    value: ${{ steps.push.outputs.digest }}
 
 runs:
-  # This action owns the publication sequence: authenticate, push a transient
-  # tag, sign its digest, then promote that same digest to the requested tag.
-  # That keeps user-facing tags from pointing at unsigned content.
+  # This action only pushes. It used to sign and promote as well, which put the
+  # signing key in a job that also ran the image build and this repository's
+  # other actions and ci_tools modules. Keeping the key out of that job is the
+  # point of #177's option B; see the comment on sign-candidate-image in
+  # build.yml.
   using: composite
   steps:
-    # Fail closed: no key means no push at all.
-    - name: Require signing key before publication
-      if: inputs.cosign_private_key == ''
-      shell: bash
-      run: |
-        echo "SIGNING_SECRET is not available. Refusing to publish an unsigned image." >&2
-        exit 1
-
-    # The `podman push` below authenticates from its own per-command auth file,
-    # but the later `skopeo copy`/`skopeo inspect` calls in this file do not pass
-    # credentials at all -- they rely on this login's Docker config file via
-    # containers/image's fallback lookup. Authenticate here so those calls can
-    # talk to GHCR as the current workflow actor.
-    - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-      with:
-        registry: ghcr.io
-        username: ${{ inputs.registry_username }}
-        password: ${{ inputs.registry_password }}
-
     - name: Retag local image for transient publication
       shell: bash
       env:
@@ -63,9 +48,6 @@ runs:
       run: |
         buildah tag "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
 
-    # Push a non-publishable transient tag first. The requested tag is only
-    # moved after cosign verifies the digest that will be promoted.
-    #
     # Calls `podman push` directly rather than through a wrapper action:
     # redhat-actions/push-to-registry hasn't cut a release since March 2024
     # (though the repo itself is still active), and buildah/podman share the
@@ -78,14 +60,13 @@ runs:
     # `docs/signing-and-bootc.md` prohibits, and this is the same file hand-off
     # `ci_tools/common.py`'s `registry_auth_dir` performs for skopeo and cosign.
     #
-    # The file is named explicitly with `--authfile` rather than leaning on
-    # podman's own fallback to the `docker/login-action` Docker config above,
-    # which would authenticate today but would also turn a login that quietly
-    # stopped working into an anonymous push instead of a denied one. Passing the
-    # credential keeps the failure mode this step already had. That login is
-    # still needed for the later skopeo calls in this file, which read it via the
-    # containers/image library's fallback to the Docker config file.
-    - name: Push transient tag with podman
+    # The file is named explicitly with `--authfile`, so a login that quietly
+    # stopped working fails the push instead of turning it into an anonymous one.
+    #
+    # `--digestfile` records the digest the registry stored, so the signing job
+    # signs exactly what was pushed without re-reading a tag that could move.
+    - id: push
+      name: Push transient tag with podman
       shell: bash
       env:
         IMAGE_REGISTRY: ${{ inputs.image_registry }}
@@ -112,49 +93,19 @@ runs:
           "${IMAGE_REGISTRY%%/*}" \
           "${encoded_credential}" \
           > "${auth_file}"
+        digest_file="${auth_dir}/digest"
         podman push \
           --tls-verify=true \
           --authfile "${auth_file}" \
+          --digestfile "${digest_file}" \
           "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}" \
           "${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
-
-    # Install signing tools for the mandatory post-push signature.
-    - uses: ./.github/actions/install-signing-tools
-
-    # Sign the pushed image by digest, not by a mutable tag name. A tag such as
-    # `latest` can move later, but a digest names one exact image forever.
-    # Signing relies on the registry login performed above, not on separate
-    # credentials passed into sign-image.
-    - name: Sign transient image digest
-      shell: bash
-      env:
-        IMAGE_ORG: ${{ inputs.image_org }}
-        IMAGE_NAME: ${{ inputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
-        COSIGN_PRIVATE_KEY: ${{ inputs.cosign_private_key }}
-      run: |
-        python3 -m ci_tools.cli sign-image
-
-    - name: Promote pushed digest to requested tag
-      shell: bash
-      env:
-        IMAGE_REGISTRY: ${{ inputs.image_registry }}
-        IMAGE_NAME: ${{ inputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image_tag }}
-        TRANSIENT_IMAGE_TAG: ${{ inputs.image_tag }}-unsigned-${{ github.run_id }}
-      run: |
-        transient_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
-        transient_digest="$(skopeo inspect --format '{{ .Digest }}' "${transient_ref}")"
-        signed_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}@${transient_digest}"
-        final_ref="docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-        # --preserve-digests keeps this copy byte-identical rather than
-        # letting skopeo re-encode the manifest; a re-encode would be
-        # invisible here (the digest check below only compares tags this
-        # same job pushed) but would silently drop Chunkah's layer
-        # annotations, which is the entire point of rechunking.
-        skopeo copy --multi-arch=all --preserve-digests "${signed_ref}" "${final_ref}"
-        final_digest="$(skopeo inspect --format '{{ .Digest }}' "${final_ref}")"
-        if [ "${final_digest}" != "${transient_digest}" ]; then
-          echo "Promoted tag digest ${final_digest} does not match signed digest ${transient_digest}" >&2
+        digest="$(cat "${digest_file}")"
+        if ! [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "podman push reported no usable digest: '${digest}'" >&2
           exit 1
         fi
+        {
+          echo "transient_tag=${TRANSIENT_IMAGE_TAG}"
+          echo "digest=${digest}"
+        } >> "${GITHUB_OUTPUT}"

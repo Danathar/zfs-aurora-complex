@@ -116,10 +116,23 @@ class GateTests(unittest.TestCase):
     def test_the_gate_commands_it_names_are_registered_in_the_cli(self) -> None:
         from ci_tools.cli import command_map
 
-        for command in ("check-akmods-cache", "sign-image", "promote-stable"):
+        for command in ("check-akmods-cache", "promote-stable"):
             with self.subTest(command=command):
                 self.assertIn(f"`{command}`", doc_text())
                 self.assertIn(command, command_map())
+
+    def test_the_signing_gate_is_the_isolated_script_run_by_the_two_signing_jobs(self) -> None:
+        self.assertIn("`ci_tools/sign_image.py` under `python3 -I`", doc_text())
+        self.assertTrue((REPO_ROOT / "ci_tools" / "sign_image.py").is_file())
+        text = workflow("build.yml")
+        self.assertEqual(2, text.count("python3 -I ci_tools/sign_image.py"))
+        for job in ("sign-akmods-cache", "sign-candidate-image"):
+            with self.subTest(job=job):
+                self.assertIn(f"`{job}`", doc_text())
+                body = text.split(f"\n  {job}:\n", 1)[1]
+                body = re.split(r"\n  [a-z][\w-]*:\n", body, maxsplit=1)[0]
+                self.assertIn("environment: production-signing", body)
+                self.assertIn("python3 -I ci_tools/sign_image.py", body)
 
     def test_the_strict_mode_variable_is_the_one_the_check_reads(self) -> None:
         self.assertIn("(`REQUIRE_MATCH`)", doc_text())
@@ -211,7 +224,7 @@ class RedBuildTableTests(unittest.TestCase):
 
     def test_pull_request_validation_stops_before_any_push_or_signing(self) -> None:
         text = workflow("build-pr.yml")
-        self.assertNotIn("sign-image", text)
+        self.assertNotIn("sign_image.py", text)
         self.assertNotIn("promote-stable", text)
         self.assertNotRegex(text, r"(?m)^\s+packages: write")
 

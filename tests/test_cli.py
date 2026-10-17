@@ -27,7 +27,6 @@ class CliTests(unittest.TestCase):
             "prepare-validation-build",
             "pin-akmods-cache",
             "promote-stable",
-            "sign-image",
             "akmods-clone-pinned",
             "akmods-configure-zfs-target",
             "akmods-build-and-publish",

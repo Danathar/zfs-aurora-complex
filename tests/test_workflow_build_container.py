@@ -161,8 +161,170 @@ class PackageWriteRefTests(unittest.TestCase):
                         or any(need in guarded for need in self._needs(job)),
                         f"{path.name}:{name} holds packages: write but nothing binds it to main",
                     )
-        # build.yml has the four package-write jobs; no other workflow has one.
-        self.assertEqual(checked, 4, "the scan found a different number of package-write jobs")
+        # build.yml has the five package-write jobs; no other workflow has one.
+        self.assertEqual(checked, 5, "the scan found a different number of package-write jobs")
+
+
+class SigningIsolationTests(unittest.TestCase):
+    """
+    Only code-owned code runs where the signing key is (#177, option B).
+
+    The key reaches a job only through the `production-signing` environment. In such
+    a job the only local action allowed is the code-owned install-signing-tools, and
+    the only Python allowed is `python3 -I ci_tools/sign_image.py`, which imports
+    nothing outside the standard library (tests/test_sign_image.py). `python3 -m
+    ci_tools.cli` would load every module the CLI imports into the key's process,
+    and any other local action is code the owner does not have to approve.
+    """
+
+    SIGNING_JOBS = frozenset({"sign-akmods-cache", "sign-candidate-image"})
+    ALLOWED_LOCAL_ACTION = "./.github/actions/install-signing-tools"
+
+    def setUp(self) -> None:
+        self.jobs = PackageWriteRefTests._jobs((WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8"))
+
+    def test_exactly_the_two_signing_jobs_use_the_environment(self) -> None:
+        declared = {
+            name
+            for name, job in self.jobs.items()
+            if re.search(r"^    environment:[ \t]*production-signing[ \t]*$", job, re.MULTILINE)
+        }
+        self.assertEqual(declared, self.SIGNING_JOBS)
+
+    def test_signing_jobs_run_no_other_local_action(self) -> None:
+        for name in self.SIGNING_JOBS:
+            local = set(re.findall(r"uses:[ \t]*(\./\S+)", self.jobs[name]))
+            with self.subTest(job=name):
+                self.assertEqual(local, {self.ALLOWED_LOCAL_ACTION})
+
+    def test_signing_jobs_run_python_only_as_the_isolated_signer(self) -> None:
+        for name in self.SIGNING_JOBS:
+            python_lines = [
+                line.strip() for line in self.jobs[name].splitlines() if re.search(r"\bpython", line)
+            ]
+            with self.subTest(job=name):
+                self.assertTrue(python_lines, "the signing job no longer calls the signer")
+                for line in python_lines:
+                    self.assertTrue(
+                        line.endswith("python3 -I ci_tools/sign_image.py"),
+                        f"{name} runs Python other than the isolated signer: {line}",
+                    )
+
+    def test_the_key_is_referenced_only_in_the_signing_jobs(self) -> None:
+        for path in sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")]):
+            text = path.read_text(encoding="utf-8")
+            if "\njobs:\n" not in text:
+                continue
+            for name, job in PackageWriteRefTests._jobs(text).items():
+                if path.name == "build.yml" and name in self.SIGNING_JOBS:
+                    continue
+                with self.subTest(workflow=path.name, job=name):
+                    self.assertNotIn("SIGNING_SECRET", job)
+
+    def test_the_allowed_local_action_calls_no_repository_code(self) -> None:
+        action = (REPO_ROOT / ".github" / "actions" / "install-signing-tools" / "action.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("uses: ./", action)
+        self.assertNotIn("python", action)
+
+
+class SigningTargetTests(unittest.TestCase):
+    """
+    The signing jobs decide where to sign and which tag to move from code-owned inputs.
+
+    build-zfs-akmods and build-candidate-image run code nobody has to approve. If the
+    signing jobs took a repository or a tag from their outputs, a forged output could
+    sign another package or point `latest` at an image with `promote_to_stable=false`.
+    These run the steps' own shell, from the repository root, with forged inputs.
+    """
+
+    SHA = "0123456789abcdef0123456789abcdef01234567"
+
+    @staticmethod
+    def _step_script(name: str) -> str:
+        text = (WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
+        step = text.split(f"name: {name}\n", 1)[1]
+        body = step.split("        run: |\n", 1)[1]
+        lines = []
+        for line in body.splitlines():
+            if line and not line.startswith("          "):
+                break
+            lines.append(line)
+        return textwrap.dedent("\n".join(lines))
+
+    def _run(self, name: str, env: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], Path]:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        temp = Path(holder.name)
+        bindir = temp / "bin"
+        bindir.mkdir()
+        python_stub = bindir / "python3"
+        python_stub.write_text('#!/bin/bash\nprintf "%s" "${IMAGE_REPO}" > "${STUB_SEEN}"\n', encoding="utf-8")
+        python_stub.chmod(0o755)
+        output = temp / "github_output"
+        full_env = {
+            "PATH": f"{bindir}:/usr/bin:/bin",
+            "GITHUB_REPOSITORY_OWNER": "Danathar",
+            "GITHUB_SHA": self.SHA,
+            "GITHUB_RUN_ID": "42",
+            "GITHUB_OUTPUT": str(output),
+            "STUB_SEEN": str(temp / "seen"),
+            **env,
+        }
+        result = subprocess.run(
+            ["bash", "-c", self._step_script(name)],
+            cwd=REPO_ROOT,
+            env=full_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result, temp
+
+    def test_the_candidate_target_comes_from_owned_inputs(self) -> None:
+        from ci_tools.tagging_context import build_candidate_tag
+
+        expected_tag = build_candidate_tag(github_sha=self.SHA, fedora_version="44")
+        result, temp = self._run(
+            "Work out what to sign", {"FEDORA_VERSION": "44", "REPORTED_CANDIDATE_TAG": expected_tag}
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (temp / "github_output").read_text(encoding="utf-8").splitlines(),
+            [
+                "image_repo=ghcr.io/danathar/zfs-aurora-complex",
+                f"candidate_tag={expected_tag}",
+                f"transient_tag={expected_tag}-unsigned-42",
+            ],
+        )
+
+    def test_a_forged_candidate_tag_or_fedora_version_is_refused(self) -> None:
+        good_tag = f"candidate-{self.SHA[:7]}-44"
+        for fedora, reported in (("44", "latest"), ("44", "stable-1-abc"), ("44;latest", good_tag), ("", good_tag)):
+            with self.subTest(fedora=fedora, reported=reported):
+                result, temp = self._run(
+                    "Work out what to sign", {"FEDORA_VERSION": fedora, "REPORTED_CANDIDATE_TAG": reported}
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("Refusing to sign", result.stderr)
+                self.assertFalse((temp / "github_output").exists())
+
+    def test_the_akmods_repository_comes_from_defaults_not_the_build_job(self) -> None:
+        signed = {"IMAGE_DIGEST": "sha256:" + "0" * 64, "COSIGN_PRIVATE_KEY": "k"}
+        result, temp = self._run(
+            "Sign shared akmods cache image",
+            {"AKMODS_IMAGE": "ghcr.io/danathar/zfs-aurora-complex-akmods:main-44", **signed},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((temp / "seen").read_text(encoding="utf-8"), "ghcr.io/danathar/zfs-aurora-complex-akmods")
+
+        for forged in ("ghcr.io/danathar/zfs-aurora-complex:main-44", "ghcr.io/someone/zfs-aurora-complex-akmods:main-44"):
+            with self.subTest(forged=forged):
+                result, temp = self._run("Sign shared akmods cache image", {"AKMODS_IMAGE": forged, **signed})
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("Refusing to sign", result.stderr)
+                self.assertFalse((temp / "seen").exists(), "the signer ran on a forged repository")
 
 
 class ProductionSigningTests(unittest.TestCase):
@@ -171,8 +333,8 @@ class ProductionSigningTests(unittest.TestCase):
 
     The production signing key is scoped to a main-only environment. Everything
     here pins the consequences: the signing jobs declare that environment, the
-    publish action refuses to push without a key, and the shared akmods cache
-    cannot be rebuilt by a caller that denies it.
+    publish action only pushes, and the shared akmods cache cannot be rebuilt by
+    a caller that denies it.
     """
 
     def test_main_signing_jobs_declare_the_environment(self) -> None:
@@ -180,8 +342,8 @@ class ProductionSigningTests(unittest.TestCase):
         # own; the jobs must declare it. (This exact settings-only mistake was
         # caught in review of the runtime-validation proposal.)
         text = (WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
-        for job in ("build-candidate-image:", "sign-akmods-cache:"):
-            block = text.split(job, 1)[1]
+        for job in ("sign-candidate-image:", "sign-akmods-cache:"):
+            block = text.split(f"\n  {job}\n", 1)[1]
             block = re.split(r"\n  [a-z][a-z0-9-]*:\n", block)[0]
             self.assertIn(
                 "environment: production-signing",
@@ -191,15 +353,14 @@ class ProductionSigningTests(unittest.TestCase):
                 "repository-level copy is removed, or signing silently breaks.",
             )
 
-    def test_publish_action_fails_closed_without_a_key(self) -> None:
+    def test_publish_action_holds_no_key(self) -> None:
+        # The action that runs in the unsigned build job must not accept a key at
+        # all; signing happens only in the isolated signing job.
         action = (
             REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn(
-            "if: inputs.cosign_private_key == ''",
-            action,
-            "publish-native-image must refuse to push when there is no signing key.",
-        )
+        self.assertNotIn("cosign_private_key", action)
+        self.assertNotIn("sign_image", action)
 
     def test_publish_action_pushes_without_the_token_in_argv(self) -> None:
         # Gotcha 6 in docs/signing-and-bootc.md: `/proc/<pid>/cmdline` is mode
@@ -211,7 +372,7 @@ class ProductionSigningTests(unittest.TestCase):
         action = (
             REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
         ).read_text(encoding="utf-8")
-        step = action.split("- name: Push transient tag with podman", 1)[1]
+        step = action.split("name: Push transient tag with podman", 1)[1]
         body = step.split("      run: |\n", 1)[1].split("\n\n", 1)[0]
         script = textwrap.dedent(body)
         token = "ghs_not-a-real-token"
@@ -231,6 +392,9 @@ class ProductionSigningTests(unittest.TestCase):
                 '    stat -c "%a" "${arg}" > "${STUB_SEEN}.mode"\n'
                 '    cat "${arg}" > "${STUB_SEEN}.auth"\n'
                 "  fi\n"
+                '  if [ "${prev}" = "--digestfile" ]; then\n'
+                '    printf "sha256:%064d" 0 > "${arg}"\n'
+                "  fi\n"
                 "  prev=${arg}\n"
                 "done\n",
                 encoding="utf-8",
@@ -246,6 +410,7 @@ class ProductionSigningTests(unittest.TestCase):
                 "TRANSIENT_IMAGE_TAG": "latest-unsigned-1",
                 "REGISTRY_USER": "actor",
                 "REGISTRY_PASSWORD": token,
+                "GITHUB_OUTPUT": str(root / "github_output"),
             }
             completed = subprocess.run(
                 ["bash", "-c", script],
@@ -269,6 +434,11 @@ class ProductionSigningTests(unittest.TestCase):
             # The temporary directory holding the credential is gone afterwards.
             self.assertEqual([path for path in root.iterdir() if path.name.startswith("tmp")], [])
             self.assertNotIn(token, completed.stdout + completed.stderr)
+            # The digest podman reported is what the signing job will sign.
+            self.assertEqual(
+                (root / "github_output").read_text(encoding="utf-8").splitlines(),
+                ["transient_tag=latest-unsigned-1", "digest=sha256:" + "0" * 64],
+            )
 
     def test_prepare_action_supports_denying_cache_rebuild(self) -> None:
         action = (

@@ -223,8 +223,8 @@ Only `main` runs may rebuild and republish this cache: the akmods job in
 nothing. The signing key lives in a `main`-restricted environment other refs
 cannot reach. When a `main` run does rebuild,
 a dedicated `sign-akmods-cache` job (in `build.yml`, running in the
-`production-signing` environment) signs the freshly published digest, reusing
-`ci_tools/sign_image.py` unchanged.
+`production-signing` environment) signs the freshly published digest by running
+`ci_tools/sign_image.py` under `python3 -I`.
 That digest is pinned only if it is the image this run built:
 `akmods-build-and-publish` records the local image ID (the sha256 of the image
 config) between `just build` and `just push`, and `pin-akmods-cache` refuses to
@@ -401,9 +401,10 @@ signed:
    pointed at `/mnt` -- so neither disk ever has to hold two unpacked copies of
    the image at once -- and finally re-tags the rechunked result back onto the
    same local tag `publish-native-image` expects.
-3. `publish-native-image`'s promote step copies the signed digest to the
-   requested tag with `skopeo copy --preserve-digests`, so that copy cannot
-   silently re-encode the manifest and drop Chunkah's layer annotations.
+3. The `sign-candidate-image` job's "Point the candidate tag at the signed
+   digest" step copies the signed digest to the requested tag with
+   `skopeo copy --preserve-digests`, so that copy cannot silently re-encode the
+   manifest and drop Chunkah's layer annotations.
    `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
    `--preserve-digests` for the same reason.
 
@@ -499,14 +500,23 @@ What was intentionally given up:
 
 ### 5. Promotion And Signing
 
-Publication signs the candidate digest before any user-facing tag is moved.
+Publication signs the candidate digest before any user-facing tag is moved, and
+the job that builds and pushes holds no signing key (issue #177).
 
-The publish action:
+`build-candidate-image` (no `production-signing` environment, no key):
 
-1. pushes a transient `*-unsigned-<run_id>` tag
-2. resolves that transient tag to a digest
-3. signs and verifies that digest
-4. copies the signed digest to the requested candidate tag
+1. pushes a transient `*-unsigned-<run_id>` tag with the `publish-native-image`
+   action and outputs the pushed digest
+
+`sign-candidate-image` (`production-signing` environment, needs the above):
+
+1. confirms the transient tag in the registry resolves to the pushed digest
+2. signs and verifies that digest with `python3 -I ci_tools/sign_image.py`
+3. only then copies the signed digest to the requested candidate tag
+
+Only code-owned code runs in a job that holds the key: `build.yml` itself,
+pinned third-party actions, the code-owned `install-signing-tools` action, and
+`ci_tools/sign_image.py` run under `python3 -I` (standard library only).
 
 Promotion is a separate job.
 
@@ -517,8 +527,8 @@ It:
 3. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
 4. copies that digest to `latest`
 
-Step 2 is deliberately redundant with the signing that already happened during
-candidate publication. Promotion runs as a separate job on a fresh runner, and
+Step 2 is deliberately redundant with the signing that already happened in
+`sign-candidate-image`. Promotion runs as a separate job on a fresh runner, and
 it is the step that actually points `latest` at a digest, so it verifies
 locally rather than inferring from an earlier job that the digest it is about
 to promote is signed. It verifies with the same committed public key that is

@@ -33,8 +33,20 @@ developer — it produces an artifact a machine pulls and boots.
 
 **Never read a private key into a transcript.** `COSIGN_PRIVATE_KEY` comes from
 the `SIGNING_SECRET` secret of the `production-signing` environment and exists
-only in the signing steps of `build.yml`. An agent has no reason to read, print,
-copy, or check the format of that key.
+only in the signing steps of the two jobs that declare that environment,
+`sign-candidate-image` and `sign-akmods-cache` in `build.yml`. An agent has no
+reason to read, print, copy, or check the format of that key.
+
+Only code-owned code runs in a job that holds the key: `build.yml` itself,
+pinned third-party actions, the code-owned `install-signing-tools` action, and
+`ci_tools/sign_image.py` run under `python3 -I` (standard library only).
+Building and pushing the image happens in `build-candidate-image`, which holds
+no key; the candidate tag moves to a digest only after that digest is signed
+and verified (issue #177). The signing jobs work out which repository to sign
+in and which tag to move from code-owned inputs (`ci/defaults.json`, the
+repository owner, the commit and the run). From the build jobs they take only
+the digest and the Fedora version, and they check both, so a forged output
+cannot sign another package or move `latest`.
 
 To confirm a private key matches the committed public half, derive the public
 half rather than reading the private one:
@@ -63,7 +75,7 @@ update.
 
 | Secret | Used by | If it leaks |
 | --- | --- | --- |
-| `SIGNING_SECRET` | the signing steps in `build.yml`, via `publish-native-image` | Anyone can sign an image that verifies against the committed `cosign.pub`, and machines are configured to trust exactly that. **Highest severity in the repository.** |
+| `SIGNING_SECRET` | the signing steps of `sign-candidate-image` and `sign-akmods-cache` in `build.yml`, run through `ci_tools/sign_image.py` | Anyone can sign an image that verifies against the committed `cosign.pub`, and machines are configured to trust exactly that. **Highest severity in the repository.** |
 | `GITHUB_TOKEN` | every workflow, scoped per job | Short-lived and bounded by that job's `permissions:` block. It is also what pushes to GHCR, not a stored credential. |
 
 No workflow here holds a model API key; nothing else in CI is secret.
