@@ -127,8 +127,8 @@ Before pushing the fork:
 3. with the zfs target configured (as this repo does), `akmods_name` resolves to
    the cache repo name, not `null`
 4. `bash -n build_files/zfs/build-kmod-zfs.sh` passes
-5. after pushing, run this repo's `build-branch` workflow (or a manual `build.yml`
-   with `rebuild_akmods=true`) so a real akmods build validates the synced fork
+5. after pushing, run a manual `build.yml` on `main`
+   with `rebuild_akmods=true` and `promote_to_stable=false` so a real akmods build validates the synced fork
    before `main` floats onto it
 
 ## What Usually Forces A Temporary Pin

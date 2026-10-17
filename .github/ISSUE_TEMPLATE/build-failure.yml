@@ -25,7 +25,6 @@ body:
       options:
         - build.yml
         - build-pr.yml
-        - build-branch.yml
         - akmods-failure-triage.yml
         - test.yml
         - Something else

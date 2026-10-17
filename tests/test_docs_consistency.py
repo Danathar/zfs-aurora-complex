@@ -143,7 +143,7 @@ class WorkflowCoverageTests(unittest.TestCase):
 
     def test_quality_page_covers_every_workflow_that_can_fail_a_change(self) -> None:
         quality = (REPO_ROOT / "docs" / "quality.md").read_text(encoding="utf-8")
-        for workflow in ("build.yml", "build-pr.yml", "build-branch.yml", "test.yml"):
+        for workflow in ("build.yml", "build-pr.yml", "test.yml"):
             with self.subTest(workflow=workflow):
                 self.assertIn(workflow, quality)
 

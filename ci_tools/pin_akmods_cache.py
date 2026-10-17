@@ -79,7 +79,7 @@ def pin_akmods_cache_image(image_tag: str, built_image_id: str) -> tuple[str, st
 
     Returns `(pinned_ref, digest)`. The bare digest is returned alongside the
     full ref because the signing job needs to sign this exact digest rather
-    than re-resolve the tag, which a concurrent branch run can move.
+    than re-resolve the tag, which another run can move.
 
     The tag is read after this run pushed it, so on its own it says only what
     the tag points at now. The digest is pinned only when its amd64 config is

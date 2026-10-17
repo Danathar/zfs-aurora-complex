@@ -118,9 +118,8 @@ restricted to the `main` branch. The publish action refuses to push an image
 when that secret is missing.
 
 Store it as an *environment* secret, not a repository secret. A repository
-secret is readable by every workflow run in the repo, including
-`build-branch.yml` runs triggered by pushing any branch -- so a leaked
-write-scoped token could sign images with it. GitHub grants environment
+secret is readable by every workflow run in the repo, on any ref -- so a
+leaked write-scoped token could sign images with it. GitHub grants environment
 secrets based on the ref a job actually runs against, which a branch push
 cannot forge.
 
@@ -140,9 +139,9 @@ git push
 ```
 
 Only `main` jobs that declare `environment: production-signing` can read it
-(`build-candidate-image` and `sign-akmods-cache` in `build.yml`). Branch runs
-deliberately cannot sign at all; they publish unsigned `br-*` test images
-instead, and cannot rebuild the shared akmods cache.
+(`build-candidate-image` and `sign-akmods-cache` in `build.yml`). A branch
+push publishes nothing, and the akmods job in `build.yml` runs only on `main`,
+so a branch cannot rebuild the shared akmods cache.
 
 Never commit `cosign.key`. Keep the original file somewhere safe: GitHub
 secrets cannot be read back, so it is the only way to re-add or migrate the
@@ -177,20 +176,14 @@ Operator rule:
 
 Everything lives in two GitHub Container Registry (GHCR) repositories: the OS
 image (`ghcr.io/danathar/zfs-aurora-complex`, with `latest`, `candidate-*`,
-`stable-*` audit, and `br-*` branch tags) and the shared akmods cache image
+`stable-*` audit tags) and the shared akmods cache image
 (`ghcr.io/danathar/zfs-aurora-complex-akmods`). There is no separate
 candidate repository, branch-scoped akmods alias repo, or stable-vs-candidate
 repair script to keep in sync. The akmods cache is signed the same way the OS
 image is, and a cache that fails signature verification is treated as a
 rebuild, not reused.
 
-One deliberate exception to "everything is signed": `br-*` branch tags are
-**unsigned test images**. Branch refs cannot reach the signing key (it is
-scoped to a `main`-only environment), so human-authored branches publish via an
-explicit unsigned opt-in instead. Machines enforcing this repository's
-signature policy refuse those tags; they are only usable on fresh, throwaway
-test VMs and must never be a durable install -- see
-["Testing an unsigned branch image"](./install-and-verify.md) for the rules.
+No branch push publishes anything.
 For the full tag list and how transient `*-unsigned-<run_id>` tags fit into
 publishing, see ["Outputs"](./architecture-overview.md#outputs) in the
 architecture overview.

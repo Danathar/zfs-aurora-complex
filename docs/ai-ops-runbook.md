@@ -95,20 +95,6 @@ Every file in `.github/workflows/` has an entry here.
 - **Detail:** [`quality.md`](./quality.md), "Reading a red build". It does not run
   for a change that touches only Markdown or `docs/**`.
 
-### `build-branch.yml` — "Build Branch Image"
-
-- **Means:** a branch other than `main` failed to build. Jobs: "Compute Branch
-  Tag", "Build Or Reuse Shared ZFS Akmods Cache" and "Build Branch Image". A
-  human's push publishes an **unsigned** `br-*` test image. A bot's push validates
-  locally and publishes nothing. A branch run never signs and never rebuilds the
-  shared akmods cache.
-- **First:** find the failing step. A registry or CDN error in a pull or push step
-  is usually a third-party outage, not this repository
-  ([`quality.md`](./quality.md), "Reading a red build").
-- **Detail:** the unsigned `br-*` tags are deliberate
-  ([`install-and-verify.md`](./install-and-verify.md)). No workflow here prunes old
-  tags, so they stay until the maintainer removes them.
-
 ### `test.yml` — "Run Python Tests"
 
 - **Means:** lint, the unit suite or a per-module coverage floor failed. The

@@ -23,49 +23,25 @@ inputs:
     required: true
   cosign_private_key:
     description: >-
-      Private signing key used to sign the pushed image digest. Optional only
-      because the branch workflow legitimately omits it (see allow_unsigned);
-      every production caller must pass it, and omitting it without
-      allow_unsigned fails the publication. GitHub does not actually enforce
-      `required:` on action inputs -- an omitted input silently becomes an
-      empty string -- so the guard step below, not this field, is what protects
-      the production path.
-    required: false
-    default: ""
-  allow_unsigned:
-    description: >-
-      Explicit opt-in to publish without a signature when no signing key is
-      available. Only the branch workflow passes this, for throwaway `br-*`
-      test images: the production signing key is scoped to an environment that
-      branch refs cannot reach, and unsigned branch images are usable only on
-      fresh, never-enforced test VMs -- any machine enforcing this repo's
-      signature policy refuses to pull them. Production paths must never set
-      this; a workflow test asserts build.yml does not.
-    required: false
-    default: "false"
+      Private signing key used to sign the pushed image digest. GitHub does not
+      actually enforce `required:` on action inputs -- an omitted input silently
+      becomes an empty string -- so the guard step below, not this field, is
+      what protects the production path.
+    required: true
 
 runs:
   # This action owns the publication sequence: authenticate, push a transient
   # tag, sign its digest, then promote that same digest to the requested tag.
-  # That keeps user-facing tags from pointing at unsigned content -- with one
-  # explicit exception: `allow_unsigned` (branch test images only, see the
-  # input description). When that exception is active and no key is present,
-  # the signing step is skipped and the tag is promoted unsigned.
+  # That keeps user-facing tags from pointing at unsigned content.
   using: composite
   steps:
-    # Fail-closed default: no key and no explicit opt-in means no push at all.
+    # Fail closed: no key means no push at all.
     - name: Require signing key before publication
-      if: inputs.cosign_private_key == '' && inputs.allow_unsigned != 'true'
+      if: inputs.cosign_private_key == ''
       shell: bash
       run: |
-        echo "SIGNING_SECRET is not available and allow_unsigned is not set. Refusing to publish an unsigned image." >&2
+        echo "SIGNING_SECRET is not available. Refusing to publish an unsigned image." >&2
         exit 1
-
-    - name: Warn that this publication is unsigned
-      if: inputs.cosign_private_key == '' && inputs.allow_unsigned == 'true'
-      shell: bash
-      run: |
-        echo "::warning::Publishing WITHOUT a cosign signature (allow_unsigned=true, no key available). This image is a throwaway test artifact: machines enforcing this repository's signature policy will refuse to pull it, and it must never be promoted or switched to durably."
 
     # The `podman push` below authenticates from its own per-command auth file,
     # but the later `skopeo copy`/`skopeo inspect` calls in this file do not pass
@@ -149,11 +125,7 @@ runs:
     # `latest` can move later, but a digest names one exact image forever.
     # Signing relies on the registry login performed above, not on separate
     # credentials passed into sign-image.
-    # Skipped only in the explicit unsigned-branch case. When a key IS present
-    # the image is signed even if allow_unsigned was passed, so the opt-in can
-    # never downgrade a run that is able to sign.
     - name: Sign transient image digest
-      if: inputs.cosign_private_key != ''
       shell: bash
       env:
         IMAGE_ORG: ${{ inputs.image_org }}

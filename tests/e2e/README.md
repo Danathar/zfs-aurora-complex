@@ -30,8 +30,7 @@ on exit status and stderr rather than on a raised exception.
 **Anything needing a network, a registry, `cosign`, `podman`, or `git`.** The
 suite has to stay runnable with nothing installed, so the only commands ever
 dispatched here are the ones whose work is env-in, file-out:
-`export-repo-defaults`, `compute-candidate-tag`, `compute-branch-metadata`,
-`compose-branch-image-tag`, `export-registry-context`, and
+`export-repo-defaults`, `compute-candidate-tag`, `export-registry-context`, and
 `write-build-inputs-manifest`.
 
 That constraint is stricter than it looks, and the command-wiring test is where

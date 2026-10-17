@@ -89,7 +89,11 @@ jobs:
   build-zfs-akmods:
     name: Build Shared ZFS Akmods Cache
     needs: preflight
-    if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
+    # Only `main` runs this job: it is privileged and holds a package-write
+    # token, so a dispatch on another ref would run that ref's code here and
+    # could republish the shared akmods cache. Every later job needs this one,
+    # so on another ref the whole build is skipped.
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true')
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     outputs:
@@ -239,7 +243,7 @@ jobs:
         if: needs.build-zfs-akmods.outputs.akmods_image_digest == ''
         shell: bash
         run: |
-          echo "This run rebuilt the shared akmods cache but produced no pinned digest. Refusing to sign by re-resolving the shared tag, which a concurrent branch rebuild could have moved." >&2
+          echo "This run rebuilt the shared akmods cache but produced no pinned digest. Refusing to sign by re-resolving the shared tag, which another run could have moved." >&2
           exit 1
 
       # Signs the exact digest the previous job pinned, not the shared tag.
@@ -249,8 +253,8 @@ jobs:
       # should be able to prove it was produced by this repo's own pipeline,
       # not just that a filename happens to match.
       #
-      # IMAGE_DIGEST matters here. `build-branch.yml` rebuilds and republishes
-      # this same shared `main-<fedora>` tag, so a concurrent branch run can
+      # IMAGE_DIGEST matters here. Any run holding a registry write token can
+      # republish this same shared `main-<fedora>` tag, so a concurrent run can
       # move it between the moment build-zfs-akmods pinned a digest and the
       # moment this job runs. Re-resolving the tag would then sign the other
       # run's image and leave the digest this run's candidate image was

@@ -299,44 +299,26 @@ class StandingConstraints(unittest.TestCase):
         check = re.search(r"a green `([^`]+)`\s+check", claim).group(1)
         self.assertIn(check, self.jobs, f"no workflow defines a job named {check!r}")
 
-    def test_the_slow_builds_bullet_names_the_right_trigger_for_each_job(self):
-        """"Pushing a branch triggers ...; opening the pull request triggers ...".
+    def test_the_slow_builds_bullet_names_a_job_the_pull_request_triggers(self):
+        """"Opening the pull request triggers ...".
 
-        This is the bullet that was wrong. It attributed all three jobs to the pull request,
-        and two of them are in build-branch.yml, which has no `pull_request` trigger -- so a
-        session was told to wait for checks that a pull request does not produce. Each half of
-        the sentence is now checked against the `on:` block of the workflow that defines the
-        jobs it lists.
+        The bullet once attributed jobs to the wrong event, so a session was told to wait for
+        checks that a pull request does not produce. The jobs it lists are checked against the
+        `on:` block of the workflow that defines them.
         """
         claim = bullet(self.text, "Image builds are slow.")
-        attributions = {
-            "push": re.search(r"Pushing a branch triggers ([^;.]+)", claim),
-            "pull_request": re.search(r"opening the pull request triggers ([^;.]+)", claim),
-        }
-        for event, match in attributions.items():
-            self.assertIsNotNone(match, f"the bullet no longer attributes any job to {event}")
-            named = BACKTICKED_RE.findall(match.group(1))
-            self.assertTrue(named, f"the {event} half of the bullet names no job")
-            for job in named:
-                self.assertIn(job, self.jobs, f"no workflow defines a job named {job!r}")
-                on = triggers(self.jobs[job])
-                self.assertIn(
-                    event,
-                    on,
-                    f"{job!r} lives in {self.jobs[job].name}, which does not trigger on {event}",
-                )
-
-    def test_a_bot_branch_is_built_but_not_pushed_as_the_bullet_says(self):
-        """"`build-branch.yml` skips its push step when the actor is a bot account".
-
-        The push step and the explanatory step are both gated on `actor_is_bot`, in opposite
-        directions. If either gate went, the bullet would describe a pipeline that is gone.
-        """
-        claim = bullet(self.text, "A bot-authored branch")
-        workflow_name = WORKFLOW_REF_RE.search(claim).group(1)
-        text = (WORKFLOW_DIR / workflow_name).read_text(encoding="utf-8")
-        self.assertIn("steps.registry.outputs.actor_is_bot != 'true'", text)
-        self.assertIn("steps.registry.outputs.actor_is_bot == 'true'", text)
+        match = re.search(r"[Oo]pening the pull request triggers ([^;.]+)", claim)
+        self.assertIsNotNone(match, "the bullet no longer attributes any job to pull_request")
+        named = BACKTICKED_RE.findall(match.group(1))
+        self.assertTrue(named, "the pull_request half of the bullet names no job")
+        for job in named:
+            self.assertIn(job, self.jobs, f"no workflow defines a job named {job!r}")
+            on = triggers(self.jobs[job])
+            self.assertIn(
+                "pull_request",
+                on,
+                f"{job!r} lives in {self.jobs[job].name}, which does not trigger on pull_request",
+            )
 
 
 class RoutingDestinations(unittest.TestCase):

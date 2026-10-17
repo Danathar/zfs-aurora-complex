@@ -55,13 +55,10 @@ branch, what is done, what is not, and what you were about to check.
 - **`main` only changes through a pull request.** A ruleset refuses direct and
   force pushes, and a pull request cannot merge until a green `Python Unit Tests`
   check reports. See [`docs/branch-protection.md`](../docs/branch-protection.md).
-- **Image builds are slow.** Pushing a branch triggers `Compute Branch Tag`,
-  `Build Or Reuse Shared ZFS Akmods Cache` and `Build Branch Image`; opening the
-  pull request triggers `Build PR Image (No Push)`. They take tens of minutes,
-  so do not read a pending image build as a hang.
-- **A bot-authored branch is built but not pushed.** `build-branch.yml` skips
-  its push step when the actor is a bot account, so a Renovate branch validates
-  the image locally and publishes no `br-*` tag. Branch images are unsigned
-  test images and are never what `bootc upgrade` pulls.
+- **Image builds are slow.** Opening the pull request triggers
+  `Build PR Image (No Push)`. It takes tens of minutes, so do not read a pending
+  image build as a hang.
+- **A branch push publishes nothing.** Only the pull request build runs for a
+  branch, and it publishes and signs nothing.
 - **`unexpected EOF` during a blob copy is a registry or CDN failure**, common
   enough here to rule out first, and never a reason to change code.

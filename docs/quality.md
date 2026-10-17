@@ -212,7 +212,6 @@ only one of them can publish anything signed:
 | --- | --- | --- |
 | `build.yml` | push to `main`, and 06:00 UTC daily | The production path: **the only one that can have moved `:latest`.** Usually nothing was published, but not always: see the warning above. |
 | `build-pr.yml` | every pull request that changes something other than Markdown or `docs/**` | Validation only. Its header says it intentionally stops before any push or signing step, so nothing was published either way. |
-| `build-branch.yml` | push to any branch except `main` | A branch test image. It never signs: branch runs publish *unsigned* `br-*` tags and cannot rebuild the shared akmods cache. Never promoted. |
 | `test.yml` | every pull request and push to `main` | Lint, unit suite, coverage floors. A red run on a pull request stops it merging. |
 
 **Then check that it actually failed.** `gh run list --workflow build.yml --limit

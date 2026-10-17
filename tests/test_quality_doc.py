@@ -199,13 +199,12 @@ class RedBuildTableTests(unittest.TestCase):
         text = section("Reading a red build").split("**Then check", 1)[0]
         return {row[0].strip("`"): flat(" ".join(row)) for row in table_rows(text)}
 
-    def test_the_table_covers_the_four_build_and_test_workflows(self) -> None:
-        self.assertEqual(sorted(self.rows()), ["build-branch.yml", "build-pr.yml", "build.yml", "test.yml"])
+    def test_the_table_covers_the_build_and_test_workflows(self) -> None:
+        self.assertEqual(sorted(self.rows()), ["build-pr.yml", "build.yml", "test.yml"])
 
     def test_each_row_trigger_matches_the_workflow(self) -> None:
         self.assertRegex(workflow("test.yml"), r"(?ms)^on:\n  pull_request:\n  push:\n    branches:\n      - main")
         self.assertRegex(workflow("build-pr.yml"), r"(?m)^  pull_request:")
-        self.assertRegex(workflow("build-branch.yml"), r"(?ms)  push:\n    branches-ignore:\n      - main")
         build_on = workflow("build.yml").split("jobs:", 1)[0]
         self.assertIn("schedule:", build_on)
         self.assertRegex(build_on, r"(?ms)  push:\n    branches:\n      - main")
@@ -215,12 +214,6 @@ class RedBuildTableTests(unittest.TestCase):
         self.assertNotIn("sign-image", text)
         self.assertNotIn("promote-stable", text)
         self.assertNotRegex(text, r"(?m)^\s+packages: write")
-
-    def test_branch_runs_never_sign(self) -> None:
-        text = workflow("build-branch.yml")
-        self.assertNotIn("sign-image", text)
-        self.assertNotIn("promote-stable", text)
-        self.assertIn("br-", text)
 
     def test_the_akmods_step_the_page_names_is_the_one_whose_last_line_misleads(self) -> None:
         self.assertIn("RUN --mount=type=cache,dst=/var/cache/dnf", doc_text())

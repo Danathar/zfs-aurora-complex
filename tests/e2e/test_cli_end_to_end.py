@@ -236,44 +236,6 @@ class TaggingEndToEndTests(unittest.TestCase):
                 "candidate-deadbee-44",
             )
 
-    def test_branch_metadata_sanitizes_a_ref_name_that_is_not_registry_safe(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_path = Path(temp_dir) / "github-output"
-            result = _run_cli(
-                "compute-branch-metadata",
-                env={
-                    "GITHUB_OUTPUT": str(output_path),
-                    "GITHUB_REF_NAME": "Feature/Fix ZFS_2.4!",
-                },
-            )
-
-            self.assertEqual(result.returncode, 0, result.stderr)
-            branch_tag = _parse_github_file(output_path)["branch_tag"]
-            self.assertEqual(branch_tag, "br-feature-fix-zfs_2.4")
-            # The value is about to become part of an image tag, so assert the
-            # property that matters rather than only the string.
-            self.assertRegex(branch_tag, r"^[a-z0-9._-]+$")
-
-    def test_branch_image_tag_is_composed_from_the_prefix_a_prior_job_exported(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_path = Path(temp_dir) / "github-output"
-            result = _run_cli(
-                "compose-branch-image-tag",
-                env={
-                    "GITHUB_OUTPUT": str(output_path),
-                    # build-branch.yml passes needs.prepare-branch-metadata's
-                    # branch_tag output here, so this is that value's shape.
-                    "BRANCH_TAG_PREFIX": "br-feature-fix-zfs_2.4",
-                    "FEDORA_VERSION": "44",
-                },
-            )
-
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(
-                _parse_github_file(output_path)["branch_image_tag"],
-                "br-feature-fix-zfs_2.4-44",
-            )
-
     def test_registry_context_is_written_to_both_output_and_env(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "github-output"
@@ -284,14 +246,12 @@ class TaggingEndToEndTests(unittest.TestCase):
                     "GITHUB_OUTPUT": str(output_path),
                     "GITHUB_ENV": str(env_path),
                     "GITHUB_REPOSITORY_OWNER": "Danathar",
-                    "GITHUB_ACTOR": "renovate[bot]",
                 },
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             outputs = _parse_github_file(output_path)
             self.assertEqual(outputs["image_registry"], "ghcr.io/danathar")
-            self.assertEqual(outputs["actor_is_bot"], "true")
             self.assertEqual(_parse_github_file(env_path)["IMAGE_ORG"], "danathar")
 
 

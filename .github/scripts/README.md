@@ -22,8 +22,6 @@ If a term is unfamiliar, check the shared glossary first:
 | Export normalized registry context for later workflow steps                | `export-registry-context`     | `ci_tools.tagging_context`             |
 | Export checked-in repo defaults for workflow steps                         | `export-repo-defaults`        | `ci_tools.export_repo_defaults`        |
 | Resolve pull request (PR) validation inputs and verify shared akmods cache | `prepare-validation-build`    | `ci_tools.prepare_validation_build`    |
-| Compute branch-safe image tag prefix                                       | `compute-branch-metadata`     | `ci_tools.tagging_context`             |
-| Compose final branch image tag                                             | `compose-branch-image-tag`    | `ci_tools.tagging_context`             |
 | Compute candidate image tag                                                | `compute-candidate-tag`       | `ci_tools.tagging_context`             |
 | Promote candidate digest to latest and audit tags                          | `promote-stable`              | `ci_tools.promote_stable`              |
 | Sign one published image tag by digest                                     | `sign-image`                  | `ci_tools.sign_image`                  |
@@ -58,9 +56,6 @@ failing closed until OpenZFS supports that kernel line.
 - [`build.yml`](../workflows/build.yml)
   - main candidate build, promotion, and signing
   - scheduled runs are gated on the upstream base image advancing (`check-stable-signal`); push and manual runs always build
-- [`build-branch.yml`](../workflows/build-branch.yml)
-  - branch-tagged push using shared-cache reuse or rebuild when required
-  - bot-authored runs stop after local validation and do not push/sign public branch tags
 - [`build-pr.yml`](../workflows/build-pr.yml)
   - no-push validation build
 - [`test.yml`](../workflows/test.yml)

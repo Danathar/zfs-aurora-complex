@@ -42,7 +42,6 @@ All operating-system image tags live in the same repository:
 - candidate tag: `ghcr.io/danathar/zfs-aurora-complex:candidate-<sha>-<fedora>`
 - stable tag: `ghcr.io/danathar/zfs-aurora-complex:latest`
 - stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
-- branch tag: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
 
 ### Shared Akmods Cache Repository
 
@@ -216,15 +215,13 @@ That check now does one direct inspection path:
    `cosign_verify` call)
 
 The signature check exists because this cache is a real supply-chain input,
-not just build-time infrastructure: branch workflows also hold `packages:
-write` and can rebuild and republish this same shared tag, so a matching
-filename alone does not prove who produced the content being reused. A cache
-that matches the kernel and ZFS version but fails signature verification is
-treated the same as a cache miss. Only `main` runs may rebuild and republish
-this cache: branch runs pass `allow_cache_rebuild: "false"` and fail with an
-explanation instead, because the signing key lives in a `main`-restricted
-environment they cannot reach, so anything they published would be unsigned
-and rejected by every later consumer anyway. When a `main` run does rebuild,
+not just build-time infrastructure: a matching filename alone does not prove
+who produced the content being reused. A cache that matches the kernel and ZFS
+version but fails signature verification is treated the same as a cache miss.
+Only `main` runs may rebuild and republish this cache: the akmods job in
+`build.yml` runs only on `main`, and a dispatch on any other ref builds
+nothing. The signing key lives in a `main`-restricted environment other refs
+cannot reach. When a `main` run does rebuild,
 a dedicated `sign-akmods-cache` job (in `build.yml`, running in the
 `production-signing` environment) signs the freshly published digest, reusing
 `ci_tools/sign_image.py` unchanged.
@@ -263,7 +260,7 @@ Why:
 1. a stale akmods ref can hide for a while if the workflow keeps reusing an older shared cache
 2. cloning the resolved ref is the cheapest way to prove that the configured commit SHA
    still exists in the configured fork
-3. this keeps branch, pull request, push, and schedule paths honest with each other
+3. this keeps pull request, push, and schedule paths honest with each other
 
 The akmods source commit is chosen by a cascade (see [`docs/akmods-fork-maintenance.md`](./akmods-fork-maintenance.md)):
 
@@ -561,17 +558,12 @@ model and the cosign v3 compatibility flags.
      candidate-tag generation instead of inline shell snippets
    - scheduled runs are gated on the upstream base image advancing; see "0. Scheduled-Build
      Gate" above. Push and manual runs always build
-2. `build-branch.yml`: branch-tagged push with shared-cache reuse only
-   - branch runs never rebuild the shared akmods cache and never sign anything;
-     the signing key is scoped to a `main`-only environment
-   - bot-authored branch runs build locally and intentionally skip the push
-   - human-authored branch runs push an UNSIGNED `br-*` test image (explicit
-     `allow_unsigned` opt-in in `publish-native-image`) for throwaway VMs only;
-     machines enforcing this repository's signature policy refuse those tags
-   - the final branch image tag is now composed by a small Python helper
-3. `build-pr.yml`: read-only validation inputs plus no-push build
-4. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers
-5. `akmods-failure-triage.yml`: `workflow_run` visibility workflow that opens, updates, and closes sticky akmods failure issues
+2. `build-pr.yml`: read-only validation inputs plus no-push build
+   - runs on every pull request, drafts included
+   - publishes and signs nothing
+   - no branch push publishes anything
+3. `test.yml`: Python unit tests for repository-owned CI helpers and image-build helpers
+4. `akmods-failure-triage.yml`: `workflow_run` visibility workflow that opens, updates, and closes sticky akmods failure issues
    - failed shared-akmods builds upload `akmods-failure.json` before the job exits
    - `upstream-compat` marks known ZFS/kernel compatibility failures; the build
      still fails and `latest` is not promoted
@@ -591,9 +583,9 @@ model and the cosign v3 compatibility flags.
 One unavoidable exception exists:
 
 - GitHub resolves `jobs.<job>.container.image` before any step can run
-- because of that, the akmods jobs in both `build.yml` and `build-branch.yml`
-  still carry one literal fallback build-container ref next to the checked-in
-  defaults file
-- both workflows accept a `workflow_dispatch` input to override this fallback
-  when the default image breaks
+- because of that, the akmods job in `build.yml` still carries one literal
+  build-container ref next to the checked-in defaults file; it must match
+  `DEFAULT_BUILD_CONTAINER_IMAGE` in `ci/defaults.json`
+- it has no `workflow_dispatch` override, because that job runs privileged with
+  a package-write token
 - every later step reads the checked-in defaults instead of repeating them

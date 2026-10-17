@@ -82,9 +82,7 @@ applies as-is. What each rule does:
   request gets. `test.yml` runs it on every pull request, with no path filter
   and no `if:`. `Build PR Image (No Push)` in `build-pr.yml` is not required,
   because `build-pr.yml` ignores Markdown and `docs/**`, so a docs-only pull
-  request never gets it and would wait forever. The `build-branch.yml` jobs
-  (`Compute Branch Tag`, `Build Or Reuse Shared ZFS Akmods Cache`,
-  `Build Branch Image`) run on branch pushes, not on pull requests.
+  request never gets it and would wait forever.
   `integration_id` 15368 is GitHub Actions, so a status with the same name
   posted by anything else does not count.
   `strict_required_status_checks_policy` is on, so a pull request must be up
