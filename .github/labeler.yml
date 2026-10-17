@@ -32,7 +32,12 @@
 'area/safety-critical':
   - changed-files:
       - any-glob-to-any-file:
-          - '.github/workflows/build.yml'
+          # Every workflow, not only build.yml (rule 2's first file). Once a
+          # workflow is on main, any job in it can declare the
+          # production-signing environment and get the signing key.
+          # docs/risk-tiers.md puts the whole directory in Tier 3, and
+          # .github/CODEOWNERS owns it.
+          - '.github/workflows/**'
           - '.github/actions/publish-native-image/**'
           - 'ci_tools/sign_image.py'
           - 'ci_tools/promote_stable.py'
