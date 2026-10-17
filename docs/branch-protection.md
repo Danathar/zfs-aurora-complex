@@ -49,11 +49,31 @@ applies as-is. What each rule does:
 - **No bypass actors.** A bypass for Actions or for an App hands back the direct
   push this exists to stop.
 - **`deletion` and `non_fast_forward`** stop `main` being deleted or rewritten.
-- **`pull_request` with 0 approvals.** GitHub does not let anyone approve their
-  own pull request. On a single-maintainer repository, requiring one approval
-  means nothing can ever merge, including the change that relaxes the rule.
-  What 0 still enforces is that every change arrives as a pull request and is
-  merged through one. `dismiss_stale_reviews_on_push` is on, so a review given
+- **`pull_request` with 0 approvals, and code owner review required.** GitHub
+  does not let anyone approve their own pull request. On a single-maintainer
+  repository, requiring one approval for *every* pull request means nothing can
+  ever merge, including the change that relaxes the rule. What 0 still enforces
+  is that every change arrives as a pull request and is merged through one.
+  `require_code_owner_review` is what puts the owner on the merge button where
+  it matters: [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists only the
+  Tier 3 paths ([`risk-tiers.md`](./risk-tiers.md)), so a pull request that
+  touches one of them cannot merge, by anyone or any token, until the owner
+  approves it on GitHub, and that approval is on record. Any other pull request
+  touches no listed path and merges on the required check alone. That is why
+  `CODEOWNERS` has no catch-all `*` line, and `tests/test_codeowners.py` fails
+  if one comes back.
+
+  The cost: the owner is the only code owner and cannot approve their own pull
+  request, so a pull request the owner opens that touches a Tier 3 path cannot
+  merge either. Either have an agent open it and approve that, or add a bypass
+  for the admin role in `pull_request` mode (`{"actor_id": 5, "actor_type":
+  "RepositoryRole", "bypass_mode": "pull_request"}` in `bypass_actors`). That
+  bypass lets an admin merge a pull request past *all* of its rules, the
+  required check included, so it is not in the file. Renovate's pull requests
+  that bump a pin in `build.yml` or `publish-native-image/` also wait for the
+  owner's approval.
+
+  `dismiss_stale_reviews_on_push` is on, so a review given
   before a later push does not carry over. The file also carries
   `required_reviewers: []` and `require_extra_approval_for_unattributed_changes: true`,
   both as GitHub reported them on the live ruleset, so the file and the live
@@ -67,6 +87,10 @@ applies as-is. What each rule does:
   `Build Branch Image`) run on branch pushes, not on pull requests.
   `integration_id` 15368 is GitHub Actions, so a status with the same name
   posted by anything else does not count.
+  `strict_required_status_checks_policy` is on, so a pull request must be up
+  to date with `main` before it merges: each merge leaves the other open pull
+  requests behind, and each must update from `main` and pass the check again
+  ([`multi-agent.md`](./multi-agent.md#a-pull-request-must-be-up-to-date-before-it-merges)).
 
 The check is a unit-test and lint gate. It is not a build gate: a green
 `Python Unit Tests` says the Python tools and their tests pass, not that the
@@ -122,5 +146,7 @@ ruleset in the same pull request, and `PUT` it straight after the merge.
 
 ## When there is a second reviewer
 
-Set `required_approving_review_count` to 1. Consider
+Set `required_approving_review_count` to 1, and add the second reviewer to the
+Tier 3 lines in `.github/CODEOWNERS` so the owner's own Tier 3 pull requests
+can merge without a bypass. Consider
 `require_last_push_approval`, so a push after approval needs a fresh one.

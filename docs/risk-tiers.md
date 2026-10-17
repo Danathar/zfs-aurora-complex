@@ -48,6 +48,9 @@ Labelled `area/safety-critical`.
 - `.github/rulesets/`, because the ruleset in it is what keeps `main`, and so
   the signing build, behind a pull request. Loosening it reopens the direct
   push; see [`branch-protection.md`](./branch-protection.md)
+- `.github/CODEOWNERS`, because it lists the paths in this tier and the ruleset
+  requires the code owner's approval for them. A line dropped from it takes
+  that path out from behind the owner
 - `.claude/settings.json`, `.claude/hooks/`, `.claude/commands/`,
   `tests/run_tests.py`: together these are the agent permission boundary. The
   settings file is the permission table: its deny list keeps signing, registry
@@ -73,7 +76,10 @@ those pools, which breaks the recovery path everything else assumes
 That is not a tier, it is a refusal (`AGENTS.md` section 0 rule 1).
 
 **An agent may not complete a Tier 3 change unattended.** It may propose one,
-with the analysis, on a branch.
+with the analysis, on a branch. GitHub enforces this: every path above is in
+[`.github/CODEOWNERS`](../.github/CODEOWNERS), and the ruleset requires the
+code owner's approving review before a pull request that touches one can merge
+([`branch-protection.md`](./branch-protection.md#the-ruleset)).
 
 ### Tier 2 — can break the build or a published artifact indirectly
 

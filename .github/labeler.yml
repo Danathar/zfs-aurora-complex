@@ -60,6 +60,10 @@
           # puts it in Tier 3: loosening it reopens a direct push to main, and a
           # push to main starts the build that signs and promotes.
           - '.github/rulesets/**'
+          # Who must approve a change to every path above. docs/risk-tiers.md
+          # puts it in Tier 3: the ruleset requires code-owner review, so
+          # dropping a line here takes that path out from behind the owner.
+          - '.github/CODEOWNERS'
           # The agent permission boundary. docs/risk-tiers.md puts it in Tier 3:
           # settings.json is the allow/deny table and registers the hook, the
           # hook keeps the allow-listed commands inside that table, run_tests.py

@@ -1,0 +1,39 @@
+# Code owners for the Tier 3 paths in docs/risk-tiers.md, and nothing else.
+#
+# The ruleset (.github/rulesets/main.json) sets require_code_owner_review, so a
+# pull request that touches a path listed here cannot merge, by anyone or any
+# token, until the owner approves it on GitHub. A pull request that touches none
+# of them merges on the required check alone, as before.
+#
+# That is why there is no catch-all `*` line: it would put every pull request
+# behind the owner's approval. tests/test_codeowners.py fails if one comes back,
+# or if this list and the area/safety-critical globs in .github/labeler.yml stop
+# covering the same files. docs/branch-protection.md explains the rule and what
+# it costs a sole maintainer.
+
+# The seven files AGENTS.md section 0 rule 2 names.
+/.github/workflows/build.yml                                  @Danathar
+/.github/actions/publish-native-image/                        @Danathar
+/ci_tools/sign_image.py                                       @Danathar
+/ci_tools/promote_stable.py                                   @Danathar
+/ci_tools/check_akmods_cache.py                               @Danathar
+/containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py   @Danathar
+/files/scripts/configure_signing_policy.py                    @Danathar
+
+# What the image installs onto every booted machine, the signing key, and the
+# ZFS line and base-image values.
+/files/                                                       @Danathar
+/cosign.pub                                                   @Danathar
+/ci/defaults.json                                             @Danathar
+
+# What each workflow's token may do, what keeps main behind a pull request, and
+# this file, which decides who must approve all of the above.
+/.github/policies/workflow-permissions.json                   @Danathar
+/.github/rulesets/                                            @Danathar
+/.github/CODEOWNERS                                           @Danathar
+
+# The agent permission boundary.
+/.claude/settings.json                                        @Danathar
+/.claude/hooks/                                               @Danathar
+/.claude/commands/                                            @Danathar
+/tests/run_tests.py                                           @Danathar

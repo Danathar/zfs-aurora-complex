@@ -90,10 +90,10 @@ class ConcurrencyClaimTests(unittest.TestCase):
 
 
 class RulesetClaimTests(unittest.TestCase):
-    def test_strict_required_status_checks_policy_is_false(self) -> None:
+    def test_strict_required_status_checks_policy_is_true(self) -> None:
         params = ruleset_rule("required_status_checks")["parameters"]
-        self.assertIs(params["strict_required_status_checks_policy"], False)
-        self.assertIn("`strict_required_status_checks_policy` to `false`", " ".join(doc_text().split()))
+        self.assertIs(params["strict_required_status_checks_policy"], True)
+        self.assertIn("`strict_required_status_checks_policy` to `true`", " ".join(doc_text().split()))
 
     def test_the_required_check_is_the_one_the_page_names(self) -> None:
         params = ruleset_rule("required_status_checks")["parameters"]
@@ -101,11 +101,16 @@ class RulesetClaimTests(unittest.TestCase):
         self.assertEqual(contexts, ["Python Unit Tests"])
         self.assertIn("The required check is `Python Unit Tests`", doc_text())
 
-    def test_no_approval_and_no_bypass(self) -> None:
-        self.assertEqual(ruleset_rule("pull_request")["parameters"]["required_approving_review_count"], 0)
+    def test_no_approval_but_the_code_owners_and_no_bypass(self) -> None:
+        params = ruleset_rule("pull_request")["parameters"]
+        self.assertEqual(params["required_approving_review_count"], 0)
+        self.assertIs(params["require_code_owner_review"], True)
         self.assertEqual(json.loads(RULESET.read_text("utf-8"))["bypass_actors"], [])
         text = " ".join(doc_text().split())
-        self.assertIn("it requires no approving review, and it allows no bypass actors", text)
+        self.assertIn(
+            "it requires no approving review except the code owner's on Tier 3 paths, and it allows no bypass actors",
+            text,
+        )
 
     def test_there_is_no_merge_queue_rule(self) -> None:
         # The page says the queue is unavailable; a ruleset that grew a merge_queue rule makes
