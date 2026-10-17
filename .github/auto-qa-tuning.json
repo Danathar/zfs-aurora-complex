@@ -32,13 +32,11 @@
     "evidenced only by an absence, and a deleted test and a removed code path",
     "look identical from the count alone.",
     "",
-    "build.yml, build-branch.yml, build-pr.yml and akmods-failure-triage.yml set",
-    "no timeout-minutes on their jobs today, so they have no entry. They are",
-    "production-path files (CLAUDE.md section 0): adding a cap there is a",
-    "deliberate, separately reviewed change, because a cap that is too tight",
-    "kills a daily build, and the cost of that falls on the published image.",
-    "Once one sets a timeout, tests/test_auto_qa_tuning.py fails until the entry",
-    "is added here."
+    "build.yml, build-branch.yml, build-pr.yml and akmods-failure-triage.yml are",
+    "production-path files (CLAUDE.md section 0). Their caps were added as a",
+    "deliberate, separately reviewed change (#178), set at roughly 2-3x the",
+    "slowest healthy run, because a cap that is too tight kills a daily build",
+    "and the cost of that falls on the published image."
   ],
 
   "policy": {
@@ -77,6 +75,20 @@
     { "workflow": "nightly-compliance.yml", "job": "suite", "timeout_minutes": 15 },
     { "workflow": "nightly-compliance.yml", "job": "published-image", "timeout_minutes": 15 },
 
-    { "workflow": "agent-audit.yml", "job": "audit", "timeout_minutes": 15 }
+    { "workflow": "agent-audit.yml", "job": "audit", "timeout_minutes": 15 },
+
+    { "workflow": "build.yml", "job": "preflight", "timeout_minutes": 10 },
+    { "workflow": "build.yml", "job": "build-zfs-akmods", "timeout_minutes": 30 },
+    { "workflow": "build.yml", "job": "sign-akmods-cache", "timeout_minutes": 15 },
+    { "workflow": "build.yml", "job": "build-candidate-image", "timeout_minutes": 45 },
+    { "workflow": "build.yml", "job": "promote-stable", "timeout_minutes": 15 },
+
+    { "workflow": "build-pr.yml", "job": "build-pr-image", "timeout_minutes": 45 },
+
+    { "workflow": "build-branch.yml", "job": "prepare-branch-metadata", "timeout_minutes": 10 },
+    { "workflow": "build-branch.yml", "job": "build-branch-akmods", "timeout_minutes": 30 },
+    { "workflow": "build-branch.yml", "job": "build-branch-image", "timeout_minutes": 45 },
+
+    { "workflow": "akmods-failure-triage.yml", "job": "triage", "timeout_minutes": 10 }
   ]
 }
