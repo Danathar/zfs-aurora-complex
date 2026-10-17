@@ -19,6 +19,7 @@ jobs:
   build-pr-image:
     name: Build PR Image (No Push)
     runs-on: ubuntu-26.04
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:

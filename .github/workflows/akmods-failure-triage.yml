@@ -26,6 +26,7 @@ jobs:
   triage:
     name: Manage sticky akmods failure issue
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     if: github.event.workflow_run.event != 'pull_request'
     permissions:
       contents: write
