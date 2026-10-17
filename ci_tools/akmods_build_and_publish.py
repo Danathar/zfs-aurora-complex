@@ -130,8 +130,8 @@ def record_built_image_id() -> str:
     by its uncompressed digest, so it identifies the content this run built.
     `pin_akmods_cache` compares it with the config the shared tag resolves to
     after the push and refuses to pin anything else. Without it, the pin would
-    record whatever the mutable tag pointed at by then, which a concurrent
-    branch run holding a registry write token can move.
+    record whatever the mutable tag pointed at by then, which another run
+    holding a registry write token can move.
     """
 
     # Same name the fork's `push` recipe pushes from:

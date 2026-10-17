@@ -19,14 +19,6 @@
         "track": {"issues": "write", "actions": "read"}
       }
     },
-    "build-branch.yml": {
-      "workflow": null,
-      "jobs": {
-        "prepare-branch-metadata": {"contents": "read"},
-        "build-branch-akmods": {"contents": "read", "packages": "write"},
-        "build-branch-image": {"contents": "read", "packages": "write"}
-      }
-    },
     "build-pr.yml": {
       "workflow": null,
       "jobs": {

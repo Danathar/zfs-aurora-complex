@@ -204,7 +204,7 @@ def inspect_akmods_cache(
     # Only verify the signature once the RPM content has already been
     # confirmed correct -- no point checking who signed a cache that does not
     # even have the RPM this run needs. This cache is a real supply-chain
-    # input (branch workflows can rebuild and republish the same shared tag),
+    # input (any run holding a registry write token can republish the shared tag),
     # so a reused cache must be signed by this repo's own key, not just
     # contain a filename that happens to match.
     #

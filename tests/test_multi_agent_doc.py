@@ -76,8 +76,8 @@ class ConcurrencyClaimTests(unittest.TestCase):
         self.assertIsNotNone(match, f"{name} has no concurrency block")
         return match.group(1)
 
-    def test_the_three_pull_request_workflows_cancel_an_older_run_for_the_same_ref(self) -> None:
-        for name in ("test.yml", "build-pr.yml", "build-branch.yml"):
+    def test_the_pull_request_workflows_cancel_an_older_run_for_the_same_ref(self) -> None:
+        for name in ("test.yml", "build-pr.yml"):
             with self.subTest(workflow=name):
                 block = self.concurrency(name)
                 self.assertIn("github.ref", block)

@@ -129,6 +129,5 @@ This page defines terms used across this repository's docs and workflow comments
 - `USE_INPUT_LOCK`: whether input-lock replay mode is enabled.
 - `LOCK_FILE`: input-lock path passed into the resolver.
 - `LOCK_FILE_PATH`: input-lock path recorded in the build-inputs manifest.
-- `BRANCH_TAG_PREFIX`: branch-safe tag prefix used by branch builds.
 - `AKMODS_FAILURE_LOG`: path to the captured akmods build log used for failure classification.
 - `AKMODS_FAILURE_PAYLOAD_PATH`: path where the failure classifier writes the sticky-issue payload.

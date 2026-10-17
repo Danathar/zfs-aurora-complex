@@ -180,8 +180,8 @@ command again before relying on it.
 Several agents, and the maintainer, can work at once. The repository gives only
 narrow guards, and none is aimed at agents in particular.
 
-**A pull request's own checks are cancelled when it is updated.** `test.yml`,
-`build-pr.yml` and `build-branch.yml` cancel an older run for the same ref. That
+**A pull request's own checks are cancelled when it is updated.** `test.yml`
+and `build-pr.yml` cancel an older run for the same ref. That
 keeps one pull request tidy; it does not coordinate two.
 
 **Two `main` runs never race to publish.** `build.yml`'s concurrency group is the

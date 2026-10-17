@@ -173,23 +173,21 @@ For the full signing model and the failure mode where default `cosign verify`
 succeeds but `bootc upgrade` cannot find a usable signature, see
 [`docs/signing-and-bootc.md`](./signing-and-bootc.md).
 
-## Branch Or Pull Request Validation Failures
+## Pull Request Validation Failures
 
-Neither pull request validation nor branch builds rebuild the shared akmods
-cache -- both are read-only against shared production state. Only the `main`
-workflow may rebuild and republish it, because only `main` refs can reach the
-signing key, and an unsigned cache would be rejected by every later run anyway.
+Pull request validation does not rebuild the shared akmods cache. It is
+read-only against shared production state. Only the `main` workflow may rebuild
+and republish it, because only `main` can reach the signing key, and an unsigned
+cache would be rejected by every later run anyway.
 
-So if `build-pr.yml` fails in `prepare-validation-build`, or if
-`build-branch.yml`'s akmods job fails with "not allowed to publish it", the
-repair path is always the same:
+So if `build-pr.yml` fails in `prepare-validation-build`, the repair path is:
 
 1. fix `main` if `main` itself is broken
 2. refresh the shared akmods cache from `main`: run the Build And Promote Main
-   Image workflow via `workflow_dispatch` with `rebuild_akmods=true` (set
-   `promote_to_stable=false` if `latest` should not move as a side effect)
-3. rerun the branch or pull request validation
+   Image workflow via `workflow_dispatch` on `main` with `rebuild_akmods=true`
+   (set `promote_to_stable=false` if `latest` should not move as a side effect)
+3. rerun the pull request validation
 
-There is no branch-side recovery path, on purpose: a branch run has no signing
-key, so anything it published would degrade the shared cache for every other
-consumer.
+There is no pull-request-side recovery path, on purpose: a pull request run has
+no signing key, so anything it published would degrade the shared cache for
+every other consumer.

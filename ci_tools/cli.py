@@ -35,8 +35,6 @@ def command_map() -> dict[str, Callable[[], None]]:
     from ci_tools.resolve_build_inputs import main as resolve_build_inputs
     from ci_tools.sign_image import main as sign_image
     from ci_tools.tagging_context import (
-        main_compose_branch_image_tag,
-        main_compute_branch_metadata,
         main_compute_candidate_tag,
         main_export_registry_context,
     )
@@ -49,13 +47,11 @@ def command_map() -> dict[str, Callable[[], None]]:
         "write-build-inputs-manifest": write_build_inputs_manifest,
         "check-akmods-cache": check_akmods_cache,
         "check-stable-signal": check_stable_signal,
-        "compose-branch-image-tag": main_compose_branch_image_tag,
         "compute-candidate-tag": main_compute_candidate_tag,
         "export-repo-defaults": export_repo_defaults,
         "export-registry-context": main_export_registry_context,
         "prepare-validation-build": prepare_validation_build,
         "pin-akmods-cache": pin_akmods_cache,
-        "compute-branch-metadata": main_compute_branch_metadata,
         "promote-stable": promote_stable,
         "sign-image": sign_image,
         "akmods-clone-pinned": akmods_clone_pinned,

@@ -1,9 +1,9 @@
 """
 Script: tests/test_security_ai_doc.py
 What: Joins docs/SECURITY-AI.md to the workflows, actions and tools its claims about secrets, workflow triggers and the safety-critical file list rest on.
-Doing: Reads the workflows as text (no YAML parser). Checks that the seven files the page lists as needing a human decision are the ones AGENTS.md section 0 rule 2 names, that `SIGNING_SECRET` is read only by build.yml jobs that declare the `production-signing` environment, that no secret other than `SIGNING_SECRET` and `GITHUB_TOKEN` is referenced anywhere, that each workflow's trigger is what the trigger table says, and that the bot rule the table describes is the one `ci_tools/tagging_context.py` implements and build-branch.yml uses.
-Why: The page is the statement of what an agent may touch and what a branch can cause. Its secret inventory and trigger table are copies of workflow facts; a second secret, a signing step outside the protected environment, or a changed bot rule makes the page understate the blast radius.
-Goal: Make a new secret, an unprotected use of the signing secret, a changed trigger or a changed bot rule fail here until the page says so.
+Doing: Reads the workflows as text (no YAML parser). Checks that the seven files the page lists as needing a human decision are the ones AGENTS.md section 0 rule 2 names, that `SIGNING_SECRET` is read only by build.yml jobs that declare the `production-signing` environment, that no secret other than `SIGNING_SECRET` and `GITHUB_TOKEN` is referenced anywhere, and that each workflow's trigger is what the trigger table says.
+Why: The page is the statement of what an agent may touch and what a branch can cause. Its secret inventory and trigger table are copies of workflow facts; a second secret, a signing step outside the protected environment, or a changed trigger makes the page understate the blast radius.
+Goal: Make a new secret, an unprotected use of the signing secret or a changed trigger fail here until the page says so.
 
 The agent-permission table is joined to `.claude/settings.json` in tests/test_agent_permission_boundary.py; the label vocabulary is joined to the labeler in tests/test_labeler_config.py; the ruleset is joined in tests/test_branch_protection.py. This file covers the rest.
 """
@@ -97,8 +97,8 @@ class SecretInventoryTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertRegex(block, r"(?m)^    environment: production-signing$")
 
-    def test_build_branch_and_pr_runs_never_name_the_signing_environment_or_key(self) -> None:
-        for name in ("build-branch.yml", "build-pr.yml"):
+    def test_pr_runs_never_name_the_signing_environment_or_key(self) -> None:
+        for name in ("build-pr.yml",):
             with self.subTest(workflow=name):
                 text = uncommented(workflow(name))
                 self.assertNotIn("production-signing", text)
@@ -120,8 +120,8 @@ class TriggerTableTests(unittest.TestCase):
                 rows[match.group(1)] = match.group(2)
         return rows
 
-    def test_the_table_has_the_three_build_workflows(self) -> None:
-        self.assertEqual(sorted(self.table()), ["build-branch.yml", "build-pr.yml", "build.yml"])
+    def test_the_table_has_the_two_build_workflows(self) -> None:
+        self.assertEqual(sorted(self.table()), ["build-pr.yml", "build.yml"])
 
     def test_each_trigger_is_the_workflows(self) -> None:
         on = {name: workflow(name).split("\njobs:\n", 1)[0] for name in self.table()}
@@ -129,23 +129,6 @@ class TriggerTableTests(unittest.TestCase):
         self.assertRegex(on["build.yml"], r"(?ms)^  push:\n    branches:\n      - main")
         self.assertRegex(on["build.yml"], r"(?m)^  workflow_dispatch:")
         self.assertRegex(on["build-pr.yml"], r"(?m)^  pull_request:")
-        self.assertRegex(on["build-branch.yml"], r"(?ms)^  push:\n    branches-ignore:\n      - main")
-
-    def test_the_bot_rule_is_the_one_the_tool_implements_and_the_workflow_uses(self) -> None:
-        source = (REPO_ROOT / "ci_tools" / "tagging_context.py").read_text("utf-8")
-        self.assertIn('return "[bot]" in actor_name', source)
-        self.assertIn("`[bot]`", doc_text())
-        branch = workflow("build-branch.yml")
-        self.assertIn("steps.registry.outputs.actor_is_bot != 'true'", branch)
-        self.assertIn("steps.registry.outputs.actor_is_bot == 'true'", branch)
-
-    def test_branch_runs_publish_unsigned_br_tags_and_never_sign(self) -> None:
-        branch = uncommented(workflow("build-branch.yml"))
-        self.assertIn('allow_unsigned: "true"', branch)
-        self.assertIn('allow_cache_rebuild: "false"', branch)
-        self.assertNotIn("sign-image", branch)
-        source = (REPO_ROOT / "ci_tools" / "tagging_context.py").read_text("utf-8")
-        self.assertIn('f"br-{safe_branch}"', source)
 
     def test_the_pull_request_workflow_stops_before_push_or_signing(self) -> None:
         text = uncommented(workflow("build-pr.yml"))

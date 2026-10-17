@@ -1,8 +1,7 @@
 """
 Script: tests/test_workflow_build_container.py
-What: Guards how the privileged akmods build container is selected, that branch runs
-stay read-only against shared production state, and that only branches may publish
-unsigned (and only explicitly).
+What: Guards how the privileged akmods build container is selected, that package-write
+jobs are bound to `main`, and that the production path signs what it publishes.
 Doing: Reads the workflow files as text and asserts no run-time override exists and that
 every hardcoded container literal matches the checked-in default.
 Why: That container runs --privileged, as root, with `/` bind-mounted and a package-write
@@ -30,8 +29,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
-# The two workflows whose jobs run the privileged akmods build container.
-PRIVILEGED_CONTAINER_WORKFLOWS = ("build.yml", "build-branch.yml")
+# The workflows whose jobs run the privileged akmods build container.
+PRIVILEGED_CONTAINER_WORKFLOWS = ("build.yml",)
 
 # Captures the rest of the line, not just non-whitespace: a GitHub expression
 # like `${{ inputs.x || 'y' }}` contains spaces, and a pattern anchored on \S+
@@ -105,53 +104,76 @@ class BuildContainerSelectionTests(unittest.TestCase):
                 )
 
 
-class BranchIsolationTests(unittest.TestCase):
+class PackageWriteRefTests(unittest.TestCase):
     """
-    Branch runs must be read-only against shared production state.
+    A job holding `packages: write` runs only on `main`.
 
-    The production signing key is scoped to a main-only environment, so branch
-    refs cannot sign. Everything here pins the consequences: the branch
-    workflow never references the secret at all, never mutates the shared
-    akmods cache, and publishes only explicitly-unsigned test images. build.yml
-    must never take the unsigned path.
+    Any workflow with `workflow_dispatch` can be started against another ref, and then it
+    runs that ref's code. A package-write token there can overwrite or delete registry
+    tags. Each such job must either guard on `github.ref` itself, use the
+    `production-signing` environment (restricted to `main` in repository settings), or
+    need a job that guards on `github.ref`.
     """
 
-    def _branch_workflow(self) -> str:
-        return (WORKFLOW_DIR / "build-branch.yml").read_text(encoding="utf-8")
+    MAIN_GUARD = "github.ref == 'refs/heads/main'"
 
-    def test_branch_workflow_never_references_the_signing_secret(self) -> None:
-        # The strongest form of "branches cannot sign": not a guard around the
-        # secret, but no reference to it anywhere in the file. A branch push
-        # cannot exfiltrate or use a secret its workflow never requests.
-        self.assertNotIn("SIGNING_SECRET", self._branch_workflow())
+    @staticmethod
+    def _jobs(text: str) -> dict[str, str]:
+        # Jobs are the two-space-indented keys under the top-level `jobs:` key; each
+        # body runs to the next one. Whole-line comments are stripped first so a
+        # commented-out line cannot count as a guard.
+        text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        body = text.split("\njobs:\n", 1)[1]
+        parts = re.split(r"^  ([A-Za-z0-9_-]+):[ \t]*$", body, flags=re.MULTILINE)
+        return dict(zip(parts[1::2], parts[2::2]))
 
-    def test_branch_cache_refresh_is_denied_for_everyone(self) -> None:
-        text = self._branch_workflow()
-        self.assertIn(
-            'allow_cache_rebuild: "false"',
-            text,
-            "build-branch.yml must deny shared akmods cache republishing to ALL branch "
-            "runs; without a signing key a branch rebuild publishes an unsigned cache "
-            "that every later run rejects, and a compromised write credential could "
-            "replace the signed cache at will.",
-        )
+    @staticmethod
+    def _needs(job: str) -> list[str]:
+        inline = re.search(r"^    needs:[ \t]*(\S.*)$", job, re.MULTILINE)
+        if inline:
+            return [name.strip() for name in inline.group(1).strip("[]").split(",")]
+        block = re.search(r"^    needs:[ \t]*\n((?:      - .*\n)+)", job, re.MULTILINE)
+        return re.findall(r"^      - (\S+)", block.group(1), re.MULTILINE) if block else []
 
-    def test_branch_workflow_has_no_cache_signing_job(self) -> None:
-        # The job cannot work without the key; leaving it in place would fail
-        # loudly on every human cache rebuild with a misleading message.
-        self.assertNotIn("sign-branch-akmods-cache", self._branch_workflow())
+    def test_every_package_writer_is_bound_to_main(self) -> None:
+        checked = 0
+        paths = sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")])
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            if "\njobs:\n" not in text:
+                continue
+            jobs = self._jobs(text)
+            guarded = {
+                name
+                for name, job in jobs.items()
+                if re.search(rf"^    if:[ \t]*{re.escape(self.MAIN_GUARD)}", job, re.MULTILINE)
+            }
+            for name, job in jobs.items():
+                if not re.search(r"^      packages:[ \t]*write[ \t]*$", job, re.MULTILINE):
+                    continue
+                checked += 1
+                with self.subTest(workflow=path.name, job=name):
+                    self.assertTrue(
+                        name in guarded
+                        or re.search(
+                            r"^    environment:[ \t]*production-signing[ \t]*$", job, re.MULTILINE
+                        )
+                        or any(need in guarded for need in self._needs(job)),
+                        f"{path.name}:{name} holds packages: write but nothing binds it to main",
+                    )
+        # build.yml has the four package-write jobs; no other workflow has one.
+        self.assertEqual(checked, 4, "the scan found a different number of package-write jobs")
 
-    def test_branch_publish_is_explicitly_unsigned(self) -> None:
-        self.assertIn('allow_unsigned: "true"', self._branch_workflow())
 
-    def test_build_yml_never_allows_unsigned_publish(self) -> None:
-        text = (WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
-        self.assertNotIn(
-            "allow_unsigned",
-            text,
-            "build.yml must never pass allow_unsigned; the production path's "
-            "no-key-no-push guard is the invariant that keeps user-facing tags signed.",
-        )
+class ProductionSigningTests(unittest.TestCase):
+    """
+    The production path signs everything it publishes.
+
+    The production signing key is scoped to a main-only environment. Everything
+    here pins the consequences: the signing jobs declare that environment, the
+    publish action refuses to push without a key, and the shared akmods cache
+    cannot be rebuilt by a caller that denies it.
+    """
 
     def test_main_signing_jobs_declare_the_environment(self) -> None:
         # Creating the environment in repository settings gates nothing on its
@@ -169,16 +191,14 @@ class BranchIsolationTests(unittest.TestCase):
                 "repository-level copy is removed, or signing silently breaks.",
             )
 
-    def test_publish_action_fails_closed_by_default(self) -> None:
+    def test_publish_action_fails_closed_without_a_key(self) -> None:
         action = (
             REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn('default: "false"', action)
         self.assertIn(
-            "inputs.cosign_private_key == '' && inputs.allow_unsigned != 'true'",
+            "if: inputs.cosign_private_key == ''",
             action,
-            "publish-native-image must refuse to push when there is no key unless the "
-            "caller explicitly opted into unsigned publication.",
+            "publish-native-image must refuse to push when there is no signing key.",
         )
 
     def test_publish_action_pushes_without_the_token_in_argv(self) -> None:

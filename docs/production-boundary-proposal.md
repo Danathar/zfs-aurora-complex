@@ -20,14 +20,12 @@ Proven by behaviour, not just configuration:
 - A throwaway branch push (run `30483215044`) built and published
   `br-test-unsigned-branch-publish-44`, and `cosign verify` on that tag **fails** -- the
   branch genuinely could not sign. A verifying signature there would have meant the boundary
-  leaked.
+  leaked. The branch workflow that published it has since been removed (issue #181).
 
 The workflow half: `build.yml`'s `build-candidate-image` and `sign-akmods-cache` declare
-`environment: production-signing`; `build-branch.yml` references `SIGNING_SECRET` nowhere at
-all; branch runs cannot rebuild the shared akmods cache (`allow_cache_rebuild: "false"`,
-stricter than the options below, chosen after a branch run swapped the shared tag mid-flight);
-and branch testing uses explicitly-unsigned `br-*` tags ("What breaks" option 1, chosen by the
-maintainer -- rules in [`install-and-verify.md`](./install-and-verify.md)).
+`environment: production-signing`; branch runs were barred from rebuilding the shared akmods
+cache after one swapped the shared tag mid-flight. Today a branch push publishes nothing, and
+the akmods job in `build.yml` runs only on `main`.
 
 ### Deliberately not done
 
@@ -63,7 +61,7 @@ resolved for the secret (see Status above); the branch-protection part was decli
 - `main` has no branch protection and no repository ruleset. A direct push to `main` triggers
   build, sign, and promote to `:latest` with nothing in between.
 - `SIGNING_SECRET` is a plain **repository-level** secret. Every workflow run in this repo can
-  read it, including `build-branch.yml` runs triggered by a push to any branch.
+  read it, including runs of the then-existing branch workflow triggered by a push to any branch.
 
 Read separately, each looks like its own fix (protect `main`; move the secret). Read together,
 fixing only one is close to meaningless:
@@ -71,7 +69,7 @@ fixing only one is close to meaningless:
 - If you protect `main` but leave `SIGNING_SECRET` at the repository level, a branch push can
   still read the production signing key. Someone (or something: a compromised token, a
   compromised collaborator account, a supply-chain-compromised bot integration with write
-  access) that can push a branch can edit `build-branch.yml` on that branch to do anything with
+  access) that can push a branch can edit a workflow file on that branch to do anything with
   the key it wants -- exfiltrate it, sign something outside this pipeline's normal flow -- and
   that branch push never had to touch `main` at all.
 - If you move the secret but leave `main` unprotected, a direct push to `main` still triggers a
@@ -83,23 +81,22 @@ attack surface without closing it.
 ### Precision on the threat model
 
 "Anyone who can push a branch" means anyone with **write access to this repository** -- not the
-general public. This is not about external fork contributors: `build-branch.yml` triggers on
-`push`, and GitHub only runs `push`-triggered workflows for pushes from someone with write
+general public. This is not about external fork contributors: GitHub only runs
+`push`-triggered workflows for pushes from someone with write
 access, not from a fork. The realistic threats this closes are a compromised personal access
 token, a compromised collaborator account, or a compromised bot/automation integration that has
 write access (Renovate already has it, for example) -- not a random GitHub user opening a PR.
 
 ### A note on cache signing (PR #44, now merged)
 
-The `sign-akmods-cache` / `sign-branch-akmods-cache` jobs pass `SIGNING_SECRET` to branch-push
-workflows too, for a real reason (an unsigned branch-rebuilt cache is a cache nothing can ever
-trust on reuse). This is not new in kind -- `build-branch.yml`'s existing "Push and sign branch
-image" step already did the same for human-authored branches -- but it is a second instance of
-it. This proposal accounts for both; see "What breaks" below.
+PR #44 added cache-signing jobs that also passed `SIGNING_SECRET` to branch-push workflows, for
+a real reason (an unsigned branch-rebuilt cache is a cache nothing can ever trust on reuse).
+It was a second instance of the same exposure as the branch workflow's own image-signing step.
 
 This widened rather than narrowed the exposure described above, and it was live for two days: a
 branch run signed the shared production cache on 2026-07-28. **Closed since** -- #51 and then
-#57 removed branch signing entirely and barred branch runs from rebuilding the cache. Kept here
+#57 removed branch signing entirely and barred branch runs from rebuilding the cache, and the
+branch workflow itself was later removed (issue #181). Kept here
 because any image published in that window carries the provenance caveat.
 
 ## Proposed changes
@@ -167,75 +164,17 @@ Every job in that file that references `secrets.SIGNING_SECRET` today can add
 - `build-candidate-image` (signs the candidate OS image)
 - `sign-akmods-cache` (added in PR #44)
 
-If a manual `workflow_dispatch` is ever run against a non-`main` branch, these jobs would then
-correctly lose access to the secret -- that is the restriction working as intended, not a bug.
+A manual `workflow_dispatch` on a non-`main` ref now builds nothing: the akmods job runs only
+on `main`, and every later job needs it. The environment would refuse the secret there anyway.
+That is the restriction working as intended, not a bug.
 
-### 3. Jobs that run from branch refs lose signing access -- by design
+### 3. Branch refs lose signing access -- by design
 
-`build-branch.yml` runs from whatever branch was pushed, which is a ref this environment
-explicitly does not allow. Once the secret moves, these jobs described below **cannot** use
-`secrets.SIGNING_SECRET` at all, environment-scoped or otherwise:
-
-- `build-branch.yml`'s "Push and sign branch image" step (existing, predates this proposal)
-- `sign-branch-akmods-cache` (added in PR #44)
-
-This is the part of the task most directly worth a real decision, not a rubber stamp, because it
-removes real capability that exists today.
-
-## What breaks, and the options for each
-
-### Branch OS-image testing (`build-branch.yml` "Push and sign branch image")
-
-Today, a human-authored branch push builds, pushes, and **signs** a test image so it can be
-tried on real hardware via `bootc switch --enforce-container-sigpolicy`. Once branch pushes lose
-signing access, that step can still **push an unsigned image**, but the in-image trust policy
-(`docs/signing-and-bootc.md`) requires a valid cosign signature matching the committed
-`cosign.pub` for `--enforce-container-sigpolicy` to succeed. An unsigned branch image cannot be
-switched to under enforced policy.
-
-Options, not mutually exclusive:
-
-1. **Accept the loss, but this needs an actual workflow change, not just removing the
-   secret.** `publish-native-image`'s "Require signing key before publication" step
-   (`.github/actions/publish-native-image/action.yml:34-39`) exits before any push when the key
-   is empty, so simply cutting branch access to `SIGNING_SECRET` does not degrade to "push
-   unsigned" -- it makes `build-branch.yml`'s "Push and sign branch image" step fail outright,
-   with no branch image published at all. Getting back to a pushed-but-unsigned test image would
-   require changing that step to add an explicit unsigned-publish path for branches. Testing that
-   image with plain `bootc switch` (no `--enforce-container-sigpolicy`) would also be a *new*,
-   weaker posture, not the existing one: `README.md:44-55` and `docs/signing-and-bootc.md:20-25`
-   currently require `--enforce-container-sigpolicy` on every first switch, and
-   `README.md:268-269` tells anyone who switched without it to switch again with it. Adopting this
-   option means updating those docs to describe a deliberately weaker branch-testing path, not
-   just skipping a flag.
-2. **A separate, lower-privilege test-signing key.** A second cosign keypair, scoped to an
-   environment that *does* allow branch refs, used only for `br-*` tags. The production
-   `cosign.pub` embedded in real images would not trust it, so a compromised branch push could
-   forge a *test*-trusted image but never a production-trusted one. More moving parts (a second
-   key to generate, store, and rotate) for a benefit that only matters if branch images are
-   regularly tested on real hardware under enforced policy.
-3. **Stop pushing/signing branch OS images entirely**, keeping only the local
-   build-and-rechunk validation that already runs for every branch (which proves the branch
-   composes, just not on real hardware). Simplest, but removes the "try this branch on a test
-   VM" workflow this repo's own docs describe.
-
-This document does not choose one. It is the owner's call, and depends on how often branch
-images actually get tried on real hardware versus validated as "does this still build."
-
-### Branch akmods-cache signing (`sign-branch-akmods-cache`, PR #44)
-
-A branch rebuild of the shared cache could no longer be signed once the secret moves. Per PR
-#44's own logic, an unsigned cache is treated as unusable on reuse -- so a branch-rebuilt cache
-would need to be rebuilt again by the *next* consumer, including the next `main` run, with no
-caching benefit carried forward from the branch. This is a real cost (slower branch validation,
-and `main` pays a full rebuild the first time it needs a kernel/ZFS combination a branch already
-built) but it is safe: nothing trusts an unsigned cache, so nothing regresses in correctness,
-only in cache-warming convenience.
-
-No action needed beyond accepting this cost, unless the owner wants to revisit PR #44's
-"branch-scoped cache tag instead of the shared one" alternative (raised, not implemented, in
-that PR) at the same time -- that would sidestep this cost entirely by giving branches their own
-cache namespace instead of contending for the shared one.
+When this was written, a separate branch workflow ran from whatever branch was pushed, which is
+a ref this environment explicitly does not allow. Its signing steps could not read
+`secrets.SIGNING_SECRET` once the secret moved. That workflow has since been removed (issue
+#181). Branch pushes publish nothing, `build.yml`'s privileged akmods job runs only on `main`,
+and signing jobs use `production-signing` (`main` only).
 
 ### `build-pr.yml`
 
@@ -280,7 +219,7 @@ is a deliberate, logged act rather than a standing hole.
 An external audit found a path this document originally missed, and it is worth recording
 because it shows the limit of what an environment restriction can do.
 
-`build.yml` and `build-branch.yml` accepted a free-text `workflow_dispatch` input naming the
+`build.yml` and the since-removed branch workflow accepted a free-text `workflow_dispatch` input naming the
 image for the akmods job -- a job running `--privileged`, as root, with `/` bind-mounted, and a
 package-write token. Anyone able to dispatch could run arbitrary code there **against the real
 `main` ref**, publish a cache that later trusted jobs sign and build from, and reach `:latest`.
@@ -353,11 +292,11 @@ Nothing here requires re-keying, re-signing existing images, or touching `cosign
    reference will resolve to the same secret value either way.
 3. Merge that PR, then trigger one real `main` build (push or `workflow_dispatch`) and confirm
    signing still succeeds, now sourced from the environment.
-4. Only after that real run succeeds: delete the repository-level `SIGNING_SECRET`. Confirm the
-   branch-signing steps identified above now correctly fail closed (no secret available) rather
-   than silently signing with something unexpected.
-5. Decide on one of the "what breaks" options above for branch OS-image testing, and implement
-   it (or explicitly accept the loss and document it in `README.md`'s Safety Model section).
+4. Only after that real run succeeds: delete the repository-level `SIGNING_SECRET`. Confirm no
+   job outside the environment can read it now, rather than silently signing with something
+   unexpected.
+5. Branch OS-image testing needed a decision at this point. It was settled later: the branch
+   workflow was removed (issue #181) and branch pushes publish nothing.
 6. Only after 1-5 are settled and working: add the `main` ruleset. Protecting `main` first, before
    the key is actually isolated, protects nothing that matters yet -- the branch bypass would
    still be wide open.

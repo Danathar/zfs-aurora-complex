@@ -93,7 +93,7 @@ class PinAkmodsCacheTests(unittest.TestCase):
 
     def test_refuses_a_digest_whose_config_is_not_the_image_this_run_built(self) -> None:
         # The shared tag moved between this run's push and the read-back: a
-        # branch run pushed its own image there. Pinning it would get it signed.
+        # different run pushed its own image there. Pinning it would get it signed.
         with (
             patch("ci_tools.pin_akmods_cache.skopeo_inspect_digest", return_value=DIGEST),
             patch("ci_tools.pin_akmods_cache.run_cmd", return_value=OTHER_CONFIG),

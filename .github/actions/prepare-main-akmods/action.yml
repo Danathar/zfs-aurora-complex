@@ -23,11 +23,11 @@ inputs:
     required: true
   allow_cache_rebuild:
     description: >-
-      Whether this run is permitted to rebuild and republish the shared akmods
-      cache at all. Callers set this to false for runs that must never mutate
-      shared state -- branch runs, which cannot sign what they publish. When
-      false and a rebuild would otherwise be required, the job fails with an
-      explanation instead of publishing.
+      Whether this run may rebuild and republish the shared akmods cache at
+      all. A caller sets this to false for a run that must never mutate shared
+      state, such as one that could only publish an unsigned cache. No caller
+      sets it today; build.yml leaves the default. When false and a rebuild
+      would be required, the job fails with an explanation instead.
     required: false
     default: "true"
   registry_actor:
@@ -100,8 +100,8 @@ outputs:
       Bare digest of the shared akmods cache image this run published. Only set
       when this run actually rebuilt the cache, because only then is there a
       freshly published digest that still needs signing. The signing job signs
-      this digest instead of re-resolving the tag, which a concurrent branch
-      run rebuilding the same shared tag could move underneath it.
+      this digest instead of re-resolving the tag, which another run
+      republishing the same shared tag could move underneath it.
     value: ${{ steps.pin_akmods.outputs.akmods_image_digest }}
   rebuilt:
     description: >-
@@ -202,10 +202,8 @@ runs:
         python3 -m ci_tools.cli check-akmods-cache
 
     # A run that is not allowed to touch shared state must stop here rather
-    # than republish the cache. Branch runs (human or automated) validate that
-    # a branch still builds, but they must never publish the shared cache image
-    # that production later consumes -- they have no signing key, so anything
-    # they published would be unsigned, which every later run correctly rejects.
+    # than republish the cache. A run without the signing key could only
+    # publish an unsigned cache, which every later run correctly rejects.
     # Failing loudly is correct: the alternative silently degrades shared state
     # for every consumer.
     - name: Refuse to refresh the shared akmods cache from a restricted run
@@ -213,7 +211,7 @@ runs:
       shell: bash
       run: |
         echo "The shared akmods cache needs rebuilding, but this run is not allowed to publish it." >&2
-        echo "Branch runs deliberately cannot refresh shared production state or sign images." >&2
+        echo "This run cannot refresh shared production state or sign images." >&2
         echo "Seed or refresh the cache from the main workflow: workflow_dispatch with rebuild_akmods=true, then re-run this." >&2
         exit 1
 
@@ -345,7 +343,7 @@ runs:
     # same pinned image.
     #
     # The tag is read back after the push, so it says only what the tag points
-    # at now; a branch run holding a registry write token can move it in
+    # at now; another run holding a registry write token can move it in
     # between. AKMODS_BUILT_IMAGE_ID is the local image ID the build step
     # recorded before pushing, and the pin is refused unless the resolved
     # digest's amd64 config is that image. There is no fallback to the tag.

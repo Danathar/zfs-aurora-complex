@@ -39,7 +39,7 @@
     },
     {
       "customType": "regex",
-      "description": "Track the digest of the privileged akmods build container recorded in ci/defaults.json. Renovate's built-in github-actions manager already tracks the same digest where it is repeated as a `container:` image in build.yml and build-branch.yml, but it does not read this JSON file. Without this manager Renovate would bump the two workflow literals and silently leave this one behind -- and this is the copy that feeds ci_tools/resolve_build_inputs.py, so the build-inputs manifest would start recording a different container than the job actually ran in. There is no version tag to track here because the pin is digest-only; currentValueTemplate names the tag whose digest is followed, which is the `latest` tag this pin replaced.",
+      "description": "Track the digest of the privileged akmods build container recorded in ci/defaults.json. Renovate's built-in github-actions manager already tracks the same digest where it is repeated as a `container:` image in build.yml, but it does not read this JSON file. Without this manager Renovate would bump the workflow literal and silently leave this one behind -- and this is the copy that feeds ci_tools/resolve_build_inputs.py, so the build-inputs manifest would start recording a different container than the job actually ran in. There is no version tag to track here because the pin is digest-only; currentValueTemplate names the tag whose digest is followed, which is the `latest` tag this pin replaced.",
       "managerFilePatterns": [
         "/^ci/defaults\\.json$/"
       ],
@@ -83,7 +83,7 @@
       "matchPackageNames": ["openzfs/zfs"]
     },
     {
-      "description": "The privileged akmods build container is pinned by digest in three places: the `container: image:` literals in build.yml and build-branch.yml (tracked by Renovate's github-actions manager) and DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json (tracked by the custom regex manager above). tests/test_workflow_build_container.py::test_container_literals_match_the_checked_in_default requires all three to be identical. The two managers report different currentValue values, so without grouping Renovate opens two PRs for one digest bump and each fails that test on its own, so neither can merge. A shared groupName puts both updates on one branch and in one PR.",
+      "description": "The privileged akmods build container is pinned by digest in two places: the `container: image:` literal in build.yml (tracked by Renovate's github-actions manager) and DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json (tracked by the custom regex manager above). tests/test_workflow_build_container.py::test_container_literals_match_the_checked_in_default requires both to be identical. The two managers report different currentValue values, so without grouping Renovate opens two PRs for one digest bump and each fails that test on its own, so neither can merge. A shared groupName puts both updates on one branch and in one PR.",
       "groupName": "akmods build container",
       "matchPackageNames": ["ghcr.io/ublue-os/devcontainer"]
     },

@@ -18,9 +18,9 @@ The pipeline is built to safely:
 
 1. Aurora is an ostree/bootc-style image, so ZFS integration must happen during image build.
 2. ZFS compatibility can lag new Fedora kernels.
-3. Branch testing must not overwrite `latest`.
+3. Branch pushes must not publish anything or overwrite `latest`.
 4. pull request (PR) validation should exercise the real build logic but should not push anything.
-5. pull request validation stays read-only, and branch builds are read-only against shared production state too: they may reuse the shared akmods cache but never rebuild or republish it. Seeding a missing cache is a `main` workflow action (`workflow_dispatch` with `rebuild_akmods=true`).
+5. pull request validation stays read-only against shared production state: it may reuse the shared akmods cache but never rebuild or republish it. Seeding a missing cache is a `main` workflow action (`workflow_dispatch` with `rebuild_akmods=true`).
 
 ## Artifact Strategy
 
@@ -31,12 +31,6 @@ The pipeline is built to safely:
 3. stable audit tag: `ghcr.io/danathar/zfs-aurora-complex:stable-<run>-<sha>`
 4. shared akmods cache image: `ghcr.io/danathar/zfs-aurora-complex-akmods:main-<fedora>`
    - final image builds consume the digest-pinned form: `ghcr.io/danathar/zfs-aurora-complex-akmods@sha256:<digest>`
-
-### Branch Artifacts
-
-1. human-authored branch image: `ghcr.io/danathar/zfs-aurora-complex:br-<branch>-<fedora>`
-2. bot-authored branch runs stop after local validation and do not push any public tag
-3. shared akmods cache stays the same shared source image; branch builds never publish branch-specific cache tags and never refresh the shared one. When it does not cover the current primary kernel, the branch's akmods job fails fast with instructions to seed it from the `main` workflow
 
 ## End-To-End Build Flow
 
@@ -88,8 +82,8 @@ Separate from cache reuse, every workflow path also clones the resolved
 That check exists because:
 
 1. an out-of-date shared cache can hide a broken source ref for a while
-2. branch and pull request validation should still prove that the resolved akmods commit SHA is
-   fetchable, even when they do not end up rebuilding the cache
+2. pull request validation should still prove that the resolved akmods commit SHA is
+   fetchable, even when it does not end up rebuilding the cache
 
 What that resolved commit actually is:
 
@@ -115,16 +109,11 @@ If the cache is missing, out of date, or a manual rebuild is requested, the work
 3. writes the upstream `cache.json` file for the supported primary kernel
 4. builds the shared cache image for that supported kernel
 
-Branch note:
+Pull request validation is read-only and fails fast instead of publishing cache
+changes. The akmods job in `build.yml` runs only on `main`, so a dispatch on
+another ref builds nothing.
 
-- branch builds cannot run this refresh path -- it is exclusive to the `main`
-  workflow. A branch targeting a kernel or ZFS version the shared cache does
-  not cover fails fast in its akmods job with instructions to run the `main`
-  workflow with `rebuild_akmods=true`, then re-run the branch
-- pull request validation is likewise read-only and fails fast instead of
-  publishing cache changes
-
-### 4. Build Candidate Or Branch Image
+### 4. Build Candidate Image
 
 The final image build is standard OCI composition now.
 
@@ -154,13 +143,8 @@ then signing that digest, inside the `production-signing` environment that only
 Stable `latest` is promoted by copying the already-signed candidate digest, not
 by signing a second time.
 
-Branch note:
-
-- branch runs cannot sign: the key is environment-scoped to `main`
-- human-authored branch runs push an UNSIGNED `br-*` test image via an explicit
-  `allow_unsigned` opt-in -- usable only on fresh, never-enforced throwaway VMs,
-  since enforced machines refuse unsigned tags under this repository's policy
-- automation accounts such as Renovate stop before the push entirely
+A branch push publishes nothing and has no access to the signing key: the key
+is environment-scoped to `main`.
 
 ### 6. Promote Candidate To Stable
 

@@ -77,27 +77,18 @@ discover them via `use-sigstore-attachments`, which default cosign v3
 verification does not use. For the full signing model, key rotation, and the
 in-image trust policy, read [`docs/signing-and-bootc.md`](./signing-and-bootc.md).
 
-## Testing An Unsigned Branch Image
+## Testing A Change Before It Reaches Latest
 
-`br-*` branch tags are **deliberately unsigned**. Branch workflow runs cannot
-reach the production signing key (it is scoped to a `main`-only environment),
-and they publish test images through an explicit unsigned opt-in instead. That
-makes them a different kind of artifact from everything else in this
-repository, with three hard rules:
+No branch push publishes an image. A pull request builds the image with
+`build-pr.yml`, but that run publishes and signs nothing.
 
-1. **Fresh, throwaway VMs only.** A machine already enforcing this repository's
-   signature policy -- including any machine that followed the install steps
-   above -- will refuse to pull an unsigned `br-*` tag. That refusal is the
-   policy working, not a bug.
-2. **Plain `bootc switch`, no `--enforce-container-sigpolicy`.** Enforcement
-   cannot be enabled against an unsigned image. This is a deliberate, weaker,
-   test-only posture -- the opposite of the rule for real installs above.
-3. **Never let such a VM become a durable machine.** `bootc upgrade` on it will
-   keep tracking the unsigned branch tag with no verification, indefinitely,
-   and it can never be moved into enforcement while it does. Test, conclude,
-   delete the VM.
+To test a change on a machine, use one of two paths:
 
-To test the real, signed artifact instead, run the main workflow with
-`workflow_dispatch` and `promote_to_stable=false`: that publishes a fully
-signed `candidate-*` tag from `main` -- switchable with enforcement, exactly
-like production -- without moving `latest`.
+1. **Local image.** Build it as described in
+   [`docs/building-locally.md`](./building-locally.md).
+2. **Signed candidate.** After the change is merged to `main`, run the main
+   workflow with `workflow_dispatch` on `main` and `promote_to_stable=false`.
+   That publishes a fully signed `candidate-*` tag without moving `latest`. It
+   is switchable with enforcement, exactly like production.
+
+A dispatch on any other ref builds nothing.

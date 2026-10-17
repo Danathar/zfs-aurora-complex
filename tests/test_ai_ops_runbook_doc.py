@@ -24,11 +24,6 @@ NAME_RE = re.compile(r"(?m)^( *)name: (.+?)\s*$")
 QUOTED_JOBS = {
     "build.yml": ["Evaluate Stable Signal Gate"],
     "build-pr.yml": ["Build PR Image (No Push)"],
-    "build-branch.yml": [
-        "Compute Branch Tag",
-        "Build Or Reuse Shared ZFS Akmods Cache",
-        "Build Branch Image",
-    ],
     "test.yml": ["Python Unit Tests"],
     "labeler.yml": ["Apply area labels"],
     "akmods-failure-triage.yml": ["Manage sticky akmods failure issue"],

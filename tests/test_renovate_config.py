@@ -25,9 +25,9 @@ So the checks here never restate what the pins are. They execute the config:
     grew a second copy that Renovate would rewrite together with the first.
   * The captured `currentValue`/`currentDigest` are then joined to the other
     places the same literal is written by hand. The devcontainer digest is in
-    three files; Renovate's built-in `github-actions` manager updates the two
-    workflow copies and the custom manager here updates the third. Those are
-    two different Renovate updates for one digest, so the package rule that
+    two files; Renovate's built-in `github-actions` manager updates the
+    workflow copy and the custom manager here updates `ci/defaults.json`. Those
+    are two different Renovate updates for one digest, so the package rule that
     groups them into one pull request is held here too (#133): without it each
     half fails tests/test_workflow_build_container.py on its own and neither
     pull request can merge, which is what happened with #76 and #77.
@@ -65,11 +65,10 @@ RUFF_PIN_FILES = {
 }
 
 # Files that write the privileged build container's digest by hand. Renovate's
-# built-in github-actions manager owns the two workflow copies; the custom
+# built-in github-actions manager owns the workflow copy; the custom
 # manager in renovate.json owns the ci/defaults.json copy.
 DEVCONTAINER_DIGEST_FILES = {
     ".github/workflows/build.yml",
-    ".github/workflows/build-branch.yml",
     "ci/defaults.json",
 }
 
@@ -231,7 +230,7 @@ class PinJoinTests(unittest.TestCase):
         cls.managers = managers_by_dep(cls.config)
         cls.defaults = json.loads(DEFAULTS_JSON.read_text(encoding="utf-8"))
 
-    def test_the_devcontainer_digest_is_one_digest_in_all_three_files(self) -> None:
+    def test_the_devcontainer_digest_is_one_digest_in_both_files(self) -> None:
         """Two different mechanisms update these copies; they must land on one digest."""
         found: dict[str, set[str]] = {}
         for name in self.tracked:
@@ -368,7 +367,7 @@ class PackageRuleTests(unittest.TestCase):
         self.assertIs(matching[0]["automerge"], False)
 
     def test_both_kinds_of_devcontainer_digest_update_move_in_one_pr(self) -> None:
-        """Two managers update the three copies; only a shared group puts them in one PR.
+        """Two managers update the two copies; only a shared group puts them in one PR.
 
         Each half alone fails test_container_literals_match_the_checked_in_default,
         so two PRs for one bump could never merge (#76 and #77). The rule must

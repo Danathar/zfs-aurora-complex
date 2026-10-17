@@ -233,13 +233,11 @@ quite:
 
 | Workflow | Trigger | What a pull request or non-`main` branch causes |
 | --- | --- | --- |
-| `build.yml` | push to `main`, daily cron, manual dispatch | **Nothing from a branch.** This is the only path that signs and promotes. |
+| `build.yml` | push to `main`, daily cron, manual dispatch | **Nothing from a branch.** This is the only path that signs and promotes. Its akmods job runs only on `main`, so a dispatch on another ref builds nothing. |
 | `build-pr.yml` | `pull_request` | A validation build. Its header says it stops before any push or signing step. |
-| `build-branch.yml` | push to any branch except `main` | An **unsigned** `br-*` test image for throwaway VMs. The push step is skipped only when the actor's login contains `[bot]` (`actor_is_bot` in `ci_tools/tagging_context.py`), which covers Renovate. A branch pushed by an actor whose login has no `[bot]` in it publishes one; whether Hive's login counts as a bot is not stated in this repository, so treat a Hive branch as able to leave a tag. It never rebuilds the shared akmods cache and never signs, and machines enforcing this repository's signature policy refuse `br-*` tags (`docs/install-and-verify.md`). |
 
-So a branch pushed by an agent can leave an unsigned throwaway tag in the
-registry, and cannot move `:latest`. Merging to `main` is what publishes, which
-is why it is a person's action.
+So a branch pushed by an agent publishes nothing and cannot move `:latest`.
+Merging to `main` is what publishes, which is why it is a person's action.
 
 ## If you find a vulnerability
 

@@ -56,9 +56,9 @@ def sign_published_image(
 
     Pass `image_digest` when the caller already knows the exact digest it wants
     signed; `image_tag` is then used only for log output. Resolving the tag here
-    instead would reintroduce a race for any tag more than one workflow can
-    publish: the shared akmods cache tag (`main-<fedora>`) is rebuilt and
-    republished by `build-branch.yml` as well as `build.yml`, so a concurrent
+    instead would reintroduce a race for any tag more than one run can
+    publish: the shared akmods cache tag (`main-<fedora>`) can be republished
+    by any run holding a registry write token for it, so a concurrent
     run can move that tag between the moment a caller pins a digest and the
     moment this function looks it up. Signing the re-resolved tag would then
     sign the other run's image and leave the digest this run actually consumed
