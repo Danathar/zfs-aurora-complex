@@ -11,8 +11,14 @@
 # covering the same files. docs/branch-protection.md explains the rule and what
 # it costs a sole maintainer.
 
-# The seven files AGENTS.md section 0 rule 2 names.
-/.github/workflows/build.yml                                  @Danathar
+# Every workflow, not only build.yml. Once a workflow is on main, any job in it
+# can declare the production-signing environment and get the signing key, so a
+# change to any of them waits for the owner. Renovate's pin bumps in workflows
+# wait too; that is the cost.
+/.github/workflows/                                           @Danathar
+
+# The seven files AGENTS.md section 0 rule 2 names. The first, build.yml, is
+# owned by the workflows line above.
 /.github/actions/publish-native-image/                        @Danathar
 /ci_tools/sign_image.py                                       @Danathar
 /ci_tools/promote_stable.py                                   @Danathar
