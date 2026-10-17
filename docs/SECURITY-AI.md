@@ -116,6 +116,9 @@ provides each instead.
 Any new workflow here must also be unable to affect the build: no
 `packages: write`, no `contents: write` to `main`, no dispatch of `build.yml`,
 and no use of the `production-signing` environment or `SIGNING_SECRET`.
+`.github/CODEOWNERS` owns every file under `.github/workflows/`, so a pull
+request that adds or changes a workflow cannot merge until the owner approves
+it: once on `main`, any job can declare that environment and be handed the key.
 
 ## Labels carry authority — automation must not apply them
 

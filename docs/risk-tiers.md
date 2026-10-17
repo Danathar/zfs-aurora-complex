@@ -24,9 +24,9 @@ how much of it to do.
 
 **Anything touching the seven files in `AGENTS.md` section 0 rule 2** (which
 `CLAUDE.md` section 0 repeats), plus the ZFS line, anything pool-facing, the files the image installs
-onto every booted machine, the policy file that says what each workflow's token
-may do, the ruleset that keeps `main` behind a pull request, and the files that
-decide what an agent may run here without a prompt.
+onto every booted machine, every workflow file, the policy file that says what
+each workflow's token may do, the ruleset that keeps `main` behind a pull
+request, and the files that decide what an agent may run here without a prompt.
 Labelled `area/safety-critical`.
 
 - `.github/workflows/build.yml`
@@ -43,6 +43,10 @@ Labelled `area/safety-critical`.
 - `cosign.pub`, `ci/defaults.json`'s ZFS and base-image values
   (`DEFAULT_ZFS_MINOR_VERSION`, `DEFAULT_BASE_IMAGE`, `STABLE_SIGNAL_IMAGE`,
   `DEFAULT_BUILD_CONTAINER_IMAGE`)
+- `.github/workflows/`, every workflow and not only `build.yml`, because once a
+  workflow is on `main` any job in it can declare the production-signing
+  environment and be handed the key that signs the published image. The cost:
+  every workflow change waits for the owner, Renovate's pin bumps included
 - `.github/policies/workflow-permissions.json`, because a token that gains
   `packages: write` can push an image to the registry these machines pull from
 - `.github/rulesets/`, because the ruleset in it is what keeps `main`, and so
@@ -86,18 +90,20 @@ code owner's approving review before a pull request that touches one can merge
 The rest of the image and the decision logic: `Containerfile`,
 `build_files/`, `containerfiles/`, the other `ci_tools/` and `shared/`
 modules, `ci/` (the parts of `defaults.json` Tier 3 does not name, and
-`inputs.lock.json`), `renovate.json`, and workflows other than `build.yml`.
-Labelled `area/build`, `area/ci`, `area/ci-tools`.
+`inputs.lock.json`), and `renovate.json`. Labelled `area/build`, `area/ci`,
+`area/ci-tools`; the workflow files the CI label also matches are Tier 3.
 
 **What it requires:** rubric sections 1, 4, 5 and 6. A green unit suite is not
 sufficient evidence — `Containerfile` and `build_files/` execute only inside an
 image build, so say how the change was verified or say plainly that it was not.
 
-Watch specifically for a widened `permissions:` block, a new secret reference,
-a new `environment:`, or a new external action. Those are Tier 3 questions
-arriving inside a Tier 2 diff. Once `.github/policies/workflow-permissions.json`
-is in the tree, a widened block cannot arrive alone: the unit suite fails until
-that file changes in the same pull request, and that file is Tier 3.
+Watch specifically for a new external action in a composite action under
+`.github/actions/`. A widened `permissions:` block, a new secret reference, a
+new `environment:` or a new external action in a workflow is a Tier 3 question,
+and since every workflow file is Tier 3 it waits for the owner's approval.
+Once `.github/policies/workflow-permissions.json` is in the tree, a widened
+block cannot arrive alone: the unit suite fails until that file changes in the
+same pull request, and that file is Tier 3.
 
 ### Tier 1 — can only break CI or mislead a reader
 

@@ -69,9 +69,11 @@ applies as-is. What each rule does:
   for the admin role in `pull_request` mode (`{"actor_id": 5, "actor_type":
   "RepositoryRole", "bypass_mode": "pull_request"}` in `bypass_actors`). That
   bypass lets an admin merge a pull request past *all* of its rules, the
-  required check included, so it is not in the file. Renovate's pull requests
-  that bump a pin in `build.yml` or `publish-native-image/` also wait for the
-  owner's approval.
+  required check included, so it is not in the file. Every file under
+  `.github/workflows/` is Tier 3, not only `build.yml`, because once a workflow
+  is on `main` any job in it can ask for the production signing key. So
+  Renovate's pull requests that bump a pin in any workflow, or in
+  `publish-native-image/`, also wait for the owner's approval.
 
   `dismiss_stale_reviews_on_push` is on, so a review given
   before a later push does not carry over. The file also carries
