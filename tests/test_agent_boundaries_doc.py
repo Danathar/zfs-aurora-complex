@@ -8,7 +8,7 @@ registered, what the ruleset requires, and recomputes it
 from the file, as text or JSON, with no YAML parser.
 Why: The page is the one place that says which limits on an agent a tool enforces. Every row is
 a fact about a file someone can change without opening the page. A row that still says "denied"
-after the deny rule went, or a "no CODEOWNERS" section after code-owner review was switched on,
+after the deny rule went, or a CODEOWNERS row after code-owner review was switched off,
 tells a reader a gate exists that does not.
 Goal: Make the page fail here when the gates move under it.
 
@@ -177,19 +177,22 @@ class RulesetRowTests(unittest.TestCase):
 
 
 class CodeownersSectionTests(unittest.TestCase):
-    """'Why there is no CODEOWNERS file' against the ruleset and the tree."""
+    """'Why CODEOWNERS lists only Tier 3' and the CODEOWNERS gate row against the ruleset and the tree."""
 
-    def test_the_ruleset_asks_for_no_code_owner_review_and_no_approval(self) -> None:
-        text = _flat(_section("Why there is no CODEOWNERS file"))
-        self.assertIn("sets `require_code_owner_review` to `false` and needs no approval", text)
+    def test_the_ruleset_asks_for_code_owner_review_and_no_other_approval(self) -> None:
+        text = _flat(_section("Why CODEOWNERS lists only Tier 3"))
+        self.assertIn("sets `require_code_owner_review` to `true` and needs no other approval", text)
         rules = json.loads(RULESET.read_text(encoding="utf-8"))["rules"]
         (pull_request,) = [rule for rule in rules if rule["type"] == "pull_request"]
-        self.assertIs(pull_request["parameters"]["require_code_owner_review"], False)
+        self.assertIs(pull_request["parameters"]["require_code_owner_review"], True)
         self.assertEqual(pull_request["parameters"]["required_approving_review_count"], 0)
 
-    def test_there_is_no_codeowners_file(self) -> None:
+    def test_the_one_codeowners_file_is_the_one_the_gate_row_names(self) -> None:
+        # GitHub reads the first of these it finds. A second copy elsewhere would leave
+        # the page describing a file GitHub ignores.
         present = [path for path in CODEOWNERS_PATHS if (REPO_ROOT / path).exists()]
-        self.assertEqual(present, [], "a CODEOWNERS file exists; the page says there is none")
+        self.assertEqual(present, [".github/CODEOWNERS"])
+        self.assertIn("`require_code_owner_review`", _gate_row(".github/CODEOWNERS"))
 
 
 if __name__ == "__main__":

@@ -208,26 +208,28 @@ the work has to keep:
 5. **Do not touch an open Renovate pull request.** It is the dependency app's, and
    it is rebased by the app.
 
-### Two green pull requests can be red together
+### A pull request must be up to date before it merges
 
 The required check is `Python Unit Tests`. The ruleset in
 [`.github/rulesets/main.json`](../.github/rulesets/main.json) sets
-`strict_required_status_checks_policy` to `false`. In plain terms: GitHub does not
-make a pull request catch up with `main` before it merges. A pull request is
-judged by the code it was tested with, not by what `main` has become.
+`strict_required_status_checks_policy` to `true`. In plain terms: GitHub will not
+merge a pull request until its branch contains everything on `main` and
+`Python Unit Tests` has passed on that combined code.
 
 So if pull request A and pull request B each pass, and both change the same
-function from different directions, merging A and then B can leave `main` broken
-even though neither ever showed red. The failure then shows on `main`, and a push
-to `main` that changes more than documentation starts `build.yml`, the workflow
-that signs and promotes an image. See [`branch-protection.md`](./branch-protection.md)
-for the ruleset itself, and [`safety-model.md`](./safety-model.md) for what a bad
-`main` can reach.
+function from different directions, B cannot merge straight after A. Once A
+merges, B is out of date: it has to update from `main`, and the rerun of
+`Python Unit Tests` shows whether the two changes break each other before `main`
+does. That matters because a push to `main` that changes more than documentation
+starts `build.yml`, the workflow that signs and promotes an image. See
+[`branch-protection.md`](./branch-protection.md) for the ruleset itself, and
+[`safety-model.md`](./safety-model.md) for what a bad `main` can reach.
 
-GitHub's merge queue is unavailable on a repository owned by a personal account,
-so nothing serialises merges. The protection is a step the merger takes: when two
-open pull requests touch the same files, merge one, update the other branch from
-`main`, wait for `Python Unit Tests` to rerun, and only then merge it.
+The cost falls on parallel work. GitHub's merge queue is unavailable on a
+repository owned by a personal account, so nothing does the updating for you:
+every merge leaves each other open pull request behind `main`, and each one must
+be updated and wait for `Python Unit Tests` again before it can merge. Agents
+working in parallel should expect that.
 
 To check what the live ruleset says rather than trust this page:
 
@@ -253,8 +255,8 @@ gh pr list --state merged --limit 1000 --json mergedBy \
 
 A merge to `main` builds, signs and promotes the image, so the required checks are
 the gate. The ruleset requires a pull request and a passing `Python Unit Tests`;
-it requires no approving review, and it allows no bypass actors. It applies to the
-Hive app as to anyone else.
+it requires no approving review except the code owner's on Tier 3 paths, and it
+allows no bypass actors. It applies to the Hive app as to anyone else.
 
 Agent sessions the maintainer runs do not merge on their own initiative.
 [`AGENTS.md`](../AGENTS.md) section 0 rule 6 says not to push, promote, tag, or
@@ -270,11 +272,13 @@ gh api repos/Danathar/zfs-aurora-complex/issues/<number>/events \
 
 The Hive app's merges include pull requests the labeler marked
 `area/safety-critical` (Tier 3 in [`risk-tiers.md`](./risk-tiers.md)): #139, #149,
-#158 and #159. [`SECURITY-AI.md`](./SECURITY-AI.md) still names "a human on the
-merge button for anything in Tier 3" among the things standing in place of an
-in-repo agent. Which of the two is intended is the maintainer's decision, and it
-belongs in that page and in `risk-tiers.md`, not here. To list those pull
-requests today:
+#158 and #159. [`SECURITY-AI.md`](./SECURITY-AI.md) names "a human on the merge
+button for anything in Tier 3" among the things standing in place of an in-repo
+agent, and nothing enforced it then. The maintainer chose to enforce it (#177):
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the Tier 3 paths, and the
+ruleset requires the code owner's approval for them, so the Hive app can still
+merge a Tier 3 pull request, but only after the maintainer has approved it on
+GitHub. To list the Tier 3 pull requests the Hive app has merged:
 
 ```bash
 gh pr list --state merged --limit 1000 --json number,mergedBy,labels \

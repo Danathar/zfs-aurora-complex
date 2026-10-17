@@ -105,7 +105,10 @@ to `main`, but it is the last gate, not a reason to add more ways to reach it.
 
 What stands in place of an in-repo agent: Hive's own gating, this policy, the
 CI gates, the ruleset on `main`, and a human on the merge button for anything in
-Tier 3 ([`risk-tiers.md`](./risk-tiers.md)). The `.acmm.yml` file records the
+Tier 3 ([`risk-tiers.md`](./risk-tiers.md)). That last one is enforced: the
+ruleset requires the code owner's approval for every path
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists, and it lists the Tier 3
+paths ([`branch-protection.md`](./branch-protection.md#the-ruleset)). The `.acmm.yml` file records the
 omission as a deliberate waiver of `acmm:ai-fix-workflow`,
 `acmm:copilot-review-apply` and `acmm:github-actions-ai`, and says what
 provides each instead.
