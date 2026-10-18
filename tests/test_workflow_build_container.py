@@ -253,6 +253,14 @@ class SigningTargetTests(unittest.TestCase):
             lines.append(line)
         return textwrap.dedent("\n".join(lines))
 
+    # Logs each call's arguments on one line; `inspect` answers with
+    # $REGISTRY_DIGEST, the digest the stub registry holds for the tag.
+    SKOPEO_STUB = (
+        "#!/bin/bash\n"
+        'printf "%s\\n" "$*" >> "${STUB_LOG}"\n'
+        'if [ "$1" = inspect ]; then printf "%s\\n" "${REGISTRY_DIGEST}"; fi\n'
+    )
+
     def _run(self, name: str, env: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], Path]:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
@@ -262,6 +270,9 @@ class SigningTargetTests(unittest.TestCase):
         python_stub = bindir / "python3"
         python_stub.write_text('#!/bin/bash\nprintf "%s" "${IMAGE_REPO}" > "${STUB_SEEN}"\n', encoding="utf-8")
         python_stub.chmod(0o755)
+        skopeo_stub = bindir / "skopeo"
+        skopeo_stub.write_text(self.SKOPEO_STUB, encoding="utf-8")
+        skopeo_stub.chmod(0o755)
         output = temp / "github_output"
         full_env = {
             "PATH": f"{bindir}:/usr/bin:/bin",
@@ -270,6 +281,7 @@ class SigningTargetTests(unittest.TestCase):
             "GITHUB_RUN_ID": "42",
             "GITHUB_OUTPUT": str(output),
             "STUB_SEEN": str(temp / "seen"),
+            "STUB_LOG": str(temp / "skopeo.log"),
             **env,
         }
         result = subprocess.run(
@@ -301,7 +313,18 @@ class SigningTargetTests(unittest.TestCase):
 
     def test_a_forged_candidate_tag_or_fedora_version_is_refused(self) -> None:
         good_tag = f"candidate-{self.SHA[:7]}-44"
-        for fedora, reported in (("44", "latest"), ("44", "stable-1-abc"), ("44;latest", good_tag), ("", good_tag)):
+        injected = "\nimage_repo=ghcr.io/someone/zfs-aurora-complex"
+        for fedora, reported in (
+            ("44", "latest"),
+            ("44", "stable-1-abc"),
+            ("44;latest", good_tag),
+            ("", good_tag),
+            # Both outputs come from jobs nobody has to approve, so a forger can
+            # make the reported tag agree with a bad Fedora version. The number
+            # check alone must refuse these, including a second GITHUB_OUTPUT line.
+            ("44;latest", f"{good_tag};latest"),
+            (f"44{injected}", f"{good_tag}{injected}"),
+        ):
             with self.subTest(fedora=fedora, reported=reported):
                 result, temp = self._run(
                     "Work out what to sign", {"FEDORA_VERSION": fedora, "REPORTED_CANDIDATE_TAG": reported}
@@ -325,6 +348,128 @@ class SigningTargetTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("Refusing to sign", result.stderr)
                 self.assertFalse((temp / "seen").exists(), "the signer ran on a forged repository")
+
+
+    def test_the_pushed_digest_must_be_what_this_runs_transient_tag_holds(self) -> None:
+        repo = "ghcr.io/danathar/zfs-aurora-complex"
+        transient = f"candidate-{self.SHA[:7]}-44-unsigned-42"
+        pushed = "sha256:" + "1" * 64
+        env = {"IMAGE_REPO": repo, "TRANSIENT_TAG": transient, "IMAGE_DIGEST": pushed}
+
+        result, temp = self._run("Confirm the pushed digest", {**env, "REGISTRY_DIGEST": pushed})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (temp / "skopeo.log").read_text(encoding="utf-8").splitlines(),
+            [f"inspect --format {{{{ .Digest }}}} docker://{repo}:{transient}"],
+        )
+
+        result, _temp = self._run("Confirm the pushed digest", {**env, "REGISTRY_DIGEST": "sha256:" + "2" * 64})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Refusing to sign", result.stderr)
+
+    def test_the_candidate_tag_moves_only_to_the_signed_digest(self) -> None:
+        repo = "ghcr.io/danathar/zfs-aurora-complex"
+        tag = f"candidate-{self.SHA[:7]}-44"
+        signed = "sha256:" + "1" * 64
+        env = {"IMAGE_REPO": repo, "CANDIDATE_TAG": tag, "IMAGE_DIGEST": signed}
+
+        result, temp = self._run("Point the candidate tag at the signed digest", {**env, "REGISTRY_DIGEST": signed})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (temp / "skopeo.log").read_text(encoding="utf-8").splitlines(),
+            [
+                f"copy --multi-arch=all --preserve-digests docker://{repo}@{signed} docker://{repo}:{tag}",
+                f"inspect --format {{{{ .Digest }}}} docker://{repo}:{tag}",
+            ],
+        )
+
+        result, _temp = self._run(
+            "Point the candidate tag at the signed digest", {**env, "REGISTRY_DIGEST": "sha256:" + "2" * 64}
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not match signed digest", result.stderr)
+
+
+class SigningJobWiringTests(unittest.TestCase):
+    """
+    Every step of sign-candidate-image uses the target the job worked out itself.
+
+    SigningTargetTests runs "Work out what to sign" in isolation. That is worth
+    nothing if a later step reads the repository or the tag from
+    build-candidate-image instead of from `steps.target`, so these pin each
+    step's inputs and the outputs the job takes from other jobs at all.
+    """
+
+    def setUp(self) -> None:
+        jobs = PackageWriteRefTests._jobs((WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8"))
+        self.jobs = jobs
+        self.job = jobs["sign-candidate-image"]
+
+    def _step_env(self, name: str) -> dict[str, str]:
+        step = self.job.split(f"name: {name}\n", 1)[1]
+        block = re.search(r"^        env:\n((?:          \S.*\n)+)", step, re.MULTILINE)
+        self.assertIsNotNone(block, f"{name} has no env block")
+        assert block is not None
+        pairs = (line.strip().split(": ", 1) for line in block.group(1).splitlines())
+        return {key: value for key, value in pairs}
+
+    def test_only_the_digest_fedora_version_and_reported_tag_come_from_other_jobs(self) -> None:
+        refs = re.findall(r"needs\.([\w-]+)\.outputs\.([\w-]+)", self.job)
+        self.assertEqual(
+            set(refs),
+            {
+                ("build-zfs-akmods", "fedora_version"),
+                ("build-candidate-image", "candidate_tag"),
+                ("build-candidate-image", "digest"),
+            },
+        )
+        # The reported tag is only ever cross-checked, never used.
+        self.assertEqual(refs.count(("build-candidate-image", "candidate_tag")), 1)
+        self.assertEqual(
+            self._step_env("Work out what to sign")["REPORTED_CANDIDATE_TAG"],
+            "${{ needs.build-candidate-image.outputs.candidate_tag }}",
+        )
+
+    def test_each_step_after_the_target_uses_the_target(self) -> None:
+        repo = "${{ steps.target.outputs.image_repo }}"
+        digest = "${{ needs.build-candidate-image.outputs.digest }}"
+        expected = {
+            "Confirm the pushed digest": {
+                "IMAGE_REPO": repo,
+                "TRANSIENT_TAG": "${{ steps.target.outputs.transient_tag }}",
+                "IMAGE_DIGEST": digest,
+            },
+            "Sign candidate image": {
+                "IMAGE_REPO": repo,
+                "IMAGE_DIGEST": digest,
+                "COSIGN_PRIVATE_KEY": "${{ secrets.SIGNING_SECRET }}",
+            },
+            "Point the candidate tag at the signed digest": {
+                "IMAGE_REPO": repo,
+                "CANDIDATE_TAG": "${{ steps.target.outputs.candidate_tag }}",
+                "IMAGE_DIGEST": digest,
+            },
+        }
+        for name, env in expected.items():
+            with self.subTest(step=name):
+                self.assertEqual(self._step_env(name), env)
+
+    def test_the_digest_is_confirmed_before_it_is_signed_and_signed_before_the_tag_moves(self) -> None:
+        order = [
+            self.job.index(f"name: {name}\n")
+            for name in (
+                "Work out what to sign",
+                "Confirm the pushed digest",
+                "Sign candidate image",
+                "Point the candidate tag at the signed digest",
+            )
+        ]
+        self.assertEqual(order, sorted(order))
+
+    def test_promotion_waits_for_the_candidate_signature(self) -> None:
+        # promote-stable moves `latest`; without this need it could run while the
+        # candidate is still unsigned.
+        self.assertIn("sign-candidate-image", PackageWriteRefTests._needs(self.jobs["promote-stable"]))
 
 
 class ProductionSigningTests(unittest.TestCase):

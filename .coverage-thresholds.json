@@ -14,7 +14,7 @@
     "ci_tools/prepare_validation_build.py": 34,
     "ci_tools/promote_stable.py": 38,
     "ci_tools/resolve_build_inputs.py": 204,
-    "ci_tools/sign_image.py": 46,
+    "ci_tools/sign_image.py": 50,
     "ci_tools/tagging_context.py": 14,
     "ci_tools/write_akmods_badge.py": 42,
     "ci_tools/write_build_inputs_manifest.py": 14,
