@@ -78,7 +78,7 @@
     { "workflow": "agent-audit.yml", "job": "audit", "timeout_minutes": 15 },
 
     { "workflow": "boot-test.yml", "job": "boot", "timeout_minutes": 60,
-      "note": "Host setup, a multi-GB pull and up to two VM boots of at most 15 minutes each. zfs-kinoite-complex's first hosted run of the same job took 4 minutes with one boot." },
+      "note": "Host setup, a multi-GB pull and up to two VM boots of at most 15 minutes each. The first hosted run (39125903251) took 6 minutes with one boot." },
 
     { "workflow": "build.yml", "job": "preflight", "timeout_minutes": 10 },
     { "workflow": "build.yml", "job": "build-zfs-akmods", "timeout_minutes": 30 },

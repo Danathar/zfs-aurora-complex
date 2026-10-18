@@ -10,8 +10,10 @@ name: Boot test
 # work; this file only gives it a runner with KVM, a VM stack and disk space.
 #
 # It reports; it gates nothing. It runs after build.yml has already moved
-# `:latest`, so a red run here means the image a user would pull right now
-# failed. auto-issues.yml turns a red scheduled run into an issue.
+# `:latest`, so a red run here means the boot test failed against the image a
+# user would pull right now: the image, or the runner that could not boot it
+# (docs/ai-ops-runbook.md says how to tell). auto-issues.yml turns a red
+# scheduled run into an issue.
 
 on:
   schedule:
@@ -39,10 +41,10 @@ jobs:
     name: boot
     # 26.04 ships podman 5 and a QEMU and virtiofsd new enough for bcvk.
     runs-on: ubuntu-26.04
-    # zfs-kinoite-complex's first hosted run of the same job took four minutes
-    # with one boot. Each of the at most two boots is bounded at fifteen
-    # minutes by BOOT_TIMEOUT_SECONDS in boot_test.py, so the cap covers two
-    # timed-out boots plus a slow pull of this larger image.
+    # The first hosted run (39125903251) took six minutes: host setup 2m14s,
+    # pull and one passing boot 3m33s. Each of the at most two boots is bounded
+    # at fifteen minutes by BOOT_TIMEOUT_SECONDS in boot_test.py, so the cap
+    # covers two timed-out boots plus a slow pull.
     timeout-minutes: 60
     env:
       WORK: ${{ github.workspace }}/artifacts/boot-test
