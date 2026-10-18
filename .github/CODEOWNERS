@@ -1,20 +1,23 @@
 # Code owners for the Tier 3 paths in docs/risk-tiers.md, and nothing else.
 #
 # The ruleset (.github/rulesets/main.json) sets require_code_owner_review, so a
-# pull request that touches a path listed here cannot merge, by anyone or any
-# token, until the owner approves it on GitHub. A pull request that touches none
-# of them merges on the required check alone, as before.
+# pull request that touches a path listed here and that someone other than the
+# owner opened cannot merge until the owner approves it on GitHub. GitHub does
+# not ask an author for their own review, so the owner's own pull requests,
+# and anything opened with the owner's token, are not held (see
+# docs/branch-protection.md). A pull request that touches none of these paths
+# merges on the required check alone, as before.
 #
-# That is why there is no catch-all `*` line: it would put every pull request
-# behind the owner's approval. tests/test_codeowners.py fails if one comes back,
+# That is why there is no catch-all `*` line: it would put every other author's
+# pull request behind the owner's approval. tests/test_codeowners.py fails if one comes back,
 # or if this list and the area/safety-critical globs in .github/labeler.yml stop
 # covering the same files. docs/branch-protection.md explains the rule and what
 # it costs a sole maintainer.
 
 # Every workflow, not only build.yml. Once a workflow is on main, any job in it
 # can declare the production-signing environment and get the signing key, so a
-# change to any of them waits for the owner. Renovate's pin bumps in workflows
-# wait too; that is the cost.
+# change to any of them from anyone but the owner waits for the owner.
+# Renovate's pin bumps in workflows wait too; that is the cost.
 /.github/workflows/                                           @Danathar
 
 # The seven files AGENTS.md section 0 rule 2 names. The first, build.yml, is

@@ -57,23 +57,26 @@ applies as-is. What each rule does:
   `require_code_owner_review` is what puts the owner on the merge button where
   it matters: [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists only the
   Tier 3 paths ([`risk-tiers.md`](./risk-tiers.md)), so a pull request that
-  touches one of them cannot merge, by anyone or any token, until the owner
-  approves it on GitHub, and that approval is on record. Any other pull request
-  touches no listed path and merges on the required check alone. That is why
-  `CODEOWNERS` has no catch-all `*` line, and `tests/test_codeowners.py` fails
-  if one comes back.
+  touches one of them and that someone other than the owner opened -- the Hive
+  app, Renovate, a contributor -- cannot merge until the owner approves it on
+  GitHub, and that approval is on record. A pull request that touches no
+  listed path merges on the required check alone. That is why `CODEOWNERS`
+  has no catch-all `*` line, and `tests/test_codeowners.py` fails if one comes
+  back.
 
-  The cost: the owner is the only code owner and cannot approve their own pull
-  request, so a pull request the owner opens that touches a Tier 3 path cannot
-  merge either. Either have an agent open it and approve that, or add a bypass
-  for the admin role in `pull_request` mode (`{"actor_id": 5, "actor_type":
-  "RepositoryRole", "bypass_mode": "pull_request"}` in `bypass_actors`). That
-  bypass lets an admin merge a pull request past *all* of its rules, the
-  required check included, so it is not in the file. Every file under
-  `.github/workflows/` is Tier 3, not only `build.yml`, because once a workflow
-  is on `main` any job in it can ask for the production signing key. So
-  Renovate's pull requests that bump a pin in any workflow, or in
-  `publish-native-image/`, also wait for the owner's approval.
+  **The gate does not apply to the owner's own pull requests.** The owner is
+  the only code owner, and GitHub does not ask an author for their own code
+  owner review: #186 touched `.github/workflows/` and
+  `.github/policies/workflow-permissions.json`, was opened from the owner's
+  account, and merged on 2026-10-18 with no review while this rule was on,
+  with GitHub reporting it mergeable and requesting no reviewer. So anything
+  that opens pull requests as the owner, an agent running with the owner's
+  `gh` token included, merges Tier 3 changes on the required check alone. The
+  gate binds every other author. Every file under `.github/workflows/` is
+  Tier 3, not only `build.yml`, because once a workflow is on `main` any job
+  in it can ask for the production signing key. So Renovate's pull requests
+  that bump a pin in any workflow, or in `publish-native-image/`, wait for the
+  owner's approval.
 
   `dismiss_stale_reviews_on_push` is on, so a review given
   before a later push does not carry over. The file also carries
@@ -147,6 +150,6 @@ ruleset in the same pull request, and `PUT` it straight after the merge.
 ## When there is a second reviewer
 
 Set `required_approving_review_count` to 1, and add the second reviewer to the
-Tier 3 lines in `.github/CODEOWNERS` so the owner's own Tier 3 pull requests
-can merge without a bypass. Consider
+Tier 3 lines in `.github/CODEOWNERS`, so the owner's own Tier 3 pull requests
+get a review too. Consider
 `require_last_push_approval`, so a push after approval needs a fresh one.

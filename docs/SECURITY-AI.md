@@ -117,10 +117,11 @@ to `main`, but it is the last gate, not a reason to add more ways to reach it.
 
 What stands in place of an in-repo agent: Hive's own gating, this policy, the
 CI gates, the ruleset on `main`, and a human on the merge button for anything in
-Tier 3 ([`risk-tiers.md`](./risk-tiers.md)). That last one is enforced: the
-ruleset requires the code owner's approval for every path
-[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists, and it lists the Tier 3
-paths ([`branch-protection.md`](./branch-protection.md#the-ruleset)). The `.acmm.yml` file records the
+Tier 3 ([`risk-tiers.md`](./risk-tiers.md)). That last one is enforced for
+every author but the owner: the ruleset requires the code owner's approval for
+every path [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists, it lists the
+Tier 3 paths, and GitHub does not hold the owner's own pull requests to it
+([`branch-protection.md`](./branch-protection.md#the-ruleset)). The `.acmm.yml` file records the
 omission as a deliberate waiver of `acmm:ai-fix-workflow`,
 `acmm:copilot-review-apply` and `acmm:github-actions-ai`, and says what
 provides each instead.
@@ -129,8 +130,9 @@ Any new workflow here must also be unable to affect the build: no
 `packages: write`, no `contents: write` to `main`, no dispatch of `build.yml`,
 and no use of the `production-signing` environment or `SIGNING_SECRET`.
 `.github/CODEOWNERS` owns every file under `.github/workflows/`, so a pull
-request that adds or changes a workflow cannot merge until the owner approves
-it: once on `main`, any job can declare that environment and be handed the key.
+request from anyone but the owner that adds or changes a workflow cannot merge
+until the owner approves it: once on `main`, any job can declare that
+environment and be handed the key.
 
 ## Labels carry authority — automation must not apply them
 
