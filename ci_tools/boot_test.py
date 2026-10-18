@@ -46,6 +46,10 @@ MARKER = "ZAC-BOOT-"
 #   request, or does not load against the running kernel at all, fails here.
 # - zpool:list proves userspace reaches the loaded module through /dev/zfs.
 #   The VM has no pool, so success is "no pools available".
+#
+# These prove the image boots with working ZFS, not whose build of ZFS it is.
+# Stock ghcr.io/ublue-os/aurora-dx:stable passed all four in a hosted run
+# (39126496706): the base ships kmod-zfs and loads it at boot as well.
 GUEST_CHECKS: tuple[tuple[str, str], ...] = (
     ("package:zfs", "rpm -q zfs"),
     ("package:kmod-zfs", "rpm -q kmod-zfs"),
