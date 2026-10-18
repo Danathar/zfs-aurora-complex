@@ -59,8 +59,8 @@ applies as-is. What each rule does:
   Tier 3 paths ([`risk-tiers.md`](./risk-tiers.md)), so a pull request that
   touches one of them and that someone other than the owner opened -- the Hive
   app, Renovate, a contributor -- cannot merge until the owner approves it on
-  GitHub, and that approval is on record. Any other pull request touches no
-  listed path and merges on the required check alone. That is why `CODEOWNERS`
+  GitHub, and that approval is on record. A pull request that touches no
+  listed path merges on the required check alone. That is why `CODEOWNERS`
   has no catch-all `*` line, and `tests/test_codeowners.py` fails if one comes
   back.
 
