@@ -42,6 +42,10 @@
         "label": {"contents": "read", "pull-requests": "write"}
       }
     },
+    "boot-test.yml": {
+      "workflow": {"contents": "read"},
+      "jobs": {}
+    },
     "nightly-compliance.yml": {
       "workflow": {"contents": "read"},
       "jobs": {}

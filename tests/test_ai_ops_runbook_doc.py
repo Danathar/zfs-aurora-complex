@@ -131,15 +131,14 @@ class ScheduleAndDefaultTests(unittest.TestCase):
 
 
 class AutoIssuesTests(unittest.TestCase):
-    def test_it_watches_the_three_workflows_the_entry_names(self) -> None:
+    WATCHED = ("nightly-compliance.yml", "agent-audit.yml", "boot-test.yml", "build.yml")
+
+    def test_it_watches_the_four_workflows_the_entry_names(self) -> None:
         match = re.search(r"workflows: \[(.*?)\]", workflow_text("auto-issues.yml"))
         watched = [w.strip().strip('"') for w in match.group(1).split(",")]
-        self.assertEqual(
-            sorted(watched),
-            sorted(workflow_name(f) for f in ("nightly-compliance.yml", "agent-audit.yml", "build.yml")),
-        )
+        self.assertEqual(sorted(watched), sorted(workflow_name(f) for f in self.WATCHED))
         entry = entries()["auto-issues.yml"]
-        for file in ("nightly-compliance.yml", "agent-audit.yml", "build.yml"):
+        for file in self.WATCHED:
             self.assertIn(f"`{file}`", entry)
 
     def test_the_title_and_the_artifact_prefixes_are_the_workflows(self) -> None:

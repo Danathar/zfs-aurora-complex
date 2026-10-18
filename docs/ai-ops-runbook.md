@@ -136,6 +136,27 @@ Every file in `.github/workflows/` has an entry here.
 - **Detail:** [`quality.md`](./quality.md), "The nightly job answers a question the
   others cannot". It reports; it repairs nothing.
 
+### `boot-test.yml` — "Boot test"
+
+- **Means:** after every `build.yml` run on `main` (the daily scheduled one
+  included, even when its gate skipped the build) it boots the published `:latest`, by digest, in a
+  throwaway VM on the runner (bcvk), logs in over SSH, and checks that the
+  `zfs` and `kmod-zfs` packages are installed, that the `zfs` module loaded at
+  boot, and that `zpool list` reaches it. Its job is `boot`. It runs after
+  `build.yml` has moved `:latest`, so it gates nothing. Red means the boot
+  test failed against the image a user would pull now, not yet that the image
+  is broken: see **First**.
+- **First:** read the run's summary. It names the digest booted and each
+  check's result. A summary saying the VM never reached the checks is a VM
+  that did not boot or never answered SSH; read the `boot-test-*` artifact's
+  `bcvk.log` and `console.txt` before blaming the image, because a runner that
+  could not start the VM looks the same from the summary. A failed check is the
+  image. Do not re-tag or re-sign anything to fix it
+  ([`AGENTS.md`](../AGENTS.md) section 0 rule 6).
+- **Detail:** the header of `ci_tools/boot_test.py`. Failed systemd units are
+  listed but not judged: several fail on every ephemeral boot, such as
+  `bootloader-update.service`, which finds no `/boot` to update.
+
 ### `akmods-failure-triage.yml` — "Akmods Failure Triage"
 
 - **Means:** runs after `build.yml` finishes. It opens or updates one sticky issue
@@ -153,12 +174,14 @@ Every file in `.github/workflows/` has an entry here.
 
 ### `auto-issues.yml` — "Auto issues"
 
-- **Means:** runs after `nightly-compliance.yml`, `agent-audit.yml` or `build.yml`
-  finishes. Its job "Open, update or close the tracking issue" opens one issue when
-  a tracked run on `main` fails, comments on that issue when it fails again, and
-  closes it when the next tracked run passes. Tracked means a *scheduled* run of
-  any of the three, or a *push* run of `build.yml` — the build a merge starts,
-  which nobody watches once Hive merges its own pull requests. The issue title is
+- **Means:** runs after `nightly-compliance.yml`, `agent-audit.yml`,
+  `boot-test.yml` or `build.yml` finishes. Its job "Open, update or close the
+  tracking issue" opens one issue when a tracked run on `main` fails, comments on
+  that issue when it fails again, and closes it when the next tracked run passes.
+  Tracked means a *scheduled* run of the other three, a *push* run of
+  `build.yml` — the build a merge starts, which nobody watches once Hive merges
+  its own pull requests — or a `boot-test.yml` run that a build's completion
+  started (`workflow_run`), since it has no schedule. The issue title is
   `Run failing on main:` followed by the workflow's name, and its author is
   `app/github-actions`. It applies no label.
 - **First:** open the run linked in the issue and use that workflow's entry on this

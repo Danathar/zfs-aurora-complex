@@ -19,7 +19,9 @@ works on a machine. [`safety-model.md`](./safety-model.md) states that boundary,
 and [`runtime-validation-proposal.md`](./runtime-validation-proposal.md) records
 the maintainer's decision, on 2026-07-28, to rely on image rollback rather than
 add a runtime test tier. This page does not reopen that decision, but it does
-refuse to let a green signal stand in for it.
+refuse to let a green signal stand in for it. The closest signal is
+`boot-test.yml`, which boots `:latest` in a VM after every `build.yml` run on
+`main` and checks that ZFS loads; it has no badge, gates nothing, and creates no pool.
 
 ## The badges
 
@@ -100,6 +102,7 @@ Two properties of the badge pipeline are deliberate:
 | `promote-stable` digest re-read | after the copy to `:latest` | the run, not the copy. It detects a bad promotion, it does not prevent one. See the warning below |
 | `bootc container lint` (`Containerfile`) | every image build | the build, if `bootc container lint` rejects the image |
 | `nightly-compliance.yml` | 05:00 UTC daily, and on dispatch | nothing. It reports. See below |
+| `boot-test.yml` | after every `build.yml` run on `main`, and on dispatch | nothing. It boots `:latest` after promotion and reports |
 
 > **A red `build.yml` does not prove `:latest` is untouched.** The candidate is
 > pushed and signed before the promotion job runs, and `promote_stable.py`

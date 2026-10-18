@@ -25,6 +25,7 @@ def command_map() -> dict[str, Callable[[], None]]:
     from ci_tools.akmods_build_and_publish import main as akmods_build_and_publish
     from ci_tools.akmods_clone_pinned import main as akmods_clone_pinned
     from ci_tools.akmods_configure_zfs_target import main as akmods_configure_zfs_target
+    from ci_tools.boot_test import main as boot_test
     from ci_tools.check_akmods_cache import main as check_akmods_cache
     from ci_tools.check_stable_signal import main as check_stable_signal
     from ci_tools.classify_akmods_failure import main as classify_akmods_failure
@@ -58,6 +59,7 @@ def command_map() -> dict[str, Callable[[], None]]:
         "classify-akmods-failure": classify_akmods_failure,
         "write-akmods-badge": write_akmods_badge,
         "write-last-good-build-badge": write_last_good_build_badge,
+        "boot-test": boot_test,
     }
 
 

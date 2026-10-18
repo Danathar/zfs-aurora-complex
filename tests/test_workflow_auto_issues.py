@@ -42,6 +42,7 @@ STEP = "Track the unattended run"
 UNWATCHED: dict[str, str] = {}
 
 BUILD = "Build And Promote Main Image"
+BOOT_TEST = "Boot test"
 
 GITHUB_BASH = ["bash", "--noprofile", "--norc", "-eo", "pipefail"]
 
@@ -269,6 +270,7 @@ class TrackStepTests(unittest.TestCase):
             "another repository": {"head_repo": "someone/zfs-aurora-complex"},
             "a push of a workflow other than the build": {"event": "push"},
             "a pull request": {"event": "pull_request"},
+            "a workflow_run of a workflow other than Boot test": {"event": "workflow_run"},
         }
         for label, overrides in cases.items():
             with self.subTest(label):
@@ -287,6 +289,22 @@ class TrackStepTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self._calls(), [])
+
+    def test_a_boot_test_the_build_started_opens_and_closes_its_issue(self) -> None:
+        # Boot test has no schedule: build.yml's completion starts it, so its
+        # unattended runs arrive as workflow_run events.
+        title = "Run failing on main: Boot test"
+        result = self._run(conclusion="failure", workflow=BOOT_TEST, event="workflow_run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        writes = self._writes()
+        self.assertEqual([call[:2] for call in writes], [["issue", "create"]])
+        self.assertIn(title, writes[0])
+
+        (self.log / "count").unlink()
+        issues = [{"number": 13, "title": title, "author": BOT}]
+        result = self._run(conclusion="success", workflow=BOOT_TEST, event="workflow_run", open_issues=issues)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[:3] for call in self._writes()], [["issue", "close", "13"]])
 
     def test_a_build_failure_with_no_akmods_payload_opens_the_scheduled_failure_issue(self) -> None:
         result = self._run(
