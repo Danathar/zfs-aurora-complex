@@ -136,9 +136,10 @@ without requiring a manual `modprobe zfs`.
 
 ### 5. Sign Published Tags
 
-Candidate tags are signed after push by resolving the pushed tag to a digest and
-then signing that digest, inside the `production-signing` environment that only
-`main` refs can reach.
+Candidate images are pushed by `build-candidate-image`, which holds no key, under
+a transient tag. The separate `sign-candidate-image` job then signs the pushed
+digest, inside the `production-signing` environment that only `main` refs can
+reach, and only afterwards moves the candidate tag to that digest.
 
 Stable `latest` is promoted by copying the already-signed candidate digest, not
 by signing a second time.

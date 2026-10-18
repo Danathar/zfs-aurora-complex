@@ -1064,9 +1064,11 @@ class DiagnoseGuardTableTests(unittest.TestCase):
         # Escalate: a moved shared tag, or a push that rewrote the config. The guard is ours.
         "Refusing to pin akmods cache": True,
         "Promoted digest mismatch": True,  # escalate, and the guard is ours
-        "Failed to resolve digest": False,  # transient registry/CDN failure
+        "Missing digest in skopeo inspect output": False,  # transient registry/CDN failure
         "SIGNING_SECRET is empty": False,  # wrong trigger context, not a defect
         "Missing required verification key file": True,  # a repository problem
+        "is not a lowercase ghcr.io/<owner>/<name> repository": True,  # the signing job's wiring
+        "is not a sha256 digest": True,  # the push step's output, ours to fix
         "Replay lock file not found": True,  # pass the lock file
     }
 

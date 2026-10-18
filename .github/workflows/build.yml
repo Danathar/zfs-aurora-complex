@@ -203,32 +203,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Only code-owned code runs in a job that holds the signing key: build.yml
+    # itself, pinned third-party actions, the code-owned
+    # `.github/actions/install-signing-tools`, and `ci_tools/sign_image.py`,
+    # which imports only the standard library and runs under `python3 -I` so no
+    # other repository module can load into the process. Nothing here calls
+    # `python3 -m ci_tools.cli` or another local action: every module the CLI
+    # imports would otherwise run next to the key (#177, option B).
+    # tests/test_workflow_build_container.py holds both signing jobs to this.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - id: defaults
-        name: Load repository defaults
-        uses: ./.github/actions/load-ci-defaults
-
-      - id: registry
-        name: Prepare registry context
-        uses: ./.github/actions/prepare-registry-context
-
-      - name: Install skopeo and cosign
-        uses: ./.github/actions/install-signing-tools
-
-      # `cosign sign` pushes the signature back to GHCR as a blob, so this job
-      # needs a registry login of its own. ci_tools/sign_image.py deliberately
-      # threads no credentials through and relies on the calling workflow
-      # having authenticated first, the same way publish-native-image and
-      # promote-stable do.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
 
       - name: Require signing secret for akmods cache signing
         if: env.HAS_SIGNING_SECRET != 'true'
@@ -237,14 +223,26 @@ jobs:
           echo "SIGNING_SECRET is not configured. Refusing to leave a freshly rebuilt akmods cache unsigned: a later run's cache-reuse check refuses to trust an unsigned cache, so an unsigned rebuild here just forces every future run to rebuild again." >&2
           exit 1
 
-      # Fail closed rather than silently letting sign-image fall back to
-      # re-resolving the tag, which is exactly the race this digest avoids.
+      # Fail closed rather than re-resolving the tag, which is exactly the race
+      # this digest avoids.
       - name: Require a pinned cache digest to sign
         if: needs.build-zfs-akmods.outputs.akmods_image_digest == ''
         shell: bash
         run: |
           echo "This run rebuilt the shared akmods cache but produced no pinned digest. Refusing to sign by re-resolving the shared tag, which another run could have moved." >&2
           exit 1
+
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
+      # `cosign sign` pushes the signature back to GHCR, so this job needs a
+      # registry login of its own. ci_tools/sign_image.py threads no
+      # credentials through and relies on this login.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Signs the exact digest the previous job pinned, not the shared tag.
       # ci_tools/check_akmods_cache.py refuses to reuse a cache without this
@@ -259,16 +257,24 @@ jobs:
       # moment this job runs. Re-resolving the tag would then sign the other
       # run's image and leave the digest this run's candidate image was
       # actually built from unsigned forever.
+      # The repository is built here from ci/defaults.json (code-owned) and the
+      # repository owner, never taken from build-zfs-akmods: that job runs
+      # code nobody has to approve, so its outputs may name only what to
+      # sign inside this repository's own akmods package, not where.
       - name: Sign shared akmods cache image
         shell: bash
         env:
-          IMAGE_ORG: ${{ steps.registry.outputs.image_org }}
-          IMAGE_NAME: ${{ steps.defaults.outputs.akmods_repo }}
-          IMAGE_TAG: main-${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          AKMODS_IMAGE: ${{ needs.build-zfs-akmods.outputs.akmods_image }}
           IMAGE_DIGEST: ${{ needs.build-zfs-akmods.outputs.akmods_image_digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
-          python3 -m ci_tools.cli sign-image
+          set -euo pipefail
+          IMAGE_REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$(jq -er .AKMODS_REPO ci/defaults.json)"
+          if [ "${AKMODS_IMAGE%:*}" != "${IMAGE_REPO}" ]; then
+            echo "build-zfs-akmods reported ${AKMODS_IMAGE}, which is not in ${IMAGE_REPO}. Refusing to sign." >&2
+            exit 1
+          fi
+          IMAGE_REPO="${IMAGE_REPO}" python3 -I ci_tools/sign_image.py
 
   build-candidate-image:
     name: Build Candidate Image
@@ -278,11 +284,12 @@ jobs:
     if: github.event_name != 'schedule' || needs.preflight.outputs.should_build == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 45
-    # Signs the candidate with the production key; same environment scoping as
-    # sign-akmods-cache above -- see the comment there.
-    environment: production-signing
-    env:
-      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
+    # Builds and pushes the candidate under a transient, unsigned tag. It holds
+    # no signing key: sign-candidate-image signs the pushed digest and only then
+    # points the candidate tag at it.
+    outputs:
+      candidate_tag: ${{ steps.tags.outputs.candidate_tag }}
+      digest: ${{ steps.publish.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -307,13 +314,6 @@ jobs:
       - id: registry
         name: Prepare registry context
         uses: ./.github/actions/prepare-registry-context
-
-      - name: Require signing secret for production image publication
-        if: env.HAS_SIGNING_SECRET != 'true'
-        shell: bash
-        run: |
-          echo "SIGNING_SECRET is not configured. Refusing to publish an unsigned production image because booted systems enforce cosign signature verification for this repository." >&2
-          exit 1
 
       # The candidate tag is the image that gets tested first. Promotion happens
       # later by copying this already-built image to `latest` only after success.
@@ -350,10 +350,10 @@ jobs:
           image_name: ${{ steps.defaults.outputs.image_name }}
           image_tag: ${{ steps.tags.outputs.candidate_tag }}
 
-      # Candidate publication is separate from promotion. This lets the workflow
-      # test and sign the candidate first, then decide later whether it is safe
-      # to copy that exact digest to the stable tag.
-      - name: Push and sign candidate image
+      # Push only. The candidate tag is not touched here; sign-candidate-image
+      # points it at this digest after signing it.
+      - id: publish
+        name: Push candidate image
         uses: ./.github/actions/publish-native-image
         with:
           image_registry: ${{ steps.registry.outputs.image_registry }}
@@ -361,14 +361,130 @@ jobs:
           image_tag: ${{ steps.tags.outputs.candidate_tag }}
           registry_username: ${{ github.actor }}
           registry_password: ${{ github.token }}
-          image_org: ${{ steps.registry.outputs.image_org }}
-          cosign_private_key: ${{ secrets.SIGNING_SECRET }}
+
+  sign-candidate-image:
+    name: Sign Candidate Image
+    needs:
+      - build-zfs-akmods
+      - build-candidate-image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    # Same environment scoping as sign-akmods-cache above, and the same rule
+    # about what may run in this job -- see the comments there.
+    environment: production-signing
+    env:
+      HAS_SIGNING_SECRET: ${{ secrets.SIGNING_SECRET != '' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require signing secret for production image publication
+        if: env.HAS_SIGNING_SECRET != 'true'
+        shell: bash
+        run: |
+          echo "SIGNING_SECRET is not configured. Refusing to publish an unsigned production image because booted systems enforce cosign signature verification for this repository." >&2
+          exit 1
+
+      - name: Install skopeo and cosign
+        uses: ./.github/actions/install-signing-tools
+
+      # skopeo reads this login through containers/image's fallback to the
+      # Docker config file, and `cosign sign` pushes the signature with it.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Everything that says WHERE to sign and which tag to move is built here
+      # from code-owned inputs: ci/defaults.json, the repository owner, this
+      # commit and this run. build-candidate-image runs code nobody has to
+      # approve, so from it this job takes only the digest, which must be what
+      # this run's own transient tag holds, and the Fedora version, which must
+      # be a plain number. Its candidate_tag output is only cross-checked. A
+      # forged output therefore cannot sign another package or move `latest`.
+      - id: target
+        name: Work out what to sign
+        shell: bash
+        env:
+          FEDORA_VERSION: ${{ needs.build-zfs-akmods.outputs.fedora_version }}
+          REPORTED_CANDIDATE_TAG: ${{ needs.build-candidate-image.outputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${FEDORA_VERSION}" =~ ^[0-9]+$ ]]; then
+            echo "Fedora version '${FEDORA_VERSION}' is not a number. Refusing to sign." >&2
+            exit 1
+          fi
+          image_repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$(jq -er .IMAGE_NAME ci/defaults.json)"
+          # The same shape ci_tools/tagging_context.py's build_candidate_tag
+          # gives, which promote_stable.py looks up.
+          candidate_tag="candidate-${GITHUB_SHA::7}-${FEDORA_VERSION}"
+          if [ "${REPORTED_CANDIDATE_TAG}" != "${candidate_tag}" ]; then
+            echo "build-candidate-image reported tag ${REPORTED_CANDIDATE_TAG}, expected ${candidate_tag}. Refusing to sign." >&2
+            exit 1
+          fi
+          {
+            echo "image_repo=${image_repo}"
+            echo "candidate_tag=${candidate_tag}"
+            echo "transient_tag=${candidate_tag}-unsigned-${GITHUB_RUN_ID}"
+          } >> "${GITHUB_OUTPUT}"
+
+      # The digest is the one podman reported for the push. Confirm this run's
+      # transient tag in this repository holds it before anything is signed.
+      - name: Confirm the pushed digest
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ steps.target.outputs.image_repo }}
+          TRANSIENT_TAG: ${{ steps.target.outputs.transient_tag }}
+          IMAGE_DIGEST: ${{ needs.build-candidate-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          registry_digest="$(skopeo inspect --format '{{ .Digest }}' "docker://${IMAGE_REPO}:${TRANSIENT_TAG}")"
+          if [ "${registry_digest}" != "${IMAGE_DIGEST}" ]; then
+            echo "Transient tag ${TRANSIENT_TAG} resolves to ${registry_digest}, not the pushed digest ${IMAGE_DIGEST}. Refusing to sign." >&2
+            exit 1
+          fi
+
+      - name: Sign candidate image
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ steps.target.outputs.image_repo }}
+          IMAGE_DIGEST: ${{ needs.build-candidate-image.outputs.digest }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          python3 -I ci_tools/sign_image.py
+
+      # Only now does the candidate tag move, and only to the digest just
+      # signed and verified, so the tag never points at unsigned content.
+      - name: Point the candidate tag at the signed digest
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ steps.target.outputs.image_repo }}
+          CANDIDATE_TAG: ${{ steps.target.outputs.candidate_tag }}
+          IMAGE_DIGEST: ${{ needs.build-candidate-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          final_ref="docker://${IMAGE_REPO}:${CANDIDATE_TAG}"
+          # --preserve-digests keeps this copy byte-identical rather than
+          # letting skopeo re-encode the manifest, which would silently drop
+          # Chunkah's layer annotations.
+          skopeo copy --multi-arch=all --preserve-digests "docker://${IMAGE_REPO}@${IMAGE_DIGEST}" "${final_ref}"
+          final_digest="$(skopeo inspect --format '{{ .Digest }}' "${final_ref}")"
+          if [ "${final_digest}" != "${IMAGE_DIGEST}" ]; then
+            echo "Promoted tag digest ${final_digest} does not match signed digest ${IMAGE_DIGEST}" >&2
+            exit 1
+          fi
 
   promote-stable:
     name: Promote Candidate To Stable
     needs:
       - build-zfs-akmods
       - build-candidate-image
+      - sign-candidate-image
       - sign-akmods-cache
     # `sign-akmods-cache` is in `needs` so a failed cache signing stops
     # promotion. Without it that job runs in parallel with nothing downstream
@@ -387,6 +503,7 @@ jobs:
       !cancelled()
       && needs.build-zfs-akmods.result == 'success'
       && needs.build-candidate-image.result == 'success'
+      && needs.sign-candidate-image.result == 'success'
       && (needs.sign-akmods-cache.result == 'success' || needs.sign-akmods-cache.result == 'skipped')
       && (github.event_name != 'workflow_dispatch' || github.event.inputs.promote_to_stable == 'true')
     runs-on: ubuntu-26.04

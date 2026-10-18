@@ -132,7 +132,7 @@ class TriggerTableTests(unittest.TestCase):
 
     def test_the_pull_request_workflow_stops_before_push_or_signing(self) -> None:
         text = uncommented(workflow("build-pr.yml"))
-        self.assertNotIn("sign-image", text)
+        self.assertNotIn("sign_image", text)
         self.assertNotIn("promote-stable", text)
         self.assertNotRegex(text, r"(?m)^\s+packages: write")
 

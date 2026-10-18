@@ -114,8 +114,9 @@ architecture overview for the full decision tables and promotion ordering.
 Published images must be signed, matching the Universal Blue image-template
 model. The repository commits only `cosign.pub`; the matching private key is
 stored as `SIGNING_SECRET` in the **`production-signing` GitHub Environment**,
-restricted to the `main` branch. The publish action refuses to push an image
-when that secret is missing.
+restricted to the `main` branch. The `sign-candidate-image` job refuses to run
+when that secret is missing, so the candidate tag never moves and nothing is
+promoted.
 
 Store it as an *environment* secret, not a repository secret. A repository
 secret is readable by every workflow run in the repo, on any ref -- so a
@@ -138,10 +139,17 @@ git commit -m "Configure image signing key"
 git push
 ```
 
-Only `main` jobs that declare `environment: production-signing` can read it
-(`build-candidate-image` and `sign-akmods-cache` in `build.yml`). A branch
+Only `main` jobs that declare `environment: production-signing` can read it:
+`sign-candidate-image` and `sign-akmods-cache` in `build.yml`. A branch
 push publishes nothing, and the akmods job in `build.yml` runs only on `main`,
 so a branch cannot rebuild the shared akmods cache.
+
+Only code-owned code runs in those two jobs: `build.yml` itself, pinned
+third-party actions, the code-owned `install-signing-tools` action, and
+`ci_tools/sign_image.py` run under `python3 -I` (standard library only).
+`build-candidate-image` builds and pushes the image without the key, and the
+candidate tag moves to a digest only after that digest is signed and verified
+(issue #177).
 
 Never commit `cosign.key`. Keep the original file somewhere safe: GitHub
 secrets cannot be read back, so it is the only way to re-add or migrate the

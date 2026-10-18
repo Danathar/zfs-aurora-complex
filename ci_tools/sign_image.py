@@ -1,89 +1,96 @@
 """
 Script: ci_tools/sign_image.py
-What: Signs and verifies one published image tag in GitHub Container Registry (GHCR).
-Doing: Resolves the tag to a digest, signs that digest with cosign, then verifies it immediately.
-Why: Signing by digest is the reliable way to keep bootc/rpm-ostree trust tied to exact image content.
-Goal: Provide one reusable signing helper for candidate, branch, and stable tags.
+What: Signs and verifies one published image digest in GitHub Container Registry (GHCR).
+Doing: Signs the digest with cosign, then verifies it against the committed public key.
+Why: This is the only code that runs while the production signing key is in the
+environment. It imports nothing but the standard library, so build.yml runs it as
+`python3 -I ci_tools/sign_image.py`: `-I` keeps the working directory, PYTHONPATH and
+user site-packages off `sys.path`, so no other file in this repository runs in the
+process that holds the key. Keep it that way; tests/test_workflow_build_container.py
+fails if it imports anything outside the standard library.
+Goal: One small, code-owned signing step.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+import re
+import subprocess
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 
-from ci_tools.common import (
-    REPO_ROOT,
-    CiToolError,
-    normalize_owner,
-    optional_env,
-    require_env,
-    run_cmd,
-    skopeo_inspect_digest,
-)
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-
-def image_tag_ref(image_org: str, image_name: str, image_tag: str) -> str:
-    """Return the registry ref used to resolve one tag to a digest."""
-
-    return f"docker://ghcr.io/{image_org}/{image_name}:{image_tag}"
+# Exactly what a caller may hand over. Anything else is refused before cosign
+# runs, so a malformed job output cannot become a signature on something else.
+DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+IMAGE_REPO_RE = re.compile(r"ghcr\.io/[a-z0-9._-]+/[a-z0-9._-]+")
 
 
-def image_digest_ref(image_org: str, image_name: str, digest: str) -> str:
-    """Return the digest-pinned image ref used for signing and verification."""
+class SigningError(Exception):
+    """A refusal or a failed command; `main` prints it and exits 1."""
 
-    return f"ghcr.io/{image_org}/{image_name}@{digest}"
+
+def run_command(
+    args: Sequence[str],
+    *,
+    capture_output: bool = True,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    """Run a command and return stdout, raising a readable error on failure."""
+
+    command_env = None
+    if env is not None:
+        command_env = dict(os.environ)
+        command_env.update(env)
+    try:
+        result = subprocess.run(
+            list(args),
+            check=True,
+            text=True,
+            capture_output=capture_output,
+            env=command_env,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or "").strip() or (exc.stdout or "").strip() or str(exc)
+        # The key travels in the environment, never in argv, so argv is safe to print.
+        raise SigningError(f"Command failed: {' '.join(args)}\n{details}") from exc
+    if not capture_output:
+        return ""
+    return (result.stdout or "").strip()
 
 
 def sign_published_image(
     *,
-    image_org: str,
-    image_name: str,
-    image_tag: str,
+    image_repo: str,
+    image_digest: str,
     cosign_private_key: str,
-    image_digest: str = "",
-    digest_lookup: Callable[[str], str] = skopeo_inspect_digest,
-    command_runner: Callable[..., str] = run_cmd,
+    command_runner: Callable[..., str] = run_command,
 ) -> str:
     """
     Sign and verify one published image digest.
 
-    The helper signs the digest rather than the tag text. That keeps signature
-    verification tied to immutable content instead of a movable label. Cosign
-    and skopeo both rely on the registry login the calling workflow step
-    already performed (see `docker/login-action` in
-    `.github/actions/publish-native-image/action.yml`); no registry
-    credentials are threaded through here.
-
-    Pass `image_digest` when the caller already knows the exact digest it wants
-    signed; `image_tag` is then used only for log output. Resolving the tag here
-    instead would reintroduce a race for any tag more than one run can
-    publish: the shared akmods cache tag (`main-<fedora>`) can be republished
-    by any run holding a registry write token for it, so a concurrent
-    run can move that tag between the moment a caller pins a digest and the
-    moment this function looks it up. Signing the re-resolved tag would then
-    sign the other run's image and leave the digest this run actually consumed
-    unsigned forever -- which a later cache-reuse check treats as untrusted.
+    The caller passes the digest it pushed, never a tag. A tag can move between
+    the push and this call, for example when another run republishes the shared
+    akmods cache tag, and signing a re-resolved tag would sign the other run's
+    image and leave this run's digest unsigned forever.
     """
 
     if not cosign_private_key:
-        raise CiToolError("SIGNING_SECRET is empty; cannot sign published image.")
-    cosign_public_key_path = os.environ.get("COSIGN_PUBLIC_KEY_PATH", "").strip()
-    if cosign_public_key_path:
-        verification_key = cosign_public_key_path
-    else:
-        verification_key = str(REPO_ROOT / "cosign.pub")
+        raise SigningError("SIGNING_SECRET is empty; cannot sign published image.")
+    if not IMAGE_REPO_RE.fullmatch(image_repo):
+        raise SigningError(
+            f"Refusing to sign: {image_repo!r} is not a lowercase ghcr.io/<owner>/<name> repository."
+        )
+    if not DIGEST_RE.fullmatch(image_digest):
+        raise SigningError(f"Refusing to sign: {image_digest!r} is not a sha256 digest.")
+
+    verification_key = os.environ.get("COSIGN_PUBLIC_KEY_PATH", "").strip() or str(REPO_ROOT / "cosign.pub")
     if not os.path.exists(verification_key):
-        raise CiToolError(f"Missing required verification key file: {verification_key}")
+        raise SigningError(f"Missing required verification key file: {verification_key}")
 
-    if image_digest:
-        digest = image_digest
-    else:
-        tag_ref = image_tag_ref(image_org, image_name, image_tag)
-        digest = digest_lookup(tag_ref)
-        if not digest or digest == "null":
-            raise CiToolError(f"Failed to resolve digest for {tag_ref}")
-
-    digest_ref = image_digest_ref(image_org, image_name, digest)
+    digest_ref = f"{image_repo}@{image_digest}"
 
     command_runner(
         [
@@ -118,22 +125,23 @@ def sign_published_image(
     return digest_ref
 
 
-def main() -> None:
-    image_org = normalize_owner(require_env("IMAGE_ORG"))
-    image_name = require_env("IMAGE_NAME")
-    image_tag = require_env("IMAGE_TAG")
-    cosign_private_key = require_env("COSIGN_PRIVATE_KEY")
-    # Optional: callers that already pinned a digest pass it so this never
-    # re-resolves a tag another workflow could have moved in the meantime.
-    image_digest = optional_env("IMAGE_DIGEST").strip()
+def _required(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value.strip():
+        raise SigningError(f"Missing required environment variable: {name}")
+    return value
 
-    sign_published_image(
-        image_org=image_org,
-        image_name=image_name,
-        image_tag=image_tag,
-        cosign_private_key=cosign_private_key,
-        image_digest=image_digest,
-    )
+
+def main() -> None:
+    try:
+        sign_published_image(
+            image_repo=_required("IMAGE_REPO").strip(),
+            image_digest=_required("IMAGE_DIGEST").strip(),
+            cosign_private_key=_required("COSIGN_PRIVATE_KEY"),
+        )
+    except SigningError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

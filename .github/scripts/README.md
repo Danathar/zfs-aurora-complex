@@ -24,13 +24,16 @@ If a term is unfamiliar, check the shared glossary first:
 | Resolve pull request (PR) validation inputs and verify shared akmods cache | `prepare-validation-build`    | `ci_tools.prepare_validation_build`    |
 | Compute candidate image tag                                                | `compute-candidate-tag`       | `ci_tools.tagging_context`             |
 | Promote candidate digest to latest and audit tags                          | `promote-stable`              | `ci_tools.promote_stable`              |
-| Sign one published image tag by digest                                     | `sign-image`                  | `ci_tools.sign_image`                  |
 | Clone resolved upstream akmods tooling and verify the exact commit SHA     | `akmods-clone-pinned`         | `ci_tools.akmods_clone_pinned`         |
 | Configure target image path for the akmods build wrapper                   | `akmods-configure-zfs-target` | `ci_tools.akmods_configure_zfs_target` |
 | Build and publish shared self-hosted ZFS akmods image                      | `akmods-build-and-publish`    | `ci_tools.akmods_build_and_publish`    |
 | Classify an akmods build failure for sticky-issue triage                   | `classify-akmods-failure`     | `ci_tools.classify_akmods_failure`     |
 | Build the OpenZFS/kernel compatibility badge payload                       | `write-akmods-badge`          | `ci_tools.write_akmods_badge`          |
 | Build the last-good-build badge payload                                    | `write-last-good-build-badge` | `ci_tools.write_last_good_build_badge` |
+
+Signing is not a CLI command. `sign-candidate-image` and `sign-akmods-cache` in `build.yml` run
+`python3 -I ci_tools/sign_image.py` directly, so no repository code beyond that standard-library
+script runs in a job that holds the signing key (issue #177).
 
 ### Akmods Failure Classification
 
@@ -82,6 +85,6 @@ These composite actions keep the workflow files focused on job order and data fl
 - [`rechunk-native-image`](../actions/rechunk-native-image/action.yml)
   - re-layers a locally built image into content-addressed chunks with Chunkah, in place, before it is pushed or signed
 - [`install-signing-tools`](../actions/install-signing-tools/action.yml)
-  - installs `skopeo` and `cosign`
+  - installs `skopeo` and `cosign`; code-owned, because it runs in jobs that hold the signing key
 - [`publish-native-image`](../actions/publish-native-image/action.yml)
-  - requires `SIGNING_SECRET`, logs in to GHCR, pushes one tag, and signs the pushed digest
+  - pushes the locally built image under a transient tag and outputs its digest; holds no signing key and does not sign or move the requested tag

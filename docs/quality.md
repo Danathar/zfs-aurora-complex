@@ -96,7 +96,7 @@ Two properties of the badge pipeline are deliberate:
 | `Build PR Image (No Push)` (`build-pr.yml`) | pull requests that change something other than Markdown or `docs/**` | nothing by rule; it proves the image still builds. It stops before any push or signing step |
 | `Evaluate Stable Signal Gate` (`build.yml`) | scheduled runs | *skips* the build on a scheduled run when upstream has not moved. A skip, not a failure. Push and manual runs always build |
 | `check-akmods-cache` strict mode (`REQUIRE_MATCH`) | after an akmods rebuild, before the candidate build | the build, if the rebuilt cache does not carry a `kmod-zfs` for the primary kernel at the resolved ZFS version |
-| `sign-image` | before publish | publishing. An unsigned production image is refused outright |
+| `ci_tools/sign_image.py` under `python3 -I` (`sign-akmods-cache` and `sign-candidate-image` in `build.yml`) | after the push, before the candidate tag moves | publishing. The candidate tag moves to a digest only after that digest is signed and verified, and an unsigned production image is refused outright |
 | `promote-stable` digest re-read | after the copy to `:latest` | the run, not the copy. It detects a bad promotion, it does not prevent one. See the warning below |
 | `bootc container lint` (`Containerfile`) | every image build | the build, if `bootc container lint` rejects the image |
 | `nightly-compliance.yml` | 05:00 UTC daily, and on dispatch | nothing. It reports. See below |
@@ -123,6 +123,14 @@ scheduled build signs and promotes whatever is on `main` without it.
 
 The rows from `Evaluate Stable Signal Gate` down are different: those run inside
 `build.yml` and stop the publish itself.
+
+Signing runs in separate jobs from the build. Only code-owned code runs in a job
+that holds the signing key: `build.yml` itself, pinned third-party actions, the
+code-owned `install-signing-tools` action, and `ci_tools/sign_image.py` run under
+`python3 -I` (standard library only). `build-candidate-image` builds and pushes
+the image under a transient tag without the key; `sign-candidate-image`, in the
+`production-signing` environment, signs the pushed digest and only then points the
+candidate tag at it.
 
 ### What each one does not cover
 

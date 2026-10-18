@@ -81,6 +81,7 @@
     { "workflow": "build.yml", "job": "build-zfs-akmods", "timeout_minutes": 30 },
     { "workflow": "build.yml", "job": "sign-akmods-cache", "timeout_minutes": 15 },
     { "workflow": "build.yml", "job": "build-candidate-image", "timeout_minutes": 45 },
+    { "workflow": "build.yml", "job": "sign-candidate-image", "timeout_minutes": 15 },
     { "workflow": "build.yml", "job": "promote-stable", "timeout_minutes": 15 },
 
     { "workflow": "build-pr.yml", "job": "build-pr-image", "timeout_minutes": 45 },

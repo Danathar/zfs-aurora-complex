@@ -63,8 +63,10 @@ response to each is different:
 | `Refusing to pin the akmods cache: AKMODS_BUILT_IMAGE_ID <value> is not the sha256 image ID the build step records.` | The "Resolve shared akmods cache digest" step ran without the local image ID the build step records between `just build` and `just push`, or with something that is not one. The rebuilt cache is already on the shared tag, but nothing has been built from it, signed or promoted. | A wiring problem in `.github/actions/prepare-main-akmods/action.yml`: pass `steps.akmods_build.outputs.built_image_id` to the pin step, and check that `ci_tools/akmods_build_and_publish.py` still writes it. Do **not** let the pin fall back to whatever the shared tag resolves to: the tag can point at an image this run did not build (AGENTS.md section 0 rule 1). |
 | `Refusing to pin akmods cache <ref>: its amd64 config is sha256:<a>, but the image this run built is sha256:<b>.` | The digest the shared `main-<fedora>` tag resolved to after this run's push is not the image this run built. Either something else pushed to the shared tag in between (another job holding a registry write token can), or the push rewrote the image config so its digest no longer equals the local image ID. Nothing has been pinned, built from it, signed or promoted. | **Escalate; do not re-run blindly.** Report the digest named and which runs pushed to the akmods package around that time. If no other push happened, compare the local image ID in the build log ("Recorded built akmods image") with the pushed config and report the difference. Never bypass the check or pin from the tag instead: that is exactly how an image this run did not build gets signed (AGENTS.md section 0 rule 1). |
 | `Promoted digest mismatch: ... produced <a>, expected <b>` | `skopeo copy` did not preserve the digest. **The copy already happened** — `promote_stable.py` copies, then re-reads the destination — so if the destination named is `:latest`, the tag has already moved to the unexpected digest. | **Check which destination the message names** (the audit tag is copied first, `:latest` second). For an audit tag, stop and investigate. For `:latest`, treat it as live and **escalate immediately**: report what `:latest` currently resolves to, what the last known-good signed digest was, and that machines tracking it will pull whatever is there now. Restoring the tag is a promotion, so it is the maintainer's to perform — propose it, do not do it (AGENTS.md section 0 rule 6). Never bypass the guard itself. |
-| `Failed to resolve digest for <ref>` / `Missing digest in skopeo inspect output for <ref>` | A registry read returned a manifest with no digest — usually a transient registry or CDN failure, sometimes a deleted tag. | Check whether the ref still exists. If it does, this is very likely transient (see step 4). |
-| `SIGNING_SECRET is empty; cannot sign published image.` | The signing job ran without its secret, typically because the run came from a context that does not get one. | Confirm the trigger. A branch or fork run is not supposed to sign. |
+| `Missing digest in skopeo inspect output for <ref>` | A registry read returned a manifest with no digest — usually a transient registry or CDN failure, sometimes a deleted tag. | Check whether the ref still exists. If it does, this is very likely transient (see step 4). |
+| `SIGNING_SECRET is empty; cannot sign published image.` | A signing job (`sign-akmods-cache` or `sign-candidate-image`, the only two that hold the key) ran without its secret, typically because the run came from a context that does not get one. | Confirm the trigger. A branch or fork run is not supposed to sign. |
+| `Refusing to sign: <value> is not a lowercase ghcr.io/<owner>/<name> repository.` | `ci_tools/sign_image.py` was handed an `IMAGE_REPO` that is not this repository's own lowercase ghcr.io package. It signs only what the workflow names explicitly and never resolves a tag, so nothing was signed. | A wiring problem in the signing job's `IMAGE_REPO` in `.github/workflows/build.yml`. Do **not** widen the accepted pattern. |
+| `Refusing to sign: <value> is not a sha256 digest.` | `ci_tools/sign_image.py` was handed an `IMAGE_DIGEST` that is not a full `sha256:` digest, for example empty because the push step did not output one. Nothing was signed and the candidate tag has not moved. | Check that `build-candidate-image` (or the akmods cache pin) actually produced a `digest` output. Do **not** let signing fall back to resolving a tag. |
 | `Missing required verification key file: <path>` | `cosign.pub` is not where the signing or promotion step expects it. | A repository problem, not upstream. |
 | `Replay lock file not found: <path>` | Replay mode was requested with no lock file. | See [`replay-a-build.prompt.md`](replay-a-build.prompt.md). |
 
@@ -85,12 +87,14 @@ format, so it reads like a signing problem here. It is not — it fails while
 *installing* `cosign`, not while using it.
 
 But do not then conclude that nothing ran. `install-signing-tools` is invoked in
-three separate `build.yml` jobs — `preflight`, `sign-akmods-cache` and
-`promote-stable` — and again inside `publish-native-image`, which runs *after*
-the transient image has been pushed. A 403 in `preflight`'s copy means almost
-nothing happened; the same 403 in `promote-stable`'s means the candidate was
-already built, signed and published. **Identify which job's installer failed
-before describing the state of the run.**
+four separate `build.yml` jobs — `preflight`, `sign-akmods-cache`,
+`sign-candidate-image` and `promote-stable`. `build-candidate-image` pushes the
+image but holds no key and installs no `cosign`. A 403 in `preflight`'s copy
+means almost nothing happened; the same 403 in `sign-candidate-image`'s means
+the candidate was built and pushed under a transient tag but not signed, and
+the candidate tag has not moved; in `promote-stable`'s it means the candidate
+was already built, signed and published. **Identify which job's installer
+failed before describing the state of the run.**
 
 For any of them: say so, name the job and the step, and note that a re-run is
 the maintainer's call — this repo does not retry automatically, and a re-run of

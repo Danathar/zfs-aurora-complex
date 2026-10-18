@@ -77,7 +77,7 @@ Docs-only changes do not trigger image builds.
    - builds candidate tags and registry context values
 2. [`ci_tools/promote_stable.py`](../ci_tools/promote_stable.py)
 3. [`ci_tools/sign_image.py`](../ci_tools/sign_image.py)
-   - used by the main publish flow; publication requires `SIGNING_SECRET`
+   - run as `python3 -I ci_tools/sign_image.py` (standard library only) by the `sign-candidate-image` and `sign-akmods-cache` jobs; signing requires `SIGNING_SECRET`
 4. [`.github/actions/`](../.github/actions)
    - local composite actions used to keep the workflow files readable
 

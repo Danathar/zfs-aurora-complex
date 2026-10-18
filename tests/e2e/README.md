@@ -43,7 +43,8 @@ rule 6). So that test provokes an *invalid* choice instead and reads the
 accepted names out of argparse's error, which is produced during parsing,
 before any handler is reached.
 
-`sign-image`, `promote-stable`, `check-akmods-cache` and the akmods commands
+`promote-stable`, `check-akmods-cache` and the akmods commands, and
+`ci_tools/sign_image.py` (run directly by the signing jobs, not through the CLI),
 are in CONTRIBUTING's second tier — real production execution, uninstrumented.
 This directory does not change that, and it is not a substitute for it.
 
