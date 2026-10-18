@@ -30,6 +30,7 @@ If a term is unfamiliar, check the shared glossary first:
 | Classify an akmods build failure for sticky-issue triage                   | `classify-akmods-failure`     | `ci_tools.classify_akmods_failure`     |
 | Build the OpenZFS/kernel compatibility badge payload                       | `write-akmods-badge`          | `ci_tools.write_akmods_badge`          |
 | Build the last-good-build badge payload                                    | `write-last-good-build-badge` | `ci_tools.write_last_good_build_badge` |
+| Boot the published image in a VM and check ZFS over SSH                    | `boot-test`                   | `ci_tools.boot_test`                   |
 
 Signing is not a CLI command. `sign-candidate-image` and `sign-akmods-cache` in `build.yml` run
 `python3 -I ci_tools/sign_image.py` directly, so no repository code beyond that standard-library
@@ -67,6 +68,8 @@ failing closed until OpenZFS supports that kernel line.
   - runs after `build.yml` completes via `workflow_run` trigger
   - opens or updates a sticky GitHub issue on classified akmods failures
   - auto-closes sticky issues when the next build succeeds
+- [`boot-test.yml`](../workflows/boot-test.yml)
+  - boots the published `:latest` daily in a VM (bcvk) and checks over SSH that ZFS is installed and its module loaded
 
 ## Local Workflow Actions
 

@@ -248,7 +248,8 @@ shipped files coverage cannot reach (the `Containerfile`,
 - **Whether the image boots.** No CI step boots the image or imports a pool before
   `:latest` moves ([`safety-model.md`](./safety-model.md),
   [`runtime-validation-proposal.md`](./runtime-validation-proposal.md)). A green
-  build number is not evidence about that, and there is no number here that is.
+  build number is not evidence about that. `boot-test.yml` boots `:latest` after
+  it moves and reports in its run summary; nothing here counts those runs.
 - **Production execution coverage.** There is no instrumentation on the
   production workflows. Whether a path actually runs in production is established
   by reading a real run's log, by hand.

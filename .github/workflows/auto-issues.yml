@@ -10,13 +10,13 @@ name: Auto issues
 # GitHub emails only whoever last edited the cron line. This turns that red run
 # into an issue someone will see. The monthly Agent audit trail is the same: a
 # finding fails a run nobody is watching, and its findings sit in that run's
-# summary.
+# summary. So is Boot test, the only thing that boots the published image.
 #
 # What it watches, and what it deliberately does not:
 #
 #   - `Nightly compliance` (nightly-compliance.yml), `Agent audit trail`
-#     (agent-audit.yml) and `Build And Promote Main Image` (build.yml) are
-#     watched.
+#     (agent-audit.yml), `Boot test` (boot-test.yml) and `Build And Promote
+#     Main Image` (build.yml) are watched.
 #   - The build needs care because akmods-failure-triage.yml already runs after
 #     every build and keeps a sticky `akmods-failure` issue for a failed akmods
 #     build, and closes it on the next build that really ran. That issue is
@@ -77,7 +77,7 @@ on:
   workflow_run:
     # Matched by each workflow's `name:`, not its file name, so renaming one
     # silently stops tracking it. The test above fails when they disagree.
-    workflows: ["Nightly compliance", "Agent audit trail", "Build And Promote Main Image"]
+    workflows: ["Nightly compliance", "Agent audit trail", "Boot test", "Build And Promote Main Image"]
     types:
       - completed
 

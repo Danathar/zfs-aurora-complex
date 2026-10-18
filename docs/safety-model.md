@@ -180,6 +180,12 @@ Operator rule:
 2. stay on that previous image until this repo successfully publishes a newer image whose primary kernel has matching ZFS support
 3. do not treat "boot an older bundled kernel from the bad current image" as the intended recovery workflow
 
+After promotion, `boot-test.yml` boots the published `:latest` once a day in a
+throwaway VM on a GitHub runner, logs in over SSH, and checks that the ZFS
+packages are installed, the module loaded at boot, and `zpool list` reaches it.
+It reports; it does not stop or roll back a promotion, and it creates no pool. A
+red run is a reason to hold off on `bootc upgrade` until it is understood.
+
 ## What Gets Published
 
 Everything lives in two GitHub Container Registry (GHCR) repositories: the OS

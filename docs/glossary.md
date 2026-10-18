@@ -130,3 +130,5 @@ This page defines terms used across this repository's docs and workflow comments
 - `LOCK_FILE_PATH`: input-lock path recorded in the build-inputs manifest.
 - `AKMODS_FAILURE_LOG`: path to the captured akmods build log used for failure classification.
 - `AKMODS_FAILURE_PAYLOAD_PATH`: path where the failure classifier writes the sticky-issue payload.
+- `BOOT_TEST_IMAGE`: image the boot test boots, by tag or digest; `boot-test.yml` passes `:latest` unless a dispatch names another.
+- `BOOT_TEST_WORK`: directory where the boot test writes its check script, VM logs and `result.json`; defaults to `artifacts/boot-test`.
