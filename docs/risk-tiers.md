@@ -82,10 +82,14 @@ those pools, which breaks the recovery path everything else assumes
 That is not a tier, it is a refusal (`AGENTS.md` section 0 rule 1).
 
 **An agent may not complete a Tier 3 change unattended.** It may propose one,
-with the analysis, on a branch. GitHub enforces this: every path above is in
+with the analysis, on a branch. GitHub enforces this only for an agent that
+opens pull requests as itself, such as the Hive app: every path above is in
 [`.github/CODEOWNERS`](../.github/CODEOWNERS), and the ruleset requires the
-code owner's approving review before a pull request that touches one can merge
-([`branch-protection.md`](./branch-protection.md#the-ruleset)).
+code owner's approving review before such a pull request can merge. An agent
+running with the owner's own token opens pull requests as the owner, which
+GitHub does not hold to that review
+([`branch-protection.md`](./branch-protection.md#the-ruleset)), so for it this
+rule is asked, not enforced.
 
 ### Tier 2 — can break the build or a published artifact indirectly
 

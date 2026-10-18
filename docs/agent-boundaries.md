@@ -25,7 +25,7 @@ much review a change needs is [`risk-tiers.md`](./risk-tiers.md).
 | Gate | What it stops | Holds for | Explained in |
 | --- | --- | --- | --- |
 | [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. It has no bypass actors. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
-| [`.github/CODEOWNERS`](../.github/CODEOWNERS), with the ruleset's `require_code_owner_review` | Merging a pull request that touches a Tier 3 path before the owner has approved it on GitHub. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
+| [`.github/CODEOWNERS`](../.github/CODEOWNERS), with the ruleset's `require_code_owner_review` | Merging a pull request that touches a Tier 3 path before the owner has approved it on GitHub. | every author but the owner: a pull request opened as the owner, including by an agent using the owner's token, is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | The required `Python Unit Tests` check in [`test.yml`](../.github/workflows/test.yml) | Merging a pull request whose unit suite or `ruff check` fails. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | [`.github/policies/workflow-permissions.json`](../.github/policies/workflow-permissions.json) | A workflow's `GITHUB_TOKEN` gaining a scope the policy file does not grant: the unit suite fails until the same pull request changes both. | every agent | [SECURITY-AI.md](./SECURITY-AI.md#what-an-agent-may-do-unattended) |
 | [`.claude/settings.json`](../.claude/settings.json) | Signing, registry pushes and deletes, merging, dispatching a workflow, releases, secrets, labels, the force-push and delete spellings a prefix rule can see, `git reset --hard`, `git clean`, destructive `zpool` and `zfs` commands, and reading `cosign.key`, `.env`, `.pem`/`.p12` files or SSH keys named `id_rsa`/`id_ed25519` (a key under another name is not denied). It asks before an ordinary push, commit or pull request. | Claude Code sessions only | [SECURITY-AI.md](./SECURITY-AI.md#the-agent-permission-boundary) |
@@ -78,10 +78,11 @@ A `CODEOWNERS` file is the usual way to put a gate on part of a repository, and
 here it gates exactly one tier. The ruleset sets `require_code_owner_review` to
 `true` and needs no other approval, for the reason above.
 [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the Tier 3 paths from
-[`risk-tiers.md`](./risk-tiers.md) and nothing else, so a pull request that
-touches one waits for the owner's approval and any other pull request does not.
-A catch-all `*` line would put every pull request behind that approval, and the
-owner could not merge their own.
+[`risk-tiers.md`](./risk-tiers.md) and nothing else, so a pull request from
+anyone but the owner that touches one waits for the owner's approval, and any
+other pull request does not. The owner's own pull requests are not held: GitHub
+does not ask an author for their own review. A catch-all `*` line would put
+every other author's pull request behind that approval.
 
 When there is a second reviewer,
 [`branch-protection.md`](./branch-protection.md#when-there-is-a-second-reviewer)

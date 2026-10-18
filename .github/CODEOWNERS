@@ -8,8 +8,8 @@
 # docs/branch-protection.md). A pull request that touches none of these paths
 # merges on the required check alone, as before.
 #
-# That is why there is no catch-all `*` line: it would put every pull request
-# behind the owner's approval. tests/test_codeowners.py fails if one comes back,
+# That is why there is no catch-all `*` line: it would put every other author's
+# pull request behind the owner's approval. tests/test_codeowners.py fails if one comes back,
 # or if this list and the area/safety-critical globs in .github/labeler.yml stop
 # covering the same files. docs/branch-protection.md explains the rule and what
 # it costs a sole maintainer.
