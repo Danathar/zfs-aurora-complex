@@ -69,7 +69,7 @@ failing closed until OpenZFS supports that kernel line.
   - opens or updates a sticky GitHub issue on classified akmods failures
   - auto-closes sticky issues when the next build succeeds
 - [`boot-test.yml`](../workflows/boot-test.yml)
-  - boots the published `:latest` daily in a VM (bcvk) and checks over SSH that ZFS is installed and its module loaded
+  - runs after every `build.yml` run on `main` (`workflow_run`), boots the published `:latest` in a VM (bcvk) and checks over SSH that ZFS is installed and its module loaded
 
 ## Local Workflow Actions
 

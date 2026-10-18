@@ -10,7 +10,8 @@ name: Auto issues
 # GitHub emails only whoever last edited the cron line. This turns that red run
 # into an issue someone will see. The monthly Agent audit trail is the same: a
 # finding fails a run nobody is watching, and its findings sit in that run's
-# summary. So is Boot test, the only thing that boots the published image.
+# summary. So is Boot test, the only thing that boots the published image; it
+# runs after every build of main, started by build.yml rather than a clock.
 #
 # What it watches, and what it deliberately does not:
 #
@@ -50,6 +51,9 @@ name: Auto issues
 # Which events count, in both directions:
 #
 #   - Scheduled runs, for every watched workflow.
+#   - Boot test runs that build.yml's completion started (`workflow_run`). It
+#     has no schedule of its own: boot-test.yml runs after every build of
+#     main, the daily scheduled one included, so these are its unattended runs.
 #   - Push runs of the build on main. At ACMM L6 Hive merges its own green pull
 #     requests, so the push build a merge starts has nobody watching it, the
 #     same as the cron run. But a push build is not the same evidence: a
@@ -126,9 +130,9 @@ jobs:
             echo "$WORKFLOW ran on $HEAD_REPO@$HEAD_BRANCH, not $REPO@$DEFAULT_BRANCH; nothing to track."
             exit 0
           fi
-          # Scheduled runs of every watched workflow, and push runs of the build
-          # (see the header). Anything else, a dispatch above all, neither opens
-          # nor closes.
+          # Scheduled runs of every watched workflow, push runs of the build and
+          # Boot test runs the build started (see the header). Anything else, a
+          # dispatch above all, neither opens nor closes.
           case "$EVENT" in
             schedule) ;;
             push)
@@ -137,8 +141,14 @@ jobs:
                 exit 0
               fi
               ;;
+            workflow_run)
+              if [ "$WORKFLOW" != "Boot test" ]; then
+                echo "$WORKFLOW ran on a workflow_run event; only Boot test's are tracked."
+                exit 0
+              fi
+              ;;
             *)
-              echo "$WORKFLOW ran on a $EVENT event; only scheduled runs and the build's push runs are tracked."
+              echo "$WORKFLOW ran on a $EVENT event; only scheduled runs, the build's push runs and Boot test's workflow_run runs are tracked."
               exit 0
               ;;
           esac

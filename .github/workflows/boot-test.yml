@@ -1,8 +1,8 @@
 ---
 name: Boot test
 
-# Boots the published image in a VM once a day and checks, over SSH, that ZFS
-# is installed and its kernel module loaded at boot.
+# Boots the published image in a VM after every build.yml run on main and
+# checks, over SSH, that ZFS is installed and its kernel module loaded at boot.
 #
 # Every other check here reads the image as files. build.yml proves the ZFS
 # packages and module files are in the image, and nightly-compliance.yml that
@@ -12,16 +12,19 @@ name: Boot test
 # It reports; it gates nothing. It runs after build.yml has already moved
 # `:latest`, so a red run here means the boot test failed against the image a
 # user would pull right now: the image, or the runner that could not boot it
-# (docs/ai-ops-runbook.md says how to tell). auto-issues.yml turns a red
-# scheduled run into an issue.
+# (docs/ai-ops-runbook.md says how to tell). auto-issues.yml turns a red run
+# that build.yml started into an issue.
 
 on:
-  schedule:
-    # 08:23 UTC daily: build.yml is scheduled at 06:00 and its recent scheduled
-    # runs started by 06:30; a full build has taken at most about 40 minutes,
-    # so this boots that morning's `:latest`. An odd minute, clear of the
-    # top-of-hour rush when scheduled runs are delayed.
-    - cron: "23 08 * * *"
+  # After build.yml finishes, not at a fixed time: a clock cannot know when a
+  # delayed or slow build has promoted, and an image promoted after the clock
+  # fired would go unbooted until the next day. build.yml runs on its own daily
+  # schedule, so this still runs at least once a day; when the stable-signal
+  # gate skipped that build, it boots the unchanged `:latest` again.
+  workflow_run:
+    workflows: ["Build And Promote Main Image"]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       image:
@@ -39,6 +42,13 @@ permissions:
 jobs:
   boot:
     name: boot
+    # Only builds of main, where `:latest` is promoted. A cancelled build was
+    # replaced by a newer one, which starts its own boot when it finishes.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.head_branch == github.event.repository.default_branch
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.conclusion != 'cancelled')
     # 26.04 ships podman 5 and a QEMU and virtiofsd new enough for bcvk.
     runs-on: ubuntu-26.04
     # The first hosted run (39125903251) took six minutes: host setup 2m14s,

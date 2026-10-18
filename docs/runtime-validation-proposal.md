@@ -35,7 +35,7 @@ bump can only arrive as a pull request someone deliberately merges.
 roll back, or if ZFS line changes stop being a deliberate, reviewed decision.
 
 **2026-10-18: a post-promotion boot test, at the maintainer's request (#185).**
-`boot-test.yml` boots the published `:latest` daily in a throwaway VM on a
+`boot-test.yml` boots the published `:latest` after every build of `main` in a throwaway VM on a
 GitHub-hosted runner (bcvk, with `/dev/kvm`, which those runners do expose),
 with no disk but the image's own root, and checks over SSH that the ZFS packages
 are installed, the module loaded at boot, and `zpool list` reaches it. It runs

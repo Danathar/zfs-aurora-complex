@@ -443,6 +443,17 @@ class MainTests(unittest.TestCase):
         self.assertIn("bcvk output (tail)", summary)
         self.assertIn(f"{MARKER}DONE", summary.split("bcvk output (tail)", 1)[1])
 
+    def test_a_failed_check_cut_off_before_done_is_not_retried(self) -> None:
+        # The guest reported module:zfs failing, then hung before DONE. A second
+        # boot that passed would otherwise replace the proven failure.
+        lines = passing_session().replace("CHECK module:zfs pass", "CHECK module:zfs fail").splitlines()
+        cut_off = "\n".join(lines[: next(i for i, line in enumerate(lines) if "module:zfs" in line) + 1])
+        booted, result, _, error = self.run_main([cut_off, passing_session()])
+        self.assertEqual(len(booted), 1)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["report"]["checks"][-1]["status"], "fail")
+        self.assertIsInstance(error, CiToolError)
+
     def test_two_boots_that_never_ran_the_checks_fail_the_run(self) -> None:
         booted, result, _, error = self.run_main(["no ssh", "no ssh"])
         self.assertEqual(len(booted), 2)

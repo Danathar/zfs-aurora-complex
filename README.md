@@ -52,8 +52,8 @@ is the version it attempts to build and install.
 > is "safe enough for one person's own machines", not a vendor support
 > commitment. **CI does not boot the image or import a pool before `:latest`
 > moves**; promotion proves the image composed, is correctly signed, and passed
-> `bootc container lint`, nothing more. A daily boot test boots `:latest` in a VM
-> after it moves and checks that ZFS loads; it reports, it does not gate. The
+> `bootc container lint`, nothing more. A boot test boots `:latest` in a VM after
+> every build and checks that ZFS loads; it reports, it does not gate. The
 > recovery model is image rollback, not pre-publication runtime testing -- see
 > [`docs/safety-model.md`](./docs/safety-model.md). Switching a machine you
 > depend on onto this image means trusting that bar, not a guarantee.

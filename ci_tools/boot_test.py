@@ -6,11 +6,11 @@ Doing: Resolves the image tag to a digest, pulls that digest, boots it with `bcv
 Why: Every other check here inspects the image as files -- packages, module files, signatures. None of them
     boots it, so an image whose ZFS module does not load on its own kernel could sit at `:latest` unnoticed
     until a machine tracking it rebooted into it.
-Goal: A red scheduled run when the image a user would pull does not boot, or boots without working ZFS.
+Goal: A red run when the image a user would pull does not boot, or boots without working ZFS.
 
-It reports; it gates nothing. `.github/workflows/boot-test.yml` runs it on a clock against whatever
-`:latest` is at the time, after build.yml has already promoted it. No pool is created on a real device:
-the VM has no disk but the image's own root, and `zpool list` only proves userspace reaches the module.
+It reports; it gates nothing. `.github/workflows/boot-test.yml` runs it after every build.yml run on
+main, against whatever `:latest` is then. No pool is created on a real device: the VM has no disk but
+the image's own root, and `zpool list` only proves userspace reaches the module.
 """
 
 from __future__ import annotations
@@ -97,7 +97,9 @@ SETTLE_TIMEOUT_SECONDS = 300
 BOOT_TIMEOUT_SECONDS = 15 * 60
 # A second boot absorbs nested-VM failures that have nothing to do with the
 # image, such as a slow runner missing bcvk's SSH deadline. It is only taken
-# when the checks never ran; a check that ran and failed is the answer.
+# when the guest reported no check at all. Once any check has reported, the
+# VM booted and logged in, and that boot is the answer: a failed check that
+# a later hang cut off before DONE must not be replaced by a second boot.
 BOOT_ATTEMPTS = 2
 # bcvk mounts a --ro-bind directory at /run/virtiofs-mnt-<name> in the guest.
 GUEST_SCRIPT_MOUNT = "zac-checks"
@@ -332,7 +334,7 @@ def main() -> None:
     for attempt in range(1, BOOT_ATTEMPTS + 1):
         attempts = attempt
         report, output = boot(pinned, work, attempt)
-        if report.done:
+        if report.done or report.checks:
             break
     passed, summary = judge(report)
 
