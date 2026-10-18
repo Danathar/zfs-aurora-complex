@@ -129,10 +129,46 @@ class SigningCommandTests(unittest.TestCase):
                 os.chdir(previous)
         self.assertIn(str(REPO_ROOT / "cosign.pub"), calls[1][0])
 
+    def test_cosign_sign_prints_to_the_job_log_and_verify_is_captured(self) -> None:
+        _ref, calls = self._sign()
+        self.assertIs(calls[0][1]["capture_output"], False)
+        self.assertNotIn("capture_output", calls[1][1])
+
+
+class RunCommandTests(unittest.TestCase):
+    """The real subprocess wrapper: `cosign sign` only gets the key through `env`."""
+
     def test_a_failed_command_raises_with_its_output(self) -> None:
         with self.assertRaises(SigningError) as raised:
             run_command([sys.executable, "-c", "import sys; sys.stderr.write('boom'); sys.exit(3)"])
         self.assertIn("boom", str(raised.exception))
+
+    def test_stderr_is_reported_before_stdout_and_stdout_when_stderr_is_empty(self) -> None:
+        both = "import sys; sys.stdout.write('to-stdout'); sys.stderr.write('to-stderr'); sys.exit(3)"
+        with self.assertRaises(SigningError) as raised:
+            run_command([sys.executable, "-c", both])
+        self.assertTrue(str(raised.exception).endswith("\nto-stderr"), str(raised.exception))
+
+        only_stdout = "import sys; sys.stdout.write('to-stdout'); sys.exit(3)"
+        with self.assertRaises(SigningError) as raised:
+            run_command([sys.executable, "-c", only_stdout])
+        self.assertTrue(str(raised.exception).endswith("\nto-stdout"), str(raised.exception))
+
+    def test_env_is_added_to_the_inherited_environment(self) -> None:
+        # cosign needs PATH, HOME and the registry login from the job's own
+        # environment as well as the key, so `env` extends os.environ, and wins
+        # where both name the same variable.
+        script = "import os; print(os.environ['ZAC_INHERITED'], os.environ['ZAC_ADDED'], os.environ['ZAC_BOTH'])"
+        with unittest.mock.patch.dict(os.environ, {"ZAC_INHERITED": "job", "ZAC_BOTH": "job"}):
+            output = run_command([sys.executable, "-c", script], env={"ZAC_ADDED": "key", "ZAC_BOTH": "key"})
+        self.assertEqual(output, "job key key")
+
+    def test_without_env_the_child_sees_only_the_inherited_environment(self) -> None:
+        script = "import os; print(os.environ.get('ZAC_INHERITED'), os.environ.get('COSIGN_PRIVATE_KEY'))"
+        with unittest.mock.patch.dict(os.environ, {"ZAC_INHERITED": "job"}):
+            os.environ.pop("COSIGN_PRIVATE_KEY", None)
+            output = run_command([sys.executable, "-c", script])
+        self.assertEqual(output, "job None")
 
 
 class MainTests(unittest.TestCase):
