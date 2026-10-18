@@ -48,7 +48,8 @@ Labelled `area/safety-critical`.
 - `.github/workflows/`, every workflow and not only `build.yml`, because once a
   workflow is on `main` any job in it can declare the production-signing
   environment and be handed the key that signs the published image. The cost:
-  every workflow change waits for the owner, Renovate's pin bumps included
+  every workflow change from anyone but the owner waits for the owner,
+  Renovate's pin bumps included
 - `.github/policies/workflow-permissions.json`, because a token that gains
   `packages: write` can push an image to the registry these machines pull from
 - `.github/rulesets/`, because the ruleset in it is what keeps `main`, and so
@@ -106,7 +107,8 @@ image build, so say how the change was verified or say plainly that it was not.
 Watch specifically for a new external action in a composite action under
 `.github/actions/`. A widened `permissions:` block, a new secret reference, a
 new `environment:` or a new external action in a workflow is a Tier 3 question,
-and since every workflow file is Tier 3 it waits for the owner's approval.
+and since every workflow file is Tier 3 it waits for the owner's approval
+unless the owner opened the pull request.
 Once `.github/policies/workflow-permissions.json` is in the tree, a widened
 block cannot arrive alone: the unit suite fails until that file changes in the
 same pull request, and that file is Tier 3.

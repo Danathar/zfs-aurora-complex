@@ -16,8 +16,8 @@
 
 # Every workflow, not only build.yml. Once a workflow is on main, any job in it
 # can declare the production-signing environment and get the signing key, so a
-# change to any of them waits for the owner. Renovate's pin bumps in workflows
-# wait too; that is the cost.
+# change to any of them from anyone but the owner waits for the owner.
+# Renovate's pin bumps in workflows wait too; that is the cost.
 /.github/workflows/                                           @Danathar
 
 # The seven files AGENTS.md section 0 rule 2 names. The first, build.yml, is
