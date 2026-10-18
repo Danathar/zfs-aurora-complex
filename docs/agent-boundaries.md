@@ -63,8 +63,9 @@ Review is what catches it.
   fails when it is missing or empty.
 - **Evidence in proportion to reach.** [`risk-tiers.md`](./risk-tiers.md) says
   how much evidence each tier needs. The `area/*` labels describe the tier;
-  they do not block a merge. For Tier 3 the code-owner gate above does, but it
-  checks that the owner approved, not what the review covered.
+  they do not block a merge. For Tier 3 the code-owner gate above does, for
+  pull requests the owner did not open, but it checks that the owner approved,
+  not what the review covered.
 - **No approval labels from automation.** The settings file denies creating,
   editing or deleting a label. Adding one to a pull request with `gh pr edit`
   only prompts.
