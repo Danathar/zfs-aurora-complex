@@ -148,7 +148,7 @@ jobs:
       # started before any step in the job runs, so a guard would execute inside
       # the very container it was meant to gate. Changing the build container is
       # a reviewable edit to ci/defaults.json plus this literal, via a PR.
-      image: ghcr.io/ublue-os/devcontainer@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca
+      image: ghcr.io/ublue-os/devcontainer@sha256:ec1046d2cb7d16e3cefaaae0915764f9ed4d4d74eabc25d1931923ce6670858d
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
