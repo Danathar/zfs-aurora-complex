@@ -415,7 +415,7 @@ class MainTests(unittest.TestCase):
     def test_the_digest_is_pulled_and_the_tag_is_recorded_beside_it(self) -> None:
         _, result, _, _ = self.run_main([passing_session()])
         pinned = f"ghcr.io/danathar/zfs-aurora-complex@{self.DIGEST}"
-        self.assertEqual([(cmd[:2], cmd[-1]) for cmd in self.pulls], [(["podman", "pull"], pinned)])
+        self.assertEqual(self.pulls, [["podman", "pull", "--quiet", "--retry", "3", pinned]])
         self.assertEqual(result["image"], "ghcr.io/danathar/zfs-aurora-complex:latest")
         self.assertEqual(result["booted"], pinned)
 
