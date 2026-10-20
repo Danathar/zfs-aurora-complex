@@ -220,12 +220,15 @@ Every file in `.github/workflows/` has an entry here.
 ## Sticky akmods failure issues
 
 - **What they look like:** author `app/github-actions`, label `akmods-failure`, and
-  a title that starts `Upstream ZFS/kernel incompatibility:` or `Unclassified
-  akmods build failure:`, followed by a kernel release and an akmods commit.
+  a title that starts `Upstream ZFS/kernel incompatibility:`, `Transient network
+  failure in akmods build:` or `Unclassified akmods build failure:`, followed by a
+  kernel release and an akmods commit.
 - **Means:** the shared ZFS module cache could not be built for that kernel.
   `Upstream ZFS/kernel incompatibility` means the log matched a known pattern, such
-  as OpenZFS not yet supporting the kernel. `Unclassified` means no known pattern
-  matched. That is not evidence it is upstream. Read the log.
+  as OpenZFS not yet supporting the kernel. `Transient network failure` means no
+  compatibility pattern matched but the log shows a download mirror or network
+  service was unreachable; re-run `build.yml`, and read the log if it fails the
+  same way again. `Unclassified` means no known pattern matched. That is not evidence it is upstream. Read the log.
 - **First:** open the failing run linked in the issue body and read the matched
   patterns and the failing step. Then follow
   [`upstream-change-response.md`](./upstream-change-response.md). The correct

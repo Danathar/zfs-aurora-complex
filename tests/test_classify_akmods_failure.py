@@ -198,6 +198,7 @@ class FailureSummaryTests(unittest.TestCase):
 
         self.assertIn("download mirror or network service was unreachable", summary)
         self.assertIn("not a kernel/ZFS compatibility problem", summary)
+        self.assertIn("read the log", summary)
         self.assertIn("Re-run `build.yml`", summary)
 
 

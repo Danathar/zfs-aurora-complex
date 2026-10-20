@@ -124,9 +124,12 @@ def build_failure_summary(*, failure_kind: str, kernel_release: str, log_text: s
         )
     if failure_kind == FAILURE_KIND_TRANSIENT_NETWORK:
         return (
-            "The akmods build failed because a download mirror or network service was "
-            "unreachable. This is not a kernel/ZFS compatibility problem. Re-run "
-            "`build.yml` or wait for the next scheduled run; image promotion was skipped."
+            "The akmods build failed and the log shows a download mirror or network service "
+            "was unreachable. No known kernel/ZFS compatibility pattern matched, so this is "
+            "most likely an outage, not a kernel/ZFS compatibility problem. Re-run "
+            "`build.yml` or wait for the next scheduled run; if it fails the same way again, "
+            "read the log, because a mirror that failed over can leave these lines behind a "
+            "different error. Image promotion was skipped."
         )
     return "The akmods build failed, but no known compatibility pattern matched the log."
 
