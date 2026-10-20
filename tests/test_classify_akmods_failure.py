@@ -151,6 +151,28 @@ class ClassifyLogTextTests(unittest.TestCase):
         self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
         self.assertEqual(matched, [ZFS_MAX_KERNEL_MISMATCH_PATTERN])
 
+    def test_each_network_pattern_alone_is_transient_network(self) -> None:
+        # One row per pattern, each matching only that pattern, so dropping any
+        # one of them turns its outage back into "unknown". The curl codes are
+        # the ones dnf5/libcurl print for DNS, refused, timeout, TLS connect and
+        # receive failures; the log casing varies between dnf versions.
+        rows = {
+            r"Curl error \((?:6|7|28|35|56)\)": "curl error (35): SSL connect error",
+            "Could not resolve host": "could not resolve host: mirrors.fedoraproject.org",
+            "Connection refused": "connect to 192.0.2.1 port 443: Connection refused",
+            "Temporary failure in name resolution": (
+                "Failed to connect: Temporary failure in name resolution"
+            ),
+            "Operation timed out after": (
+                "Operation timed out after 30000 milliseconds with 0 bytes received"
+            ),
+        }
+        for pattern, log in rows.items():
+            with self.subTest(pattern=pattern):
+                kind, matched = classify_log_text(log)
+                self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+                self.assertEqual(matched, [pattern])
+
     def test_unrelated_curl_error_code_is_not_transient_network(self) -> None:
         kind, matched = classify_log_text("Curl error (60): SSL certificate problem")
         self.assertEqual(kind, FAILURE_KIND_UNKNOWN)
@@ -246,6 +268,24 @@ class ZfsMetadataFromLogTests(unittest.TestCase):
         )
 
         self.assertEqual(version, "")
+
+    def test_capture_is_bounded_to_a_version_shaped_value(self) -> None:
+        # 32 version characters is the most the pattern takes; one more, or a
+        # space or `*` (prose and emphasis markdown), takes the no-metadata path.
+        longest = "2." + "4" * 30
+        rows = {
+            longest: longest,
+            longest + "4": "",
+            "2.4.4 see the log": "",
+            "*2.4.4*": "",
+        }
+        for value, expected in rows.items():
+            with self.subTest(value=value):
+                version, max_kernel = zfs_metadata_from_log(
+                    f"ZFS_META_VERSION='{value}'\nZFS_META_KVER_MAX='{value}'\n"
+                )
+                self.assertEqual(version, expected)
+                self.assertEqual(max_kernel, expected)
 
     def test_summary_names_the_placeholder_rather_than_quoting_the_log(self) -> None:
         # The unparseable half degrades to the placeholder this function
