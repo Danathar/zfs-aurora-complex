@@ -18,6 +18,7 @@ from ci_tools.classify_akmods_failure import (
     build_step_summary_markdown,
     build_sticky_issue_payload,
     classify_log_text,
+    zfs_metadata_from_log,
 )
 
 
@@ -141,6 +142,72 @@ class FailureSummaryTests(unittest.TestCase):
 
         self.assertNotIn("but the resolved base image uses", summary)
         self.assertIn("known upstream ZFS/kernel compatibility pattern", summary)
+
+
+class ZfsMetadataFromLogTests(unittest.TestCase):
+    """
+    The two captured values are published, so what they may contain matters.
+
+    `build_failure_summary` puts them in the sticky issue body
+    akmods-failure-triage.yml opens with `issues: write`, and
+    `ci_tools/write_akmods_badge.py` puts them in the badge message that same
+    workflow commits to the `status` branch for shields.io. The log they come
+    out of is not written by this repository: it is the akmods fork's
+    `just build` output plus the OpenZFS release tarball's own `configure`.
+    """
+
+    # A real configure line, and the release-candidate form, which carries the
+    # two characters most likely to be dropped by an over-tight pattern.
+    def test_ordinary_metadata_still_parses(self) -> None:
+        version, max_kernel = zfs_metadata_from_log(
+            "ZFS_META_VERSION='2.4.0-rc1'\nZFS_META_KVER_MAX='6.19'\n"
+        )
+
+        self.assertEqual(version, "2.4.0-rc1")
+        self.assertEqual(max_kernel, "6.19")
+
+    def test_capture_does_not_run_past_the_end_of_its_own_line(self) -> None:
+        # An unterminated `ZFS_META_VERSION='` used to capture every line up to
+        # the next quote anywhere later in the log, because a character class
+        # matches newlines. Pin the boundary rather than the old behaviour.
+        version, max_kernel = zfs_metadata_from_log(
+            "checking ZFS_META_VERSION='2.4.4\n"
+            "some other output line\n"
+            "ZFS_META_KVER_MAX='6.99'\n"
+        )
+
+        self.assertEqual(version, "")
+        self.assertEqual(max_kernel, "6.99")
+
+    def test_markdown_in_the_log_is_not_captured_as_a_version(self) -> None:
+        # Markdown in an issue body renders as markdown, and an image fetches a
+        # remote URL when a maintainer opens the issue. A version string has no
+        # business containing any of these characters.
+        version, _ = zfs_metadata_from_log(
+            "ZFS_META_VERSION='[x](https://example.invalid)'\n"
+        )
+
+        self.assertEqual(version, "")
+
+    def test_summary_names_the_placeholder_rather_than_quoting_the_log(self) -> None:
+        # The unparseable half degrades to the placeholder this function
+        # already used for a log that names a max kernel but no version, so
+        # the summary still says which kernel is too new. What it must not do
+        # is carry the log lines that sat between the two metadata markers.
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+            kernel_release="7.1.4-204.fc44.x86_64",
+            log_text=(
+                "checking ZFS_META_VERSION='2.4.4\n"
+                "[x](https://example.invalid) all this text\n"
+                "ZFS_META_KVER_MAX='6.99'\n"
+            ),
+        )
+
+        self.assertNotIn("example.invalid", summary)
+        self.assertIn("the selected OpenZFS release", summary)
+        self.assertIn("up to 6.99", summary)
+
 
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):

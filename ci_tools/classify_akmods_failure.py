@@ -20,8 +20,26 @@ FAILURE_KIND_UPSTREAM_COMPAT = "upstream-compat"
 FAILURE_KIND_UNKNOWN = "unknown"
 
 
-ZFS_META_VERSION_RE = re.compile(r"ZFS_META_VERSION='([^']+)'")
-ZFS_META_KVER_MAX_RE = re.compile(r"ZFS_META_KVER_MAX='([^']+)'")
+# Both values are read out of a build log this repository does not author: the
+# combined output of the akmods fork's `just build` and of the OpenZFS release
+# tarball's own `configure`, both resolved at run time. Whatever is captured is
+# published twice -- into the sticky issue body `build_sticky_issue_payload`
+# renders, and into the badge message `ci_tools/write_akmods_badge.py` commits
+# to the `status` branch for shields.io to render in the README.
+#
+# So the capture is bounded to one line and to the characters a version string
+# actually uses. `[^']+` was neither: a character class matches newlines, so a
+# `ZFS_META_VERSION='` with no closing quote on its own line captured every
+# intervening line up to the next quote anywhere later in the log, and markdown
+# in those lines rendered as markdown in the issue.
+#
+# Real values are `2.4.4`, `2.4.0-rc1`, `6.19`. A value outside this shape now
+# yields "" and takes the existing no-metadata path: the generic upstream-compat
+# sentence in the summary, and "waiting: known upstream ZFS/kernel
+# incompatibility" on the badge.
+ZFS_META_VALUE = r"[0-9A-Za-z._+~-]{1,32}"
+ZFS_META_VERSION_RE = re.compile(rf"ZFS_META_VERSION='({ZFS_META_VALUE})'")
+ZFS_META_KVER_MAX_RE = re.compile(rf"ZFS_META_KVER_MAX='({ZFS_META_VALUE})'")
 KERNEL_MAJOR_MINOR_RE = re.compile(r"^(\d+)\.(\d+)")
 ZFS_MAX_KERNEL_MISMATCH_PATTERN = "OpenZFS max supported kernel is below resolved kernel"
 
