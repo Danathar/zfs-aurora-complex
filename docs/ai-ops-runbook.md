@@ -227,8 +227,9 @@ Every file in `.github/workflows/` has an entry here.
   `Upstream ZFS/kernel incompatibility` means the log matched a known pattern, such
   as OpenZFS not yet supporting the kernel. `Transient network failure` means no
   compatibility pattern matched but the log shows a download mirror or network
-  service was unreachable; re-run `build.yml`, and read the log if it fails the
-  same way again. `Unclassified` means no known pattern matched. That is not evidence it is upstream. Read the log.
+  service was unreachable. The build already re-ran `just build` up to twice for
+  that, and the log holds every attempt, so check the last attempt's error before
+  re-running `build.yml`. `Unclassified` means no known pattern matched. That is not evidence it is upstream. Read the log.
 - **First:** open the failing run linked in the issue body and read the matched
   patterns and the failing step. Then follow
   [`upstream-change-response.md`](./upstream-change-response.md). The correct

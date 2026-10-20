@@ -140,17 +140,22 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
                 observed.append((args[-1], cache_json.exists()))
                 return f"{'a' * 64}\n" if args[0] == "podman" else ""
 
+            def record_build(args: list[str], **_kwargs: object) -> tuple[int, str]:
+                record(args)
+                return 0, ""
+
             with (
                 patch.object(script, "run_cmd", side_effect=record) as run_cmd,
+                patch.object(script, "run_streamed", side_effect=record_build) as run_streamed,
                 contextlib.redirect_stdout(io.StringIO()) as printed,
             ):
                 script.build_and_push_kernel_release("6.18.16-200.fc43.x86_64")
 
             self.assertEqual(observed, [("build", True), (local_ref, True), ("push", True)])
+            run_streamed.assert_called_once_with(["just", "build"], cwd=str(Path(tempdir)))
             self.assertEqual(
                 run_cmd.call_args_list,
                 [
-                    call(["just", "build"], cwd=str(Path(tempdir)), capture_output=False),
                     call(["podman", "image", "inspect", "--format", "{{.Id}}", local_ref]),
                     call(["just", "push"], cwd=str(Path(tempdir)), capture_output=False),
                 ],
@@ -215,6 +220,76 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
                 call(["just", "manifest"], cwd=str(Path(tempdir)), capture_output=False),
             ],
         )
+
+
+# Verbatim from the failing build of run 39380642084 (#194).
+MIRROR_DNS_FAILURE = (
+    ">>> Curl error (6): Could not resolve hostname for "
+    "https://repos.eggycrew.com/rpmfusion/free/fedora/rpmfusion-free-release-44.noarch.rpm "
+    "[Could not resolve host: repos.eggycrew.com]\nFailed to download files\n"
+)
+KERNEL = "7.2.7-200.fc44.x86_64"
+
+
+class BuildWithNetworkRetryTests(unittest.TestCase):
+    def run_builds(self, results: list[tuple[int, str]]) -> str:
+        """Run build_with_network_retry on scripted `just build` results; record calls and waits."""
+        with (
+            patch.object(script, "run_streamed", side_effect=results) as run_streamed,
+            patch.object(script.time, "sleep") as sleep,
+            contextlib.redirect_stdout(io.StringIO()) as printed,
+        ):
+            try:
+                script.build_with_network_retry(KERNEL)
+            finally:
+                self.calls = run_streamed.call_count
+                self.sleeps = [c.args[0] for c in sleep.call_args_list]
+        return printed.getvalue()
+
+    def test_network_failure_then_success_retries_once(self) -> None:
+        printed = self.run_builds([(1, MIRROR_DNS_FAILURE), (0, "")])
+        self.assertEqual(self.calls, 2)
+        self.assertEqual(self.sleeps, [60])
+        self.assertIn("attempt 1/3", printed)
+
+    def test_persistent_network_failure_gives_up_after_three_attempts(self) -> None:
+        with self.assertRaisesRegex(
+            script.CiToolError, "attempt 3/3, failure kind transient-network"
+        ):
+            self.run_builds([(1, MIRROR_DNS_FAILURE)] * 3)
+        self.assertEqual(self.calls, 3)
+        self.assertEqual(self.sleeps, [60, 180])
+
+    def test_unclassified_failure_is_not_retried(self) -> None:
+        with self.assertRaisesRegex(script.CiToolError, "attempt 1/3, failure kind unknown"):
+            self.run_builds([(1, "make: *** [Makefile:12: all] Error 2\n")])
+        self.assertEqual(self.calls, 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_compat_failure_with_network_noise_is_not_retried(self) -> None:
+        # A real kernel/ZFS break must fail on the first attempt even when a
+        # mirror hiccup also left network lines in the same output.
+        with self.assertRaisesRegex(script.CiToolError, "failure kind upstream-compat"):
+            self.run_builds([(1, MIRROR_DNS_FAILURE + "configure: error: Unsupported Linux 7.2\n")])
+        self.assertEqual(self.calls, 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_only_the_failing_attempts_output_is_classified(self) -> None:
+        # The second attempt's unrelated failure must not be retried just
+        # because the first attempt's output had network errors.
+        with self.assertRaisesRegex(script.CiToolError, "attempt 2/3, failure kind unknown"):
+            self.run_builds([(1, MIRROR_DNS_FAILURE), (1, "error: some other failure\n")])
+        self.assertEqual(self.calls, 2)
+        self.assertEqual(self.sleeps, [60])
+
+    def test_run_streamed_echoes_and_returns_combined_output(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            returncode, output = script.run_streamed(
+                ["sh", "-c", "echo out; echo err >&2; exit 3"], cwd="."
+            )
+        self.assertEqual(returncode, 3)
+        self.assertEqual(output, "out\nerr\n")
+        self.assertEqual(printed.getvalue(), "out\nerr\n")
 
 
 if __name__ == "__main__":

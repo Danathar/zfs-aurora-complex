@@ -49,7 +49,9 @@ The classifier is intentionally small and fail-closed:
   surface. The build still fails, and image promotion remains blocked.
 - `transient-network` means no compatibility pattern matched, but the log shows
   a download mirror or network service was unreachable (curl/DNS/connection
-  errors). Re-run the build; if it fails the same way again, read the log.
+  errors). The build re-runs `just build` up to twice for this kind before
+  failing, and the log holds every attempt; check the last attempt's error, then
+  re-run the build.
 - `unknown` means the log did not match a known compatibility pattern and needs
   manual investigation.
 

@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
+from ci_tools.classify_akmods_failure import FAILURE_KIND_TRANSIENT_NETWORK, classify_log_text
 from ci_tools.common import (
     CiToolError,
     optional_env,
@@ -28,6 +32,15 @@ AKMODS_WORKTREE = Path("/tmp/akmods")
 # this workflow uses, and `pin_akmods_cache` checks the amd64 child of the
 # pushed manifest list against the ID recorded here.
 BUILT_IMAGE_ARCH = "x86_64"
+
+# Waits before the second and third `just build` attempts. A build is retried
+# only when its own output classifies as `transient-network` (an unreachable
+# download mirror, e.g. run 39380642084 / #194), never for upstream-compat or
+# unclassified failures, so a real build break still fails on the first
+# attempt. Whether a retry reaches a working mirror is not guaranteed; the
+# waits give a short outage time to clear. Worst case adds two builds and four
+# minutes, inside the job's 30-minute timeout.
+BUILD_RETRY_DELAYS_SECONDS = (60, 180)
 
 
 def kernel_name_for_flavor(kernel_flavor: str) -> str:
@@ -149,6 +162,52 @@ def record_built_image_id() -> str:
     return image_id
 
 
+def run_streamed(args: list[str], *, cwd: str) -> tuple[int, str]:
+    """
+    Run a command, echoing its combined output live, and return its exit code and output.
+
+    The output still reaches the job log as it is produced, which the action
+    tees into `artifacts/akmods-build.log` for the failure classifier.
+    """
+    with subprocess.Popen(
+        args,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    ) as proc:
+        assert proc.stdout is not None
+        lines: list[str] = []
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            lines.append(line)
+    return proc.returncode, "".join(lines)
+
+
+def build_with_network_retry(kernel_release: str) -> None:
+    """Run `just build`, retrying only failures that classify as `transient-network`."""
+    attempts = len(BUILD_RETRY_DELAYS_SECONDS) + 1
+    for attempt in range(1, attempts + 1):
+        returncode, output = run_streamed(["just", "build"], cwd=str(AKMODS_WORKTREE))
+        if returncode == 0:
+            return
+        failure_kind, _patterns = classify_log_text(output, kernel_release=kernel_release)
+        if failure_kind != FAILURE_KIND_TRANSIENT_NETWORK or attempt == attempts:
+            raise CiToolError(
+                f"Command failed: just build (exit {returncode}, attempt {attempt}/{attempts}, "
+                f"failure kind {failure_kind})"
+            )
+        delay = BUILD_RETRY_DELAYS_SECONDS[attempt - 1]
+        print(
+            f"just build failed with a transient network error (attempt {attempt}/{attempts}); "
+            f"retrying in {delay}s",
+            flush=True,
+        )
+        time.sleep(delay)
+
+
 def build_and_push_kernel_release(kernel_release: str) -> None:
     """
     Build and push one akmods payload for the supported primary kernel.
@@ -162,7 +221,7 @@ def build_and_push_kernel_release(kernel_release: str) -> None:
 
     # Upstream tooling reads the cache.json file we just wrote and publishes the
     # shared Fedora-wide tag plus the architecture-specific inspection tag.
-    run_cmd(["just", "build"], cwd=str(AKMODS_WORKTREE), capture_output=False)
+    build_with_network_retry(kernel_release)
     # Taken between build and push, so it names what this run built rather
     # than anything the registry says afterwards.
     record_built_image_id()

@@ -579,7 +579,10 @@ model and the cosign v3 compatibility flags.
      still fails and `latest` is not promoted
    - `transient-network` marks failures where a download mirror or network
      service was unreachable (DNS, connection refused, timeouts); it is not a
-     compatibility problem, and the next green build closes the issue
+     compatibility problem, and the next green build closes the issue. Before
+     failing, `ci_tools/akmods_build_and_publish.py` re-runs `just build` up to
+     twice (60s, then 180s later) when that attempt's own output classifies as
+     `transient-network`; any other failure kind fails on the first attempt
    - when OpenZFS configure metadata shows `ZFS_META_KVER_MAX` below the
      resolved base-image kernel, the job summary and sticky payload call out
      that this is an intentional fail-closed protection
