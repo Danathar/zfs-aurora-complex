@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 
 from ci_tools.classify_akmods_failure import (
+    FAILURE_KIND_TRANSIENT_NETWORK,
     FAILURE_KIND_UNKNOWN,
     FAILURE_KIND_UPSTREAM_COMPAT,
     ZFS_MAX_KERNEL_MISMATCH_PATTERN,
@@ -109,6 +110,51 @@ class ClassifyLogTextTests(unittest.TestCase):
             ],
         )
 
+    def test_mirror_dns_failure_is_transient_network(self) -> None:
+        log = (
+            "Curl error (6): Could not resolve hostname for "
+            "https://repos.eggycrew.com/rpmfusion/free/fedora/rpmfusion-free-release-44.noarch.rpm "
+            "[Could not resolve host: repos.eggycrew.com]\n"
+            "Failed to download files\n"
+        )
+        kind, matched = classify_log_text(log, kernel_release="7.2.7-200.fc44.x86_64")
+        self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+        self.assertIn(r"Curl error \((?:6|7|28|35|56)\)", matched)
+        self.assertIn("Could not resolve host", matched)
+
+    def test_copr_connection_refused_is_transient_network(self) -> None:
+        log = (
+            "Curl error (7): Couldn't connect to server for "
+            "https://copr.fedorainfracloud.org [Connection refused]"
+        )
+        kind, matched = classify_log_text(log)
+        self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+        self.assertIn("Connection refused", matched)
+
+    def test_upstream_compat_pattern_wins_over_network_pattern(self) -> None:
+        log = (
+            "Curl error (6): Could not resolve hostname for https://example.invalid\n"
+            "module.c:123: error: implicit declaration of function 'folio_wait_writeback'\n"
+        )
+        kind, matched = classify_log_text(log)
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertEqual(matched, ["implicit declaration of function"])
+
+    def test_zfs_max_kernel_mismatch_wins_over_network_pattern(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+            "Connection refused\n"
+        )
+        kind, matched = classify_log_text(log, kernel_release="7.0.4-200.fc44.x86_64")
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertEqual(matched, [ZFS_MAX_KERNEL_MISMATCH_PATTERN])
+
+    def test_unrelated_curl_error_code_is_not_transient_network(self) -> None:
+        kind, matched = classify_log_text("Curl error (60): SSL certificate problem")
+        self.assertEqual(kind, FAILURE_KIND_UNKNOWN)
+        self.assertEqual(matched, [])
+
 
 class FailureSummaryTests(unittest.TestCase):
     def test_openzfs_max_kernel_summary_explains_fail_closed_behavior(self) -> None:
@@ -142,6 +188,17 @@ class FailureSummaryTests(unittest.TestCase):
         self.assertNotIn("but the resolved base image uses", summary)
         self.assertIn("known upstream ZFS/kernel compatibility pattern", summary)
 
+    def test_transient_network_summary_says_it_is_not_a_compat_problem(self) -> None:
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_TRANSIENT_NETWORK,
+            kernel_release="7.2.7-200.fc44.x86_64",
+            log_text="Could not resolve host: repos.eggycrew.com",
+        )
+
+        self.assertIn("download mirror or network service was unreachable", summary)
+        self.assertIn("not a kernel/ZFS compatibility problem", summary)
+        self.assertIn("Re-run `build.yml`", summary)
+
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):
     def test_payload_key_is_stable_per_kernel_and_ref(self) -> None:
@@ -174,6 +231,23 @@ class BuildStickyIssuePayloadTests(unittest.TestCase):
         )
         self.assertTrue(payload["title"].startswith("Unclassified"))
         self.assertEqual(payload["failure_kind"], FAILURE_KIND_UNKNOWN)
+
+    def test_transient_network_kind_has_its_own_title_and_key(self) -> None:
+        payload = build_sticky_issue_payload(
+            failure_kind=FAILURE_KIND_TRANSIENT_NETWORK,
+            kernel_release="7.2.7-200.fc44.x86_64",
+            akmods_upstream_ref="d73abd6aacb2ffffffffffffffffffffffffffff",
+            fedora_version="44",
+            run_id="12345",
+            run_url="https://github.com/example/repo/actions/runs/12345",
+            matched_patterns=["Could not resolve host"],
+        )
+        self.assertEqual(
+            payload["title"],
+            "Transient network failure in akmods build: 7.2.7-200.fc44.x86_64 + akmods@d73abd6aacb2",
+        )
+        self.assertEqual(payload["key"], "transient-network:7.2.7-200.fc44.x86_64:d73abd6aacb2")
+        self.assertEqual(payload["failure_kind"], FAILURE_KIND_TRANSIENT_NETWORK)
 
     def test_missing_ref_uses_placeholder(self) -> None:
         payload = build_sticky_issue_payload(

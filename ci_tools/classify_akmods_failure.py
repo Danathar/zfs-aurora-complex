@@ -1,6 +1,6 @@
 """
 Script: ci_tools/classify_akmods_failure.py
-What: Classifies an akmods/build failure log into a small set of known failure kinds.
+What: Classifies an akmods/build failure log into a small set of known failure kinds (`upstream-compat`, `transient-network`, `unknown`).
 Doing: Reads a log file, scans a tight allowlist of patterns, writes classification to GitHub outputs and a sticky-issue payload.
 Why: Lets the sticky-issue workflow open one issue per distinct upstream-compat outage and auto-close on green without hiding red builds.
 Goal: Make persistent upstream failures informative without suppressing anything.
@@ -17,6 +17,7 @@ from pathlib import Path
 from ci_tools.common import optional_env, write_github_outputs
 
 FAILURE_KIND_UPSTREAM_COMPAT = "upstream-compat"
+FAILURE_KIND_TRANSIENT_NETWORK = "transient-network"
 FAILURE_KIND_UNKNOWN = "unknown"
 
 
@@ -45,6 +46,17 @@ UPSTREAM_COMPAT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"configure: error: unsupported kernel version", re.IGNORECASE),
     re.compile(r"configure: error: \*{3} Please use a newer kernel", re.IGNORECASE),
     re.compile(r"Unsupported Linux [0-9]", re.IGNORECASE),
+)
+
+# Download mirrors or network services that were unreachable. These say nothing
+# about kernel/ZFS compatibility, so they are only consulted when no
+# upstream-compat pattern matched.
+TRANSIENT_NETWORK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"Curl error \((?:6|7|28|35|56)\)", re.IGNORECASE),
+    re.compile(r"Could not resolve host", re.IGNORECASE),
+    re.compile(r"Connection refused", re.IGNORECASE),
+    re.compile(r"Temporary failure in name resolution", re.IGNORECASE),
+    re.compile(r"Operation timed out after", re.IGNORECASE),
 )
 
 
@@ -92,6 +104,12 @@ def build_failure_summary(*, failure_kind: str, kernel_release: str, log_text: s
             "The akmods build failed with a known upstream ZFS/kernel compatibility pattern. "
             "The build is intentionally failing closed and image promotion was skipped."
         )
+    if failure_kind == FAILURE_KIND_TRANSIENT_NETWORK:
+        return (
+            "The akmods build failed because a download mirror or network service was "
+            "unreachable. This is not a kernel/ZFS compatibility problem. Re-run "
+            "`build.yml` or wait for the next scheduled run; image promotion was skipped."
+        )
     return "The akmods build failed, but no known compatibility pattern matched the log."
 
 
@@ -101,9 +119,10 @@ def classify_log_text(log_text: str, *, kernel_release: str = "") -> tuple[str, 
 
     Returns:
     - failure_kind: one of the FAILURE_KIND_* constants
-    - matched_patterns: every upstream-compat pattern whose regex found at least
-      one match in the log body, preserving the declaration order of
-      `UPSTREAM_COMPAT_PATTERNS`
+    - matched_patterns: every pattern of the winning kind whose regex found at
+      least one match in the log body, preserving declaration order. Upstream-compat
+      patterns (and the ZFS max-kernel mismatch) take precedence; the
+      `TRANSIENT_NETWORK_PATTERNS` are consulted only when none of them matched.
     """
     if not log_text:
         return FAILURE_KIND_UNKNOWN, []
@@ -118,6 +137,12 @@ def classify_log_text(log_text: str, *, kernel_release: str = "") -> tuple[str, 
 
     if matched:
         return FAILURE_KIND_UPSTREAM_COMPAT, matched
+
+    network_matched = [
+        pattern.pattern for pattern in TRANSIENT_NETWORK_PATTERNS if pattern.search(log_text)
+    ]
+    if network_matched:
+        return FAILURE_KIND_TRANSIENT_NETWORK, network_matched
     return FAILURE_KIND_UNKNOWN, []
 
 
@@ -148,6 +173,8 @@ def build_sticky_issue_payload(
     key = f"{failure_kind}:{kernel_release or 'unknown-kernel'}:{safe_ref}"
     if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT:
         title = f"Upstream ZFS/kernel incompatibility: {kernel_release} + akmods@{safe_ref}"
+    elif failure_kind == FAILURE_KIND_TRANSIENT_NETWORK:
+        title = f"Transient network failure in akmods build: {kernel_release} + akmods@{safe_ref}"
     else:
         title = f"Unclassified akmods build failure: {kernel_release} + akmods@{safe_ref}"
 

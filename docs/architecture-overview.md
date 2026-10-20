@@ -577,6 +577,9 @@ model and the cosign v3 compatibility flags.
    - failed shared-akmods builds upload `akmods-failure.json` before the job exits
    - `upstream-compat` marks known ZFS/kernel compatibility failures; the build
      still fails and `latest` is not promoted
+   - `transient-network` marks failures where a download mirror or network
+     service was unreachable (DNS, connection refused, timeouts); it is not a
+     compatibility problem, and the next green build closes the issue
    - when OpenZFS configure metadata shows `ZFS_META_KVER_MAX` below the
      resolved base-image kernel, the job summary and sticky payload call out
      that this is an intentional fail-closed protection
