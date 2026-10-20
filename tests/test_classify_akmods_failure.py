@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 
 from ci_tools.classify_akmods_failure import (
+    FAILURE_KIND_TRANSIENT_NETWORK,
     FAILURE_KIND_UNKNOWN,
     FAILURE_KIND_UPSTREAM_COMPAT,
     ZFS_MAX_KERNEL_MISMATCH_PATTERN,
@@ -18,6 +19,7 @@ from ci_tools.classify_akmods_failure import (
     build_step_summary_markdown,
     build_sticky_issue_payload,
     classify_log_text,
+    zfs_metadata_from_log,
 )
 
 
@@ -109,6 +111,73 @@ class ClassifyLogTextTests(unittest.TestCase):
             ],
         )
 
+    def test_mirror_dns_failure_is_transient_network(self) -> None:
+        log = (
+            "Curl error (6): Could not resolve hostname for "
+            "https://repos.eggycrew.com/rpmfusion/free/fedora/rpmfusion-free-release-44.noarch.rpm "
+            "[Could not resolve host: repos.eggycrew.com]\n"
+            "Failed to download files\n"
+        )
+        kind, matched = classify_log_text(log, kernel_release="7.2.7-200.fc44.x86_64")
+        self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+        self.assertIn(r"Curl error \((?:6|7|28|35|56)\)", matched)
+        self.assertIn("Could not resolve host", matched)
+
+    def test_copr_connection_refused_is_transient_network(self) -> None:
+        log = (
+            "Curl error (7): Couldn't connect to server for "
+            "https://copr.fedorainfracloud.org [Connection refused]"
+        )
+        kind, matched = classify_log_text(log)
+        self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+        self.assertIn("Connection refused", matched)
+
+    def test_upstream_compat_pattern_wins_over_network_pattern(self) -> None:
+        log = (
+            "Curl error (6): Could not resolve hostname for https://example.invalid\n"
+            "module.c:123: error: implicit declaration of function 'folio_wait_writeback'\n"
+        )
+        kind, matched = classify_log_text(log)
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertEqual(matched, ["implicit declaration of function"])
+
+    def test_zfs_max_kernel_mismatch_wins_over_network_pattern(self) -> None:
+        log = (
+            "ZFS_META_VERSION='2.4.1'\n"
+            "ZFS_META_KVER_MAX='6.19'\n"
+            "Connection refused\n"
+        )
+        kind, matched = classify_log_text(log, kernel_release="7.0.4-200.fc44.x86_64")
+        self.assertEqual(kind, FAILURE_KIND_UPSTREAM_COMPAT)
+        self.assertEqual(matched, [ZFS_MAX_KERNEL_MISMATCH_PATTERN])
+
+    def test_each_network_pattern_alone_is_transient_network(self) -> None:
+        # One row per pattern, each matching only that pattern, so dropping any
+        # one of them turns its outage back into "unknown". The curl codes are
+        # the ones dnf5/libcurl print for DNS, refused, timeout, TLS connect and
+        # receive failures; the log casing varies between dnf versions.
+        rows = {
+            r"Curl error \((?:6|7|28|35|56)\)": "curl error (35): SSL connect error",
+            "Could not resolve host": "could not resolve host: mirrors.fedoraproject.org",
+            "Connection refused": "connect to 192.0.2.1 port 443: Connection refused",
+            "Temporary failure in name resolution": (
+                "Failed to connect: Temporary failure in name resolution"
+            ),
+            "Operation timed out after": (
+                "Operation timed out after 30000 milliseconds with 0 bytes received"
+            ),
+        }
+        for pattern, log in rows.items():
+            with self.subTest(pattern=pattern):
+                kind, matched = classify_log_text(log)
+                self.assertEqual(kind, FAILURE_KIND_TRANSIENT_NETWORK)
+                self.assertEqual(matched, [pattern])
+
+    def test_unrelated_curl_error_code_is_not_transient_network(self) -> None:
+        kind, matched = classify_log_text("Curl error (60): SSL certificate problem")
+        self.assertEqual(kind, FAILURE_KIND_UNKNOWN)
+        self.assertEqual(matched, [])
+
 
 class FailureSummaryTests(unittest.TestCase):
     def test_openzfs_max_kernel_summary_explains_fail_closed_behavior(self) -> None:
@@ -142,6 +211,102 @@ class FailureSummaryTests(unittest.TestCase):
         self.assertNotIn("but the resolved base image uses", summary)
         self.assertIn("known upstream ZFS/kernel compatibility pattern", summary)
 
+    def test_transient_network_summary_says_it_is_not_a_compat_problem(self) -> None:
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_TRANSIENT_NETWORK,
+            kernel_release="7.2.7-200.fc44.x86_64",
+            log_text="Could not resolve host: repos.eggycrew.com",
+        )
+
+        self.assertIn("download mirror or network service was unreachable", summary)
+        self.assertIn("not a kernel/ZFS compatibility problem", summary)
+        self.assertIn("read the log", summary)
+        self.assertIn("Re-run `build.yml`", summary)
+
+
+class ZfsMetadataFromLogTests(unittest.TestCase):
+    """
+    The two captured values are published, so what they may contain matters.
+
+    `build_failure_summary` puts them in the sticky issue body
+    akmods-failure-triage.yml opens with `issues: write`, and
+    `ci_tools/write_akmods_badge.py` puts them in the badge message that same
+    workflow commits to the `status` branch for shields.io. The log they come
+    out of is not written by this repository: it is the akmods fork's
+    `just build` output plus the OpenZFS release tarball's own `configure`.
+    """
+
+    # A real configure line, and the release-candidate form, which carries the
+    # two characters most likely to be dropped by an over-tight pattern.
+    def test_ordinary_metadata_still_parses(self) -> None:
+        version, max_kernel = zfs_metadata_from_log(
+            "ZFS_META_VERSION='2.4.0-rc1'\nZFS_META_KVER_MAX='6.19'\n"
+        )
+
+        self.assertEqual(version, "2.4.0-rc1")
+        self.assertEqual(max_kernel, "6.19")
+
+    def test_capture_does_not_run_past_the_end_of_its_own_line(self) -> None:
+        # An unterminated `ZFS_META_VERSION='` used to capture every line up to
+        # the next quote anywhere later in the log, because a character class
+        # matches newlines. Pin the boundary rather than the old behaviour.
+        version, max_kernel = zfs_metadata_from_log(
+            "checking ZFS_META_VERSION='2.4.4\n"
+            "some other output line\n"
+            "ZFS_META_KVER_MAX='6.99'\n"
+        )
+
+        self.assertEqual(version, "")
+        self.assertEqual(max_kernel, "6.99")
+
+    def test_markdown_in_the_log_is_not_captured_as_a_version(self) -> None:
+        # Markdown in an issue body renders as markdown, and an image fetches a
+        # remote URL when a maintainer opens the issue. A version string has no
+        # business containing any of these characters.
+        version, _ = zfs_metadata_from_log(
+            "ZFS_META_VERSION='[x](https://example.invalid)'\n"
+        )
+
+        self.assertEqual(version, "")
+
+    def test_capture_is_bounded_to_a_version_shaped_value(self) -> None:
+        # 32 version characters is the most the pattern takes; one more, or a
+        # space or `*` (prose and emphasis markdown), takes the no-metadata path.
+        longest = "2." + "4" * 30
+        rows = {
+            longest: longest,
+            longest + "4": "",
+            "2.4.4 see the log": "",
+            "*2.4.4*": "",
+        }
+        for value, expected in rows.items():
+            with self.subTest(value=value):
+                version, max_kernel = zfs_metadata_from_log(
+                    f"ZFS_META_VERSION='{value}'\nZFS_META_KVER_MAX='{value}'\n"
+                )
+                self.assertEqual(version, expected)
+                self.assertEqual(max_kernel, expected)
+
+    def test_summary_names_the_placeholder_rather_than_quoting_the_log(self) -> None:
+        # The unparseable half degrades to the placeholder this function
+        # already used for a log that names a max kernel but no version, so
+        # the summary still says which kernel is too new. What it must not do
+        # is carry the log lines that sat between the two metadata markers.
+        summary = build_failure_summary(
+            failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+            kernel_release="7.1.4-204.fc44.x86_64",
+            log_text=(
+                "checking ZFS_META_VERSION='2.4.4\n"
+                "[x](https://example.invalid) all this text\n"
+                "ZFS_META_KVER_MAX='6.99'\n"
+            ),
+        )
+
+        self.assertNotIn("example.invalid", summary)
+        self.assertIn("the selected OpenZFS release", summary)
+        self.assertIn("up to 6.99", summary)
+
+
 
 class BuildStickyIssuePayloadTests(unittest.TestCase):
     def test_payload_key_is_stable_per_kernel_and_ref(self) -> None:
@@ -174,6 +339,23 @@ class BuildStickyIssuePayloadTests(unittest.TestCase):
         )
         self.assertTrue(payload["title"].startswith("Unclassified"))
         self.assertEqual(payload["failure_kind"], FAILURE_KIND_UNKNOWN)
+
+    def test_transient_network_kind_has_its_own_title_and_key(self) -> None:
+        payload = build_sticky_issue_payload(
+            failure_kind=FAILURE_KIND_TRANSIENT_NETWORK,
+            kernel_release="7.2.7-200.fc44.x86_64",
+            akmods_upstream_ref="d73abd6aacb2ffffffffffffffffffffffffffff",
+            fedora_version="44",
+            run_id="12345",
+            run_url="https://github.com/example/repo/actions/runs/12345",
+            matched_patterns=["Could not resolve host"],
+        )
+        self.assertEqual(
+            payload["title"],
+            "Transient network failure in akmods build: 7.2.7-200.fc44.x86_64 + akmods@d73abd6aacb2",
+        )
+        self.assertEqual(payload["key"], "transient-network:7.2.7-200.fc44.x86_64:d73abd6aacb2")
+        self.assertEqual(payload["failure_kind"], FAILURE_KIND_TRANSIENT_NETWORK)
 
     def test_missing_ref_uses_placeholder(self) -> None:
         payload = build_sticky_issue_payload(

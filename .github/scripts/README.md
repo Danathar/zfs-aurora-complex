@@ -47,6 +47,9 @@ The classifier is intentionally small and fail-closed:
 
 - `upstream-compat` means the log matched a known ZFS/kernel compatibility
   surface. The build still fails, and image promotion remains blocked.
+- `transient-network` means no compatibility pattern matched, but the log shows
+  a download mirror or network service was unreachable (curl/DNS/connection
+  errors). Re-run the build; if it fails the same way again, read the log.
 - `unknown` means the log did not match a known compatibility pattern and needs
   manual investigation.
 

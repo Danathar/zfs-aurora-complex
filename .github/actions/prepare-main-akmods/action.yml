@@ -266,7 +266,8 @@ runs:
     # existing cache does not match the current primary kernel.
     #
     # We capture stdout and stderr to a log file so the next step can classify a
-    # failure into `upstream-compat` vs `unknown` without re-running the build.
+    # failure into `upstream-compat`, `transient-network` or `unknown` without
+    # re-running the build.
     - id: akmods_build
       name: Build and publish shared self-hosted ZFS akmods image
       if: inputs.rebuild_akmods == 'true' || steps.cache.outputs.exists != 'true'
