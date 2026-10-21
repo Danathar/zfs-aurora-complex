@@ -124,6 +124,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from typing import NamedTuple
@@ -1493,7 +1494,7 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
         # absent has weakened itself by accident.
         bindir = Path(tempfile.mkdtemp(prefix="gate-path-"))
         try:
-            for name in ("git", "realpath", "cat", "printf"):
+            for name in ("git", "realpath", "cat", "printf", "timeout"):
                 found = shutil.which(name)
                 if found:
                     (bindir / name).symlink_to(found)
@@ -1524,6 +1525,56 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 2, result.stderr)
+
+    def test_it_fails_closed_when_timeout_is_missing(self) -> None:
+        # Without timeout the reading has no bound, and a hook that overruns
+        # Claude Code's hook timeout lets the command run, so the hook refuses
+        # as it does without jq.
+        bindir = Path(tempfile.mkdtemp(prefix="gate-path-"))
+        try:
+            for name in ("git", "realpath", "cat", "printf", "jq"):
+                found = shutil.which(name)
+                if found:
+                    (bindir / name).symlink_to(found)
+            result = subprocess.run(
+                [BASH, str(GATE)],
+                input=payload("git diff HEAD~1 HEAD"),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=str(REPO_ROOT),
+                env={"PATH": str(bindir), "CLAUDE_PROJECT_DIR": str(REPO_ROOT)},
+                check=False,
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("needs timeout", result.stderr)
+        finally:
+            shutil.rmtree(bindir, ignore_errors=True)
+
+    def test_a_command_too_long_to_read_in_the_budget_is_refused(self) -> None:
+        # Claude Code runs the command when a PreToolUse hook overruns its
+        # timeout, which is 60 seconds here because the settings entry sets
+        # none. Unbounded, this 60 KB string took 61 s to refuse under
+        # LC_ALL=C in the same hook in zfs-kinoite-complex, so it ran. Under
+        # the budget it is refused at 10 s.
+        command = "git status -- " + "a " * 30000 + "; git diff /dev/null ./cosign.key"
+        started = time.monotonic()
+        result = self.run_gate(command)
+        elapsed = time.monotonic() - started
+        self.assertEqual(result.returncode, 2, result.stderr[:200])
+        self.assertIn("took longer than 10 seconds to check", result.stderr)
+        self.assertLess(elapsed, 30)
+
+    def test_readings_behind_programs_are_bounded(self) -> None:
+        # Each checked command behind a program the gate does not step over
+        # is read by running the hook again, so their number and nesting are
+        # bounded, and a string past either bound is refused unread.
+        many = "strace " + " ".join(["git status"] * 17)
+        deep = "sh -c \"sh -c 'sh -c \\\"sh -c git\\\"'\""
+        for command in (many, deep):
+            with self.subTest(command=command):
+                self.assertRefused(command, "each one has to be read on its own")
+        self.assertAllowed("strace " + " ".join(["git status"] * 3))
 
 
 class Row(NamedTuple):
@@ -2183,6 +2234,103 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "the word xargs inside an argument is not xargs in the wrapper chain",
     ),
+    # A program the gate neither checks nor steps over can still run a checked
+    # command: setarch, strace and prlimit run the words after them, and sh -c,
+    # script -c and eval run a string. No allow rule covers them, so the
+    # default mode prompts, but bypass and auto modes prompt for nothing (#199;
+    # atomic-image-builder#781 is the same rule). Every refused row below
+    # exited 0 before.
+    Row(
+        "command name",
+        "setarch x86_64 gh pr view 1 --json number --jq env",
+        "refused",
+        "setarch runs gh with the filter, which prints GH_TOKEN with the rest of the environment; "
+        "the filter scan read gh only as the name",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "strace -o /dev/null gh pr view 1 --json number -q '$ENV'",
+        "refused",
+        "the same behind a tracer, with an option value between the program and gh",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "script -qc 'git diff /dev/null ./.env' /dev/null",
+        "refused",
+        "script -c hands its quoted argument to a shell, so the plain-file read runs from a "
+        "string this split saw as one word",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "script -qc'gh pr view 1 --json number --jq env' /dev/null",
+        "refused",
+        "the command string attached to script's short option is read too",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c 'git diff /dev/null ./cosign.key'",
+        "refused",
+        "a shell runs the string as a command line, and that command line is the plain-file read",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 /usr/bin/gh pr view 1 --json number --jq env",
+        "refused",
+        "a checked command behind the program is found by its last path component",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        ">.claude/settings.json setarch x86_64 gh run view 1 --log",
+        "refused",
+        "the program hands gh the redirection in front of it, so the command read on its own "
+        "carries it too: gh's log overwrites the file holding these rules",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "env -i $G diff /dev/null ./cosign.key",
+        "refused",
+        "after a wrapper every word is held to the name test, past the wrapper's own options",
+        "Spell every command name literally",
+    ),
+    Row(
+        "command name",
+        "noglob $G diff /dev/null ./cosign.key",
+        "refused",
+        "noglob is a wrapper, so the word after it is the name and is held to the name test",
+        "Spell every command name literally",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 git diff HEAD",
+        "allowed",
+        "a command that passes on its own passes behind a program as well",
+    ),
+    Row(
+        "command name",
+        "sh -c 'git status'",
+        "allowed",
+        "the string a shell runs is read, and this one is an ordinary command",
+    ),
+    Row(
+        "command name",
+        "rg 'git diff' docs",
+        "allowed",
+        "a search pattern that spells a checked command is read as one, and passes",
+    ),
+    Row(
+        "command name",
+        "jq -r '.[] | select(.name == \"gh\")' runs.json",
+        "allowed",
+        "a string is read only when it names git or a whole allow-listed prefix, so a jq program "
+        "that mentions gh is left alone",
+    ),
     # --- 5. an option that loads or writes ---------------------------------
     Row(
         "options",
@@ -2523,13 +2671,13 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "the name search past a wrapper's own options",
         "((after_wrapper)) || command_word_pending=0",
         "command_word_pending=0",
-        "git status; env -i python3 tests/run_tests.py >cosign.pub",
+        "env -i $G diff /dev/null ./cosign.key",
     ),
     (
         "noglob stepped over as a wrapper",
         "nice | noglob | xargs | timeout",
         "nice | xargs | timeout",
-        "noglob python3 tests/run_tests.py >out",
+        "noglob $G diff /dev/null ./cosign.key",
     ),
     (
         "the xargs refusal",
@@ -2547,7 +2695,7 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "a wrapper's typed word cut at a backslash as well as a slash",
         'wrapper="${typed##*[\\\\/]}"',
         'wrapper="${typed##*/}"',
-        "/usr/bin\\timeout 5 python3 tests/run_tests.py >out",
+        "'./shim\\nohup' git diff HEAD",
     ),
     (
         "the words after xargs's command read as its arguments",
@@ -2596,6 +2744,30 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         '[[ "${word}" == "blame" || "${word}" == "annotate" ]]',
         '[[ "${word}" == "blame" ]]',
         "git annotate --contents ./cosign.key README.md",
+    ),
+    (
+        "a checked command behind a program read on its own",
+        'read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"',
+        ":",
+        "setarch x86_64 gh pr view 1 --json number --jq env",
+    ),
+    (
+        "a command string a later word carries read on its own",
+        'read_on_its_own "${program}" "${string_prefix}${text}${string_suffix}"',
+        ":",
+        "script -qc 'git diff /dev/null ./.env' /dev/null",
+    ),
+    (
+        "a short-option cluster's tails read as command strings",
+        "for ((cut = 2; cut <= cluster; cut++)); do",
+        "for ((cut = cluster + 1; cut <= cluster; cut++)); do",
+        "script -qc'gh pr view 1 --json number --jq env' /dev/null",
+    ),
+    (
+        "a string read only when it names a whole checked command",
+        '[[ "${candidate}" == "${prefix} "* ]] && return 0',
+        '[[ "${candidate}" == "${prefix%% *} "* ]] && return 0',
+        "jq -r '.[] | select(.name == \"gh\")' runs.json",
     ),
 )
 
