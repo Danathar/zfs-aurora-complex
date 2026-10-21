@@ -11,6 +11,12 @@ prefixes the row depends on. This repository runs the rows its own allow list
 makes reachable, so a newly found bypass is one new row, and every repository
 that allows the command fails until its gate refuses it.
 
+A row with a `wraps` field puts a wrapper no allow rule covers (`flock`,
+`watch`, `find -exec`) in front of the command it requires. It runs wherever
+that inner command is allowed, because every gate refuses the protected action
+behind any wrapper, whether or not Claude Code would prompt first: bypass and
+auto permission modes prompt for nothing.
+
 The canonical copy lives in Danathar/atomic-image-builder, whose
 docs/gate-refusal-corpus.md documents the row format. The copy here is pinned
 by SHA-256: change a row there, then copy the file here and update the pin.
@@ -25,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -38,10 +45,11 @@ SETTINGS = ROOT / ".claude/settings.json"
 REFUSE = "refuse"
 ALLOW = "allow"
 ROW_FIELDS = {"id", "class", "verdict", "requires", "command", "why"}
+OPTIONAL_FIELDS = {"wraps"}
 
 # SHA-256 of the canonical tests/fixtures/gate-refusal-corpus.json in
 # Danathar/atomic-image-builder. Copy the file from there; never edit it here.
-CANONICAL_SHA256 = "8a4bf0f7118af630f2549633cb91d33a324312d5750bbc83e0f0a8489700cf71"
+CANONICAL_SHA256 = "de16d01afbf010ddb6d63d55c3a182f457e02b3b04319085f57d8f530b65a44d"
 
 
 def allow_prefixes(settings: dict) -> list[str]:
@@ -69,6 +77,18 @@ def covered(prefix: str, prefixes: list[str]) -> bool:
 
 def applies(row: dict, prefixes: list[str]) -> bool:
     return all(covered(prefix, prefixes) for prefix in row["requires"])
+
+
+def inner_words(row: dict) -> list[str]:
+    """The words a row's command is checked against for what it requires.
+
+    A row without `wraps` is read word by word, as written. A wrapped row is
+    read the way the shell hands it to the wrapper, and each of those words
+    split again, so `env -S 'git diff ...'` names `git diff` as well.
+    """
+    if "wraps" not in row:
+        return row["command"].split()
+    return [part for word in shlex.split(row["command"]) for part in word.split()]
 
 
 def hook_command(settings: dict) -> str:
@@ -143,7 +163,8 @@ class CorpusShapeTests(unittest.TestCase):
     def test_every_row_has_exactly_the_documented_fields(self) -> None:
         for row in self.corpus["rows"]:
             with self.subTest(row=row.get("id")):
-                self.assertEqual(set(row), ROW_FIELDS)
+                self.assertLessEqual(ROW_FIELDS, set(row))
+                self.assertLessEqual(set(row), ROW_FIELDS | OPTIONAL_FIELDS)
                 self.assertIn(row["verdict"], (REFUSE, ALLOW))
                 self.assertTrue(row["requires"], "a row has to name what it depends on")
                 for prefix in row["requires"]:
@@ -162,7 +183,7 @@ class CorpusShapeTests(unittest.TestCase):
         # a gate that has nothing to do with it.
         for row in self.corpus["rows"]:
             with self.subTest(row=row["id"]):
-                words = row["command"].split()
+                words = inner_words(row)
                 self.assertTrue(
                     any(
                         " ".join(words[i : i + len(p.split())]) == p
@@ -171,6 +192,21 @@ class CorpusShapeTests(unittest.TestCase):
                     ),
                     f"{row['command']!r} names none of {row['requires']}",
                 )
+
+    def test_a_wrapped_row_starts_with_the_wrapper_it_names(self) -> None:
+        # `wraps` is what tells a reader the row is not reachable through an
+        # allow rule alone. It names the first word, and is never one of the
+        # prefixes the row requires, or the row would run only where the
+        # wrapper itself is allowed.
+        wrapped = [row for row in self.corpus["rows"] if "wraps" in row]
+        self.assertTrue(wrapped, "the corpus has no wrapped row for this test to read")
+        for row in wrapped:
+            with self.subTest(row=row["id"]):
+                wrapper = row["wraps"]
+                self.assertIsInstance(wrapper, str)
+                self.assertTrue(wrapper and wrapper == wrapper.strip() and " " not in wrapper)
+                self.assertEqual(shlex.split(row["command"])[0], wrapper)
+                self.assertFalse(any(prefix.split()[0] == wrapper for prefix in row["requires"]))
 
     def test_both_verdicts_are_present(self) -> None:
         # Refusals alone would pass a gate that refuses everything, and a
@@ -196,6 +232,33 @@ class PrefixMatchTests(unittest.TestCase):
         self.assertFalse(covered("gh prx view", prefixes))
         prefixes = allow_prefixes({"permissions": {"allow": ["Bash(gh pr view:*)"]}})
         self.assertFalse(covered("gh pr", prefixes))
+
+
+SAMPLE_ROW = {
+    "id": "r",
+    "class": "c",
+    "verdict": REFUSE,
+    "requires": ["git diff"],
+    "command": "git diff /dev/null ./.env",
+    "why": "w",
+}
+
+
+class WrappedRowTests(unittest.TestCase):
+    def test_a_wrapped_row_runs_where_its_inner_command_is_allowed(self) -> None:
+        # No allow rule covers `flock`; the row still runs wherever `git diff`
+        # is allowed, which is the point of the field.
+        row = {**SAMPLE_ROW, "wraps": "flock", "command": "flock /tmp/l git diff /dev/null ./.env"}
+        self.assertTrue(applies(row, ["git diff"]))
+        self.assertFalse(applies(row, ["git status"]))
+
+    def test_a_wrapped_row_names_what_it_requires_inside_a_quoted_word(self) -> None:
+        row = {**SAMPLE_ROW, "wraps": "env", "command": "env -S 'git diff /dev/null ./.env'"}
+        self.assertEqual(inner_words(row)[2:4], ["git", "diff"])
+
+    def test_a_row_without_wraps_is_read_as_written(self) -> None:
+        row = {**SAMPLE_ROW, "command": "env -S 'git diff /dev/null ./.env'"}
+        self.assertNotIn("git", inner_words(row))
 
 
 class CorpusVerdictTests(unittest.TestCase):
