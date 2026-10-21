@@ -164,10 +164,24 @@
 # literal paths. Nothing here is named `~`, and the alternative is a
 # containment test that has to know how each word was quoted.
 #
-# What it still cannot see, stated rather than implied: a command that hides a
-# git invocation behind another interpreter (`sh -c ...`), one that changes
-# directory out of the repository first, and anything a command reads or writes
-# once it has started. A git argument built at runtime (`git diff $x $y`,
+# A program this hook neither checks nor steps over can still run a checked
+# command: `setarch x86_64 gh pr view 1 --json number --jq env`, `strace -o
+# /dev/null gh ...` and `prlimit git ...` run the words after them, and
+# `sh -c '...'`, `script -qc '...'` and `eval '...'` hand a shell a whole
+# command line. No allow rule covers such a program, so the default mode
+# prompts, but bypass and auto modes prompt for nothing, and the fleet's rule
+# is that a protected action is refused behind any program. So behind one,
+# every later word where git or an allow-listed prefix starts, and every
+# command string a later word carries, is read as a command of its own by
+# running this hook on it, and the whole command is refused when that one
+# would be (see `read_on_its_own`). A command that passes on its own still
+# passes (`setarch x86_64 git diff HEAD`).
+#
+# What it still cannot see, stated rather than implied: a command that takes
+# the git invocation from somewhere other than this string (a script file,
+# standard input, a variable), one that changes directory out of the
+# repository first, and anything a command reads or writes once it has
+# started. A git argument built at runtime (`git diff $x $y`,
 # `$(...)`, a backtick, `$'\x74'`) is no longer waved through -- every `$` and
 # backtick in a word of a git invocation is refused, see `EXPAND_MSG` -- but
 # that is a refusal, not an inspection. `xargs` is the one runtime reader
@@ -185,6 +199,45 @@ refuse() {
   printf '%s\n' "$1" >&2
   exit 2
 }
+
+# This file, by a path that still works after the `cd` below: the reading of
+# a command behind a program this gate does not step over runs it again (see
+# `read_on_its_own`).
+case "${BASH_SOURCE[0]}" in
+/*) GATE_SELF="${BASH_SOURCE[0]}" ;;
+*) GATE_SELF="${PWD}/${BASH_SOURCE[0]}" ;;
+esac
+
+# A PreToolUse hook that runs past its timeout refuses nothing: Claude Code
+# gives up on it and runs the command. The settings entry sets no timeout, so
+# that is the 60-second default. Reading a command here costs more than its
+# length -- every character is taken with `${command_string:i:1}`, and the
+# word arrays are walked again by each scan below -- so a long enough string
+# outlasts the default: `git status -- a a ...` with 30000 pathspecs and then
+# `; git diff /dev/null ./cosign.key`, 60 KB in all, took 61 s to refuse
+# under LC_ALL=C and 102 s under C.UTF-8 in the same hook in
+# zfs-kinoite-complex, and the plain-file read ran instead. So the reading
+# runs again under `timeout` with a budget well inside that default, and
+# running out of it is a refusal like the rest. The re-run is marked by an
+# argument rather than the environment, because Claude Code passes the hook
+# no arguments and nothing in a command string can add one; the second
+# argument is how many readings deep it is (see `read_on_its_own`), and each
+# of those runs inside the same budget, since `timeout` signals the whole
+# process group. Without `timeout` on PATH the hook refuses, as it does
+# without jq.
+GATE_BUDGET_SECONDS=10
+# shellcheck disable=SC2016 # the backticks quote command spellings for the reader
+BUDGET_MSG="blocked: this command took longer than ${GATE_BUDGET_SECONDS} seconds to check, so this PreToolUse hook refuses it rather than let Claude Code's own hook timeout run it unchecked -- a hook that overruns its timeout refuses nothing. Reading a command here grows faster than the command does, and about 60 KB of allow-listed words in front of \`git diff /dev/null ./cosign.key\` was enough to outlast the 60-second default. Split the command into shorter ones."
+if [[ "${1-}" != --within-budget ]]; then
+  command -v timeout >/dev/null 2>&1 ||
+    refuse 'blocked: this PreToolUse hook needs timeout (coreutils) to bound how long it reads a command and timeout is not on PATH. A hook that overruns Claude Code'"'"'s hook timeout lets the command through unchecked, so it refuses rather than read without a bound. Install coreutils.'
+  timeout --kill-after=2 "${GATE_BUDGET_SECONDS}" "${BASH:-bash}" "${GATE_SELF}" --within-budget 0
+  status=$?
+  ((status == 124 || status == 137)) && refuse "${BUDGET_MSG}"
+  exit "${status}"
+fi
+reading_depth="${2:-0}"
+[[ "${reading_depth}" =~ ^[0-9]+$ ]] || reading_depth=0
 
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal
 # text -- $'\x74' and $(...) are what the reader has to see, not what this
@@ -270,7 +323,9 @@ brace_would_expand() {
 # removed, which is the word git receives and what the operand scan compares.
 # Alongside them is what kind of thing each entry is: a `word` of a command, a
 # `sep` (an unquoted command separator: `;`, `&`, `&&`, `|`, `||`, `|&`, `(`,
-# `)`, a newline, a backtick), or the `target` of a redirection.
+# `)`, a newline, a backtick), or the `target` of a redirection -- and where
+# in the command string it starts, so that a command a program would run can
+# be cut out of the string as typed (see `read_on_its_own`).
 #
 # The separators are the only things that end a command, and the list has to
 # be exactly bash's, in both directions. An earlier version of this split
@@ -306,7 +361,9 @@ words=()
 kinds=()
 redirects=() # the operator, for a `target`; empty for anything else
 globs=()     # 1 when the word carries a `*`, `?` or `[` bash would expand
+offsets=()   # where each entry starts in the command string
 raw_word=''
+raw_start=0 # where the word being read started
 raw_glob=0
 raw_quote=''
 raw_escaped=0
@@ -321,6 +378,7 @@ push_word() {
   kinds+=("$1")
   redirects+=("${2-}")
   globs+=("${raw_glob}")
+  offsets+=("${raw_start}")
   raw_word=''
   raw_glob=0
 }
@@ -341,6 +399,7 @@ push_sep() {
   kinds+=(sep)
   redirects+=('')
   globs+=(0)
+  offsets+=("${i}")
   redirect_pending=0
   redirect_op=''
 }
@@ -348,6 +407,7 @@ push_sep() {
 for ((i = 0; i < ${#command_string}; i++)); do
   ch="${command_string:i:1}"
   next="${command_string:i+1:1}"
+  [[ -n "${raw_word}" ]] || raw_start=${i}
   prev_redirect="${after_redirect}"
   after_redirect=0
   if ((raw_escaped)); then
@@ -393,10 +453,11 @@ for ((i = 0; i < ${#command_string}; i++)); do
       # Process substitution. Kept as a word spelled `<(` or `>(` so the
       # brace scan can refuse it inside a git invocation; its body is a
       # command of its own and is split as one.
+      raw_start=${i}
       raw_word="${ch}("
       push_word word
-      push_sep '('
       ((i++))
+      push_sep '('
       continue
     fi
     # A second `>` or `<` while the target is still to come extends the
@@ -504,8 +565,8 @@ end_word
 # interpreter: `env -S 'git diff /dev/null ./cosign.key'` (GNU and uutils
 # `--split-string`) splits its quoted string into a command this scan never
 # sees as words, so any `-S`, clustered (`-iS`) or long, after `env` is
-# refused outright. `sh -c ...` and `eval` remain the interpreters the
-# header says this hook does not see behind.
+# refused outright. `sh -c ...`, `eval` and every other program this scan
+# does not step over are read at the end, by `read_on_its_own`.
 #
 # The cost is a backtick assignment (`X=\`date\``): the split ends the word
 # `X=` at the backtick, and the backtick then opens in command position. The
@@ -1498,6 +1559,306 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     seen_git=1
     in_git=1
   fi
+done
+
+# A checked command behind a program this gate neither checks nor steps over.
+#
+# Every scan above reads a command by its name: git and the GATED_PREFIXES
+# rows where they stand as the name, and every word after a wrapper in
+# `is_wrapper`. Any other program in front of them ends that. `setarch
+# x86_64 gh pr view 1 --json number --jq env` names setarch, so the --jq
+# filter was never read and setarch ran gh with it, printing GH_TOKEN with
+# the rest of the environment; `strace -o /dev/null gh ... -q '$ENV'` was the
+# same with a tracer; and `script -qc 'git diff /dev/null ./.env' /dev/null`
+# hands its quoted argument to a shell, where it runs as a command line this
+# split saw as one word, so every refusal that reads operands was skipped
+# inside it. No list of programs that run their arguments is complete --
+# setarch, prlimit, setpriv, strace, nsenter, busybox, script, sh, bash,
+# eval -- and none of them matches an allow row, so the default mode prompts
+# for them; bypass and auto modes prompt for nothing, so this gate is all
+# that stands there.
+#
+# So behind such a program, two things are read as commands of their own, by
+# running this hook on them, and the whole command is refused when one of
+# them would be refused standing alone:
+#   - every later word where git or the first word of a GATED_PREFIXES row
+#     starts (by its last path component, so `/usr/bin/gh` counts), from
+#     there to the end of the command as typed, behind whatever stood in
+#     front of the program -- an assignment, a redirection, a wrapper -- since
+#     the program hands the command those too;
+#   - every command string a later word carries, as the shell that runs it
+#     would receive it: the word itself when it holds more than one word of
+#     its own (`sh -c '...'`, `eval '...'`), the value after a long option's
+#     `=`, and every tail of a short-option cluster (`script -qc'...'`), each
+#     with the assignments in front of the program and the command's
+#     redirections.
+# A string is read only when it names git or a GATED_PREFIXES command
+# somewhere in it, and a program that prints or matches its arguments and
+# never runs them -- echo, printf, grep, egrep, fgrep, typed by the bare name
+# or as /usr/bin/NAME or /bin/NAME -- is not read at all. A command that
+# passes on its own still passes: `setarch x86_64 git diff HEAD`,
+# `sh -c 'git status'`, `rg 'git diff' docs`. A program spelled as a path to
+# a checked command (`/usr/bin/gh pr view ...`) is read as that command.
+#
+# Each reading runs this hook again, inside the same time budget, so a command
+# that needs more of them than the budget allows is refused like any other
+# that outruns it. They are bounded as well: more than MAX_READINGS in one
+# string, or readings nested more than MAX_READING_DEPTH deep (`sh -c "sh -c
+# '...'"`), are refused unread. Residual, stated rather than implied: a
+# command the program takes from somewhere other than this string -- a
+# script file, standard input, a variable (`setarch x86_64 $G diff ...`) --
+# is not read.
+MAX_READINGS=16
+MAX_READING_DEPTH=3
+
+# shellcheck disable=SC2016 # the backticks quote command spellings for the reader
+READINGS_MSG="blocked: this command puts more than ${MAX_READINGS} commands that this gate checks behind programs it neither checks nor steps over, or nests the command strings that carry them more than ${MAX_READING_DEPTH} deep (\`sh -c \"sh -c '...'\"\`), and each one has to be read on its own before the whole can run. Split the command into shorter ones, or run the checked commands on their own."
+
+checked_names=(git)
+for prefix in "${GATED_PREFIXES[@]}"; do
+  first="${prefix%% *}"
+  [[ " ${checked_names[*]} " == *" ${first} "* ]] || checked_names+=("${first}")
+done
+
+is_checked_name() {
+  local name
+  for name in "${checked_names[@]}"; do
+    [[ "$1" == "${name}" ]] && return 0
+  done
+  return 1
+}
+
+# Whether a word mentions a checked command at all, quotes and backslashes
+# removed (`g''it` is git to bash): the cheap test that decides whether its
+# command strings are worth cutting out.
+text_mentions_a_checked_name() {
+  local plain="${1//[\'\"\\]/}" name
+  for name in "${checked_names[@]}"; do
+    [[ "${plain}" == *"${name}"* ]] && return 0
+  done
+  return 1
+}
+
+# Whether a command string names a checked command: cut at whitespace, the
+# shell's punctuation and `=` (`G=git; $G diff ...`), with quotes and
+# backslashes removed first, some piece is git or begins a GATED_PREFIXES row,
+# each by its last path component. Over-reading is the safe direction: a
+# string read here is refused only when the command it would be refuses, and
+# a jq or awk program that merely mentions `gh` is not read.
+text_names_a_checked_command() {
+  local plain="${1//[\'\"\\]/}" pieces=() k candidate prefix
+  plain="${plain//[$' \t\n;&|()<>`=']/ }"
+  read -r -a pieces <<<"${plain}"
+  for ((k = 0; k < ${#pieces[@]}; k++)); do
+    [[ "${pieces[k]##*/}" == git ]] && return 0
+    candidate="${pieces[k]##*/} ${pieces[*]:k+1:2} "
+    for prefix in "${GATED_PREFIXES[@]}"; do
+      [[ "${candidate}" == "${prefix} "* ]] && return 0
+    done
+  done
+  return 1
+}
+
+# A program that prints or matches its arguments and never runs them, typed
+# by its bare name or under /usr/bin or /bin. A path or a quote anywhere else
+# is some other file, and is read like any other program.
+is_argument_only() {
+  local name
+  for name in echo printf grep egrep fgrep; do
+    case "$1" in
+    "${name}" | "/usr/bin/${name}" | "/bin/${name}") return 0 ;;
+    *) ;;
+    esac
+  done
+  return 1
+}
+
+# The word as the program behind it receives it: bash's quote removal, and
+# nothing else. A `$` or a backtick is left in place, so the reading below
+# sees what bash would expand and refuses it as a runtime-built word.
+unquote_word() {
+  local raw="$1" quote='' ch after i
+  unquoted=''
+  for ((i = 0; i < ${#raw}; i++)); do
+    ch="${raw:i:1}"
+    if [[ "${quote}" == "'" ]]; then
+      if [[ "${ch}" == "'" ]]; then quote=''; else unquoted+="${ch}"; fi
+      continue
+    fi
+    if [[ "${ch}" == $'\\' ]]; then
+      after="${raw:i+1:1}"
+      if [[ "${quote}" == '"' ]]; then
+        # shellcheck disable=SC2016 # the literal `$` is one of the characters a backslash escapes there
+        case "${after}" in
+        '"' | '\' | '$' | '`') ;;
+        *)
+          unquoted+="${ch}"
+          continue
+          ;;
+        esac
+      fi
+      unquoted+="${after}"
+      i=$((i + 1))
+      continue
+    fi
+    case "${ch}" in
+    "'") if [[ -z "${quote}" ]]; then quote="'"; else unquoted+="${ch}"; fi ;;
+    '"') if [[ -z "${quote}" ]]; then quote='"'; else quote=''; fi ;;
+    *) unquoted+="${ch}" ;;
+    esac
+  done
+}
+
+# The command strings one word may carry, the readings
+# atomic-image-builder's gate tries: the word itself when it holds more than
+# one word of its own, the value after a long option's `=`, and every tail of
+# a short-option cluster, since `-qc'...'` and `-cCMD` attach the string to
+# the option that takes it.
+string_separators=$' \t\n;&|<>()`'
+word_strings() {
+  local cut cluster
+  strings=()
+  unquote_word "$1"
+  [[ "${unquoted}" == *["${string_separators}"]* ]] && strings+=("${unquoted}")
+  if [[ "${unquoted}" == --*=* ]]; then
+    strings+=("${unquoted#*=}")
+  elif [[ "${unquoted}" =~ ^-([A-Za-z0-9]+) ]]; then
+    cluster=$((${#BASH_REMATCH[1]} + 1))
+    for ((cut = 2; cut <= cluster; cut++)); do
+      strings+=("${unquoted:cut}")
+    done
+  fi
+}
+
+# Whether each separator opens a nested command (`$(`, a subshell's or a
+# process substitution's `(`, an opening backtick), closes one, or ends the
+# command it stands in.
+roles=()
+backtick_open=0
+for ((idx = 0; idx < ${#words[@]}; idx++)); do
+  [[ "${kinds[idx]}" == sep ]] || continue
+  # shellcheck disable=SC2016 # the literal `$(` is the separator's name
+  case "${words[idx]}" in
+  '$(' | '(') roles[idx]=open ;;
+  '$)' | ')') roles[idx]=close ;;
+  '`')
+    if ((backtick_open)); then roles[idx]=close; else roles[idx]=open; fi
+    backtick_open=$((1 - backtick_open))
+    ;;
+  *) roles[idx]=end ;;
+  esac
+done
+
+# Where the command holding entry $1 ends in the command string: at the
+# separator that ends it, stepping over the nested commands inside it, so
+# `setarch x86_64 gh pr view $(echo 1) --jq env` keeps its filter.
+command_end() {
+  local k depth=0
+  end_offset=${#command_string}
+  for ((k = $1 + 1; k < ${#words[@]}; k++)); do
+    [[ "${kinds[k]}" == sep ]] || continue
+    case "${roles[k]}" in
+    open) depth=$((depth + 1)) ;;
+    close)
+      if ((depth == 0)); then
+        end_offset=${offsets[k]}
+        return 0
+      fi
+      depth=$((depth - 1))
+      ;;
+    *)
+      if ((depth == 0)); then
+        end_offset=${offsets[k]}
+        return 0
+      fi
+      ;;
+    esac
+  done
+}
+
+# Run this hook on one command and refuse with its reason when it refuses.
+# Any exit but 0 is a refusal: a reading that failed is one that did not
+# decide.
+readings=0
+read_on_its_own() {
+  local program="$1" text="$2" reason status shown
+  readings=$((readings + 1))
+  ((readings > MAX_READINGS || reading_depth >= MAX_READING_DEPTH)) && refuse "${READINGS_MSG}"
+  reason="$(jq -cn --arg command "${text}" '{tool_name: "Bash", tool_input: {command: $command}}' |
+    "${BASH:-bash}" "${GATE_SELF}" --within-budget "$((reading_depth + 1))" 2>&1 >/dev/null)"
+  status=$?
+  ((status == 0)) && return 0
+  shown="${text:0:200}"
+  ((${#text} > 200)) && shown+='...'
+  refuse "blocked: ${program} is a program this gate neither checks nor steps over, and it runs \`${shown}\` as a command of its own -- the words after it, or a command string it hands to a shell -- and that command is refused here when it stands alone. No allow rule covers ${program}, so Claude Code prompts for it in the default mode, but bypass and auto modes prompt for nothing, so the command behind it is read as though it stood alone and refused for the same reason. Run the command on its own instead. The reason it is refused (exit ${status}): ${reason#blocked: }"
+}
+
+# The words of this command before the program that are assignments, which
+# the program hands to whatever it runs, and the command's redirections, with
+# their operators: a string run by `sh -c` inherits both.
+string_context() {
+  local k
+  string_prefix=''
+  string_suffix=''
+  for ((k = cmd_first; k < program_idx; k++)); do
+    ((${name_assignments[k]:-0})) && string_prefix+="${raw_words[k]} "
+  done
+  for ((k = cmd_first; k < ${#words[@]}; k++)); do
+    [[ "${kinds[k]}" == sep ]] && break
+    [[ "${kinds[k]}" == target ]] && string_suffix+=" ${redirects[k]}${raw_words[k]}"
+  done
+}
+
+cmd_start=0       # where the current command starts in the command string
+cmd_first=0       # its first entry
+program_idx=-1    # its name, once seen
+skip_command=0    # its name is checked above, or only prints its arguments
+command_stack=()  # the outer command's state, while a nested one is read
+for ((idx = 0; idx < ${#words[@]}; idx++)); do
+  if [[ "${kinds[idx]}" == sep ]]; then
+    if [[ "${roles[idx]}" == open ]]; then
+      command_stack+=("${cmd_start} ${cmd_first} ${program_idx} ${skip_command}")
+    elif [[ "${roles[idx]}" == close ]] && ((${#command_stack[@]})); then
+      read -r cmd_start cmd_first program_idx skip_command <<<"${command_stack[-1]}"
+      unset 'command_stack[-1]'
+      continue
+    fi
+    cmd_start=$((offsets[idx] + 1))
+    cmd_first=$((idx + 1))
+    program_idx=-1
+    skip_command=0
+    continue
+  fi
+  [[ "${kinds[idx]}" == word ]] || continue
+  if ((program_idx < 0)); then
+    ((${command_names[idx]:-0})) || continue
+    program_idx=${idx}
+    program="${words[idx]}"
+    if is_checked_name "${program}" || is_argument_only "${raw_words[idx]}"; then
+      skip_command=1
+    elif is_checked_name "${program##*/}"; then
+      # A path to a checked command, which the scans above read only by its
+      # bare name: read it under that name.
+      raw="${raw_words[idx]}"
+      [[ "${command_string:offsets[idx]:${#raw}}" == "${raw}" ]] || refuse "${CMD_MSG}"
+      command_end "${idx}"
+      read_on_its_own "${program}" "${command_string:cmd_start:offsets[idx]-cmd_start}${program##*/}${command_string:offsets[idx]+${#raw}:end_offset-offsets[idx]-${#raw}}"
+      skip_command=1
+    fi
+    continue
+  fi
+  ((skip_command)) && continue
+  if is_checked_name "${words[idx]##*/}"; then
+    command_end "${idx}"
+    read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"
+  fi
+  text_mentions_a_checked_name "${raw_words[idx]}" || continue
+  word_strings "${raw_words[idx]}"
+  string_context
+  for text in "${strings[@]+"${strings[@]}"}"; do
+    [[ -n "${text}" ]] && text_names_a_checked_command "${text}" &&
+      read_on_its_own "${program}" "${string_prefix}${text}${string_suffix}"
+  done
 done
 
 exit 0
