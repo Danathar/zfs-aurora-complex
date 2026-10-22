@@ -33,6 +33,7 @@ docs/
   design-deep-dive.md         <- deep technical design + issue history
   akmods-fork-maintenance.md  <- how akmods source refs are selected and pinned
   maintenance-watchlist.md    <- pins and decisions on a clock that no automation watches
+  sibling-delta.md            <- which shared ci_tools/ modules differ from the sister repository, and why
   production-boundary-proposal.md <- main protection and signing-key isolation (adopted)
   runtime-validation-proposal.md  <- boot/pool testing in CI (declined; rollback is the mitigation)
   risk-tiers.md               <- Tier 3/2/1/0: how much scrutiny a path gets, and the area/* labels
@@ -144,6 +145,8 @@ tests/e2e/
 ### Goal: I want to know what might silently go stale over time
 
 1. [`docs/maintenance-watchlist.md`](./maintenance-watchlist.md)
+2. [`docs/sibling-delta.md`](./sibling-delta.md) -- shared build scripts where one
+   repository has a fix the other does not
 
 ## Where To Put New Documentation
 
@@ -163,6 +166,8 @@ tests/e2e/
 8. Put workflow-step-to-code mapping in [`.github/scripts/README.md`](../.github/scripts/README.md).
 9. Put pins or decisions that will need a future human call, and that no automation
    will surface, in [`docs/maintenance-watchlist.md`](./maintenance-watchlist.md).
+   Put whether a shared `ci_tools/` module still matches the sister repository's
+   copy in [`docs/sibling-delta.md`](./sibling-delta.md).
 10. Put how to submit and test a change in [`CONTRIBUTING.md`](../CONTRIBUTING.md),
     and what a reviewer checks in [`docs/review-rubric.md`](./review-rubric.md).
 11. Put which paths carry which scrutiny in [`docs/risk-tiers.md`](./risk-tiers.md),
