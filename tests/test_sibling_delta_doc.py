@@ -22,9 +22,9 @@ LEDGER = REPO_ROOT / "docs" / "sibling-delta.md"
 CI_TOOLS = REPO_ROOT / "ci_tools"
 
 ROW_RE = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|")
-# The issue a `port pending` row names: one in this repository (`#N`) or one in
-# the sister repository (`Danathar/zfs-kinoite-complex#N`).
-ISSUE_RE = re.compile(r"^(?:Danathar/zfs-kinoite-complex)?#\d+$")
+# The issue a `port pending` row names, in this repository (`#N`). A port the
+# sister repository owes is tracked from that issue, not named here.
+ISSUE_RE = re.compile(r"^#\d+$")
 SISTER_COMMIT_RE = re.compile(r"^Last sister commit reviewed: `([0-9a-f]{40})`$", re.MULTILINE)
 # The prefixes a status may take; every form but `same` must give a reason.
 REASON_PREFIXES = ("differs on purpose: ", "only here: ")
@@ -56,7 +56,7 @@ def status_problem(status: str) -> str | None:
     if status.startswith(PORT_PREFIX):
         issues = [part.strip() for part in status[len(PORT_PREFIX) :].split(",")]
         if not issues or not all(ISSUE_RE.match(issue) for issue in issues):
-            return "does not name the tracking issue as #N or Danathar/zfs-kinoite-complex#N"
+            return "does not name the tracking issue as #N"
         return None
     return "is not `same`, `differs on purpose: ...`, `port pending: ...` or `only here: ...`"
 
@@ -101,7 +101,7 @@ class StatusFormTests(unittest.TestCase):
             "differs on purpose: the User-Agent names the repository",
             "only here: the sister has no copy",
             "port pending: #12",
-            "port pending: Danathar/zfs-kinoite-complex#7, #12",
+            "port pending: #7, #12",
         ):
             with self.subTest(status=status):
                 self.assertIsNone(status_problem(status))
@@ -117,6 +117,7 @@ class StatusFormTests(unittest.TestCase):
             "port pending: soon",
             "port pending: #12, later",
             "port pending: other/repo#3",
+            "port pending: Danathar/zfs-kinoite-complex#7",
         ):
             with self.subTest(status=status):
                 self.assertIsNotNone(status_problem(status))
