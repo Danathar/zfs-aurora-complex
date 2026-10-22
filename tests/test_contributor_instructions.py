@@ -234,7 +234,7 @@ class TemplateStructureTests(unittest.TestCase):
         # passed and no one ticked it.
         text = TEMPLATE.read_text(encoding="utf-8")
         self.assertNotIn("- [x]", text.lower())
-        self.assertEqual(5, text.count("- [ ] "), "the Checks list changed size")
+        self.assertEqual(6, text.count("- [ ] "), "the Checks list changed size")
 
     def test_the_fail_closed_checkbox_still_names_all_three_relaxations(self) -> None:
         # AGENTS.md section 0 rule 1 forbids three distinct moves, and a
