@@ -1674,13 +1674,36 @@ is_argument_only() {
 }
 
 # The word as the program behind it receives it: bash's quote removal, and
-# nothing else. A `$` or a backtick is left in place, so the reading below
-# sees what bash would expand and refuses it as a runtime-built word.
+# the two quotes that start with a `$`. `$'...'` is decoded the way bash
+# decodes it (`${body@E}` expands the backslash escapes and runs nothing), so
+# `sh -c $'git diff /dev/null ./.env'` and `$'\x67it'` are read as the git
+# they are; `$"..."` is a double-quoted string translated for the locale,
+# read here untranslated. Any other `$` or a backtick is left in place, so
+# the reading below sees what bash would expand and refuses it as a
+# runtime-built word.
 unquote_word() {
-  local raw="$1" quote='' ch after i
+  local raw="$1" quote='' ch after i body
   unquoted=''
   for ((i = 0; i < ${#raw}; i++)); do
     ch="${raw:i:1}"
+    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == "'" ]]; then
+      body=''
+      for ((i = i + 2; i < ${#raw}; i++)); do
+        ch="${raw:i:1}"
+        [[ "${ch}" == "'" ]] && break
+        if [[ "${ch}" == $'\\' ]]; then
+          body+="${ch}${raw:i+1:1}"
+          i=$((i + 1))
+        else
+          body+="${ch}"
+        fi
+      done
+      unquoted+="${body@E}"
+      continue
+    fi
+    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == '"' ]]; then
+      continue
+    fi
     if [[ "${quote}" == "'" ]]; then
       if [[ "${ch}" == "'" ]]; then quote=''; else unquoted+="${ch}"; fi
       continue
@@ -1848,11 +1871,12 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     continue
   fi
   ((skip_command)) && continue
-  if is_checked_name "${words[idx]##*/}"; then
+  unquote_word "${raw_words[idx]}"
+  if is_checked_name "${words[idx]##*/}" || is_checked_name "${unquoted##*/}"; then
     command_end "${idx}"
     read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"
   fi
-  text_mentions_a_checked_name "${raw_words[idx]}" || continue
+  text_mentions_a_checked_name "${unquoted}" || continue
   word_strings "${raw_words[idx]}"
   string_context
   for text in "${strings[@]+"${strings[@]}"}"; do

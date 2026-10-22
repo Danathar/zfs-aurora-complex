@@ -2312,6 +2312,43 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "a command that passes on its own passes behind a program as well",
     ),
+    # bash decodes a `$'...'` string and reads a `$"..."` one as double-quoted
+    # before the program behind it gets the word, so the reading has to as
+    # well. Every refused row below exited 0 before.
+    Row(
+        "command name",
+        "sh -c $'git diff /dev/null ./.env'",
+        "refused",
+        "the shell receives the string with its $'...' quotes removed, which is the plain-file read",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 sh -c $'\\x67it diff /dev/null ./.env'",
+        "refused",
+        "\\x67 is g, so the string the shell runs names git although the word never spells it",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        'setarch x86_64 sh -c $"git diff /dev/null ./.env"',
+        "refused",
+        "a $\"...\" string is a double-quoted one translated for the locale, and reaches the shell as one",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 $'git' diff /dev/null ./.env",
+        "refused",
+        "setarch runs the word bash hands it, which is git once the $'...' quotes are removed",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c $'git status\\n'",
+        "allowed",
+        "a decoded string is read like any other, and this one is an ordinary command",
+    ),
     Row(
         "command name",
         "sh -c 'git status'",
@@ -2762,6 +2799,27 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "for ((cut = 2; cut <= cluster; cut++)); do",
         "for ((cut = cluster + 1; cut <= cluster; cut++)); do",
         "script -qc'gh pr view 1 --json number --jq env' /dev/null",
+    ),
+    (
+        "a $'...' string decoded before it is read",
+        'unquoted+="${body@E}"',
+        'unquoted+="${body}"',
+        "setarch x86_64 sh -c $'\\x67it diff /dev/null ./.env'",
+    ),
+    (
+        "a $\"...\" string read as a double-quoted one",
+        """    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == '"' ]]; then
+      continue
+    fi
+""",
+        "",
+        'setarch x86_64 sh -c $"git diff /dev/null ./.env"',
+    ),
+    (
+        "a later word read as a checked name with its quotes removed",
+        '|| is_checked_name "${unquoted##*/}"; then',
+        "; then",
+        "setarch x86_64 $'git' diff /dev/null ./.env",
     ),
     (
         "a string read only when it names a whole checked command",
