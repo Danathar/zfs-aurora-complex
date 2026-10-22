@@ -2312,6 +2312,57 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "a command that passes on its own passes behind a program as well",
     ),
+    # bash decodes a `$'...'` string and reads a `$"..."` one as double-quoted
+    # before the program behind it gets the word, so the reading has to as
+    # well. Every refused row below exited 0 before.
+    Row(
+        "command name",
+        "sh -c $'git diff /dev/null ./.env'",
+        "refused",
+        "the shell receives the string with its $'...' quotes removed, which is the plain-file read",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 sh -c $'\\x67it diff /dev/null ./.env'",
+        "refused",
+        "\\x67 is g, so the string the shell runs names git although the word never spells it",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        'setarch x86_64 sh -c $"git diff /dev/null ./.env"',
+        "refused",
+        "a $\"...\" string is a double-quoted one translated for the locale, and reaches the shell as one",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 $'git' diff /dev/null ./.env",
+        "refused",
+        "setarch runs the word bash hands it, which is git once the $'...' quotes are removed",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "bash -c \"\\$'git' diff /dev/null ./.env\"",
+        "refused",
+        "the string handed to bash carries a $'...' of its own, which bash decodes to git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 bash -c \"\\$'\\x67it' diff /dev/null ./.env\"",
+        "refused",
+        "the same one level down, with \\x67 for g, so the string never spells git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c $'git status\\n'",
+        "allowed",
+        "a decoded string is read like any other, and this one is an ordinary command",
+    ),
     Row(
         "command name",
         "sh -c 'git status'",
@@ -2323,6 +2374,104 @@ CORPUS: tuple[Row, ...] = (
         "rg 'git diff' docs",
         "allowed",
         "a search pattern that spells a checked command is read as one, and passes",
+    ),
+    # The shell expands braces and globs before it looks a name up, so a
+    # checked command behind a program, or in a string it hands to a shell,
+    # can be spelled without its name (#206). Every refused row below exited 0
+    # before.
+    Row(
+        "command name",
+        "setarch x86_64 {git,diff} /dev/null ./.env",
+        "refused",
+        "the brace group is `git diff` once bash expands it, so setarch runs the plain-file read",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 g{,}it diff /dev/null ./.env",
+        "refused",
+        "an empty brace alternative leaves `git`",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "strace -o /dev/null {gh,pr,view} 1 --json number --jq env",
+        "refused",
+        "the brace group is `gh pr view`, whose filter prints GH_TOKEN",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 /usr/bin/g?t diff /dev/null ./.env",
+        "refused",
+        "the glob matches /usr/bin/git, so setarch runs git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 g?t diff /dev/null ./.env",
+        "refused",
+        "a glob with no slash matches a file named git in the working directory, and setarch "
+        "then looks that name up on PATH",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 /usr/bin/g? pr view 1 --json number --jq env",
+        "refused",
+        "the glob matches /usr/bin/gh, and with the words after it makes the filtered view",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c '{git,diff} /dev/null ./cosign.key'",
+        "refused",
+        "the shell expands the brace group inside the string it runs",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "watch -n1 '/usr/bin/g?t diff /dev/null ./.env'",
+        "refused",
+        "watch hands the string to a shell, which expands the glob to git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c '/usr/bin/g? pr view 1 --json number --jq env'",
+        "refused",
+        "a glob in a string names a gated prefix's first word as well as git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 {git,diff} HEAD",
+        "allowed",
+        "the expanded command is `git diff HEAD`, which passes on its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 /usr/bin/g?t status",
+        "allowed",
+        "the glob is read as git, and `git status` passes on its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 'g?t' diff /dev/null ./cosign.key",
+        "allowed",
+        "a quoted glob is not expanded: setarch is handed the literal name g?t, which is no program",
+    ),
+    Row(
+        "command name",
+        "ls docs/* tests/*",
+        "allowed",
+        "a glob that spells no part of a name is a list of files, not a command name",
+    ),
+    Row(
+        "command name",
+        "ls /usr/bin/g*",
+        "allowed",
+        "the glob is read as git, and git alone passes",
     ),
     Row(
         "command name",
@@ -2764,10 +2913,92 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "script -qc'gh pr view 1 --json number --jq env' /dev/null",
     ),
     (
+        "a $'...' string decoded before it is read",
+        'unquoted+="${body@E}"',
+        'unquoted+="${body}"',
+        "setarch x86_64 sh -c $'\\x67it diff /dev/null ./.env'",
+    ),
+    (
+        "a $\"...\" string read as a double-quoted one",
+        """    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == '"' ]]; then
+      continue
+    fi
+""",
+        "",
+        'setarch x86_64 sh -c $"git diff /dev/null ./.env"',
+    ),
+    (
+        "a later word read as a checked name with its quotes removed",
+        '|| is_checked_name "${unquoted##*/}"; then',
+        "; then",
+        "setarch x86_64 $'git' diff /dev/null ./.env",
+    ),
+    (
+        "a $'...' inside a command string counted as naming a command",
+        """  [[ "$1" == *"\\$'"* || "$1" == *'$"'* ]] && return 0
+""",
+        "",
+        "bash -c \"\\$'git' diff /dev/null ./.env\"",
+    ),
+    (
+        "a $'...' inside a command string kept from being skipped",
+        """ || [[ "${unquoted}" == *"\\$'"* || "${unquoted}" == *'$"'* ]] || continue""",
+        " || continue",
+        "setarch x86_64 bash -c \"\\$'\\x67it' diff /dev/null ./.env\"",
+    ),
+    (
         "a string read only when it names a whole checked command",
         '[[ "${candidate}" == "${prefix} "* ]] && return 0',
         '[[ "${candidate}" == "${prefix%% *} "* ]] && return 0',
         "jq -r '.[] | select(.name == \"gh\")' runs.json",
+    ),
+    (
+        "a word behind a program read with the name the shell expands it to",
+        'read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${text}"',
+        ":",
+        "setarch x86_64 {git,diff} /dev/null ./.env",
+    ),
+    (
+        "a glob behind a program read as the checked names it matches",
+        'piece_names "${spelled##*/}" "${name}" && text_names_a_checked_command',
+        'false && text_names_a_checked_command',
+        "setarch x86_64 /usr/bin/g?t diff /dev/null ./.env",
+    ),
+    (
+        "a word with a glob always worth a closer look",
+        '[[ "${plain}" == *[*?[]* ]] && return 0',
+        ":",
+        "setarch x86_64 g?t diff /dev/null ./.env",
+    ),
+    (
+        "braces taken out before looking for a name",
+        'plain="${plain//[\\{\\},]/}"',
+        ":",
+        "setarch x86_64 g{,}it diff /dev/null ./.env",
+    ),
+    (
+        "a glob in a command string matched against git",
+        'piece_names "${pieces[k]##*/}" git && return 0',
+        '[[ "${pieces[k]##*/}" == git ]] && return 0',
+        "watch -n1 '/usr/bin/g?t diff /dev/null ./.env'",
+    ),
+    (
+        "a glob in a command string matched against a gated prefix",
+        'piece_names "${pieces[k]##*/}" "${prefix%% *}" && candidate=',
+        'false && candidate=',
+        "sh -c '/usr/bin/g? pr view 1 --json number --jq env'",
+    ),
+    (
+        "a quoted glob not read as one",
+        """"'" | '"') quote="${ch}" ;;""",
+        """"'" | '"') ;;""",
+        "setarch x86_64 'g?t' diff /dev/null ./cosign.key",
+    ),
+    (
+        "a glob that spells no part of a name left alone",
+        '[[ -n "${text//[*?[\\]]/}" ]] || return 0',
+        ":",
+        "ls docs/* tests/*",
     ),
 )
 

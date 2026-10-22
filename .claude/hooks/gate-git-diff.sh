@@ -1608,6 +1608,20 @@ done
 # command the program takes from somewhere other than this string -- a
 # script file, standard input, a variable (`setarch x86_64 $G diff ...`) --
 # is not read.
+#
+# A name is found as the shell will spell it, not only as typed. The shell
+# expands braces and globs before it looks a name up, so `{git,diff}` is
+# `git diff`, `g{,}it` is `git` and `/usr/bin/g?t` is `/usr/bin/git`; a
+# glob with no `/` matches a file in the working directory, so after
+# `touch git` a bare `g?t` is `git` too. A word behind the program that the
+# shell would expand that way is read with the name it makes in its place,
+# and a command string is read when such a word in it names a checked
+# command. A glob is read as each checked name it matches only where that
+# name, with the words after it, makes a checked command -- every name for
+# git, `gh` only before `pr view` and the like. A glob that spells no part
+# of a name (`*`, `docs/*`) is read as a list of files, not as a name, so
+# `ls docs/* tests/*` still passes; a bare `*` in front of a planted file
+# named git is the residual that leaves.
 MAX_READINGS=16
 MAX_READING_DEPTH=3
 
@@ -1633,10 +1647,22 @@ is_checked_name() {
 # command strings are worth cutting out.
 text_mentions_a_checked_name() {
   local plain="${1//[\'\"\\]/}" name
+  # A brace the shell expands hides the name (`g{,}it`), and a glob may
+  # match one it never spells (`/usr/bin/g?t`).
+  plain="${plain//[\{\},]/}"
+  [[ "${plain}" == *[*?[]* ]] && return 0
   for name in "${checked_names[@]}"; do
     [[ "${plain}" == *"${name}"* ]] && return 0
   done
   return 1
+}
+
+# Whether a piece of a command is the name $2: as itself, or as a glob that
+# matches it.
+piece_names() {
+  [[ "$1" == "$2" ]] && return 0
+  # shellcheck disable=SC2053 # the piece is matched as a pattern on purpose
+  [[ "$1" == *[*?[]* && "$2" == $1 ]]
 }
 
 # Whether a command string names a checked command: cut at whitespace, the
@@ -1644,15 +1670,19 @@ text_mentions_a_checked_name() {
 # backslashes removed first, some piece is git or begins a GATED_PREFIXES row,
 # each by its last path component. Over-reading is the safe direction: a
 # string read here is refused only when the command it would be refuses, and
-# a jq or awk program that merely mentions `gh` is not read.
+# a jq or awk program that merely mentions `gh` is not read. A string that
+# carries a `$'...'` or `$"..."` of its own is always read: the shell it is
+# handed to decodes that quoting, which this test does not.
 text_names_a_checked_command() {
   local plain="${1//[\'\"\\]/}" pieces=() k candidate prefix
+  [[ "$1" == *"\$'"* || "$1" == *'$"'* ]] && return 0
   plain="${plain//[$' \t\n;&|()<>`=']/ }"
   read -r -a pieces <<<"${plain}"
   for ((k = 0; k < ${#pieces[@]}; k++)); do
-    [[ "${pieces[k]##*/}" == git ]] && return 0
+    piece_names "${pieces[k]##*/}" git && return 0
     candidate="${pieces[k]##*/} ${pieces[*]:k+1:2} "
     for prefix in "${GATED_PREFIXES[@]}"; do
+      piece_names "${pieces[k]##*/}" "${prefix%% *}" && candidate="${prefix%% *} ${pieces[*]:k+1:2} "
       [[ "${candidate}" == "${prefix} "* ]] && return 0
     done
   done
@@ -1673,14 +1703,94 @@ is_argument_only() {
   return 1
 }
 
+# Whether a word as typed holds a glob character the shell expands: a `*`,
+# `?` or `[` outside quotes and not escaped. `find . -name '*.sh'` hands find
+# the pattern; `ls *.sh` hands ls the files.
+word_globs() {
+  local raw="$1" quote='' ch i
+  for ((i = 0; i < ${#raw}; i++)); do
+    ch="${raw:i:1}"
+    if [[ "${quote}" == "'" ]]; then
+      [[ "${ch}" == "'" ]] && quote=''
+      continue
+    fi
+    if [[ "${ch}" == $'\\' ]]; then
+      i=$((i + 1))
+      continue
+    fi
+    if [[ "${quote}" == '"' ]]; then
+      [[ "${ch}" == '"' ]] && quote=''
+      continue
+    fi
+    case "${ch}" in
+    "'" | '"') quote="${ch}" ;;
+    '*' | '?' | '[') return 0 ;;
+    *) ;;
+    esac
+  done
+  return 1
+}
+
+# The commands a word behind the program may start once the shell expands
+# it, in `expansions`, each with the words after it in the command ($2): for
+# a brace group, the words it expands to; for a glob, each checked name it
+# matches by its last path component, kept only when it begins a checked
+# command with those words. Empty when the word expands to no checked name.
+word_expansions() {
+  local spelled="${1//[\'\"\\]/}" text name
+  expansions=()
+  if brace_would_expand "$1"; then
+    for text in "${spelled//[\{\},]/}" "${spelled//[\{\},]/ }"; do
+      if text_names_a_checked_command "${text}"; then
+        expansions+=("${text}$2")
+        return 0
+      fi
+    done
+  fi
+  word_globs "$1" || return 0
+  # A glob that spells no letter of a name (`*`, `docs/*`) is a list of
+  # files, not a name someone typed, and reading every checked name in its
+  # place would refuse `ls docs/* tests/*`.
+  text="${spelled##*/}"
+  [[ -n "${text//[*?[\]]/}" ]] || return 0
+  for name in "${checked_names[@]}"; do
+    piece_names "${spelled##*/}" "${name}" && text_names_a_checked_command "${name}$2" &&
+      expansions+=("${name}$2")
+  done
+  return 0
+}
+
 # The word as the program behind it receives it: bash's quote removal, and
-# nothing else. A `$` or a backtick is left in place, so the reading below
-# sees what bash would expand and refuses it as a runtime-built word.
+# the two quotes that start with a `$`. `$'...'` is decoded the way bash
+# decodes it (`${body@E}` expands the backslash escapes and runs nothing), so
+# `sh -c $'git diff /dev/null ./.env'` and `$'\x67it'` are read as the git
+# they are; `$"..."` is a double-quoted string translated for the locale,
+# read here untranslated. Any other `$` or a backtick is left in place, so
+# the reading below sees what bash would expand and refuses it as a
+# runtime-built word.
 unquote_word() {
-  local raw="$1" quote='' ch after i
+  local raw="$1" quote='' ch after i body
   unquoted=''
   for ((i = 0; i < ${#raw}; i++)); do
     ch="${raw:i:1}"
+    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == "'" ]]; then
+      body=''
+      for ((i = i + 2; i < ${#raw}; i++)); do
+        ch="${raw:i:1}"
+        [[ "${ch}" == "'" ]] && break
+        if [[ "${ch}" == $'\\' ]]; then
+          body+="${ch}${raw:i+1:1}"
+          i=$((i + 1))
+        else
+          body+="${ch}"
+        fi
+      done
+      unquoted+="${body@E}"
+      continue
+    fi
+    if [[ -z "${quote}" && "${ch}" == '$' && "${raw:i+1:1}" == '"' ]]; then
+      continue
+    fi
     if [[ "${quote}" == "'" ]]; then
       if [[ "${ch}" == "'" ]]; then quote=''; else unquoted+="${ch}"; fi
       continue
@@ -1848,16 +1958,27 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     continue
   fi
   ((skip_command)) && continue
-  if is_checked_name "${words[idx]##*/}"; then
+  unquote_word "${raw_words[idx]}"
+  if is_checked_name "${words[idx]##*/}" || is_checked_name "${unquoted##*/}"; then
     command_end "${idx}"
     read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"
   fi
-  text_mentions_a_checked_name "${raw_words[idx]}" || continue
+  text_mentions_a_checked_name "${unquoted}" || [[ "${unquoted}" == *"\$'"* || "${unquoted}" == *'$"'* ]] || continue
   word_strings "${raw_words[idx]}"
   string_context
   for text in "${strings[@]+"${strings[@]}"}"; do
     [[ -n "${text}" ]] && text_names_a_checked_command "${text}" &&
       read_on_its_own "${program}" "${string_prefix}${text}${string_suffix}"
+  done
+  # A word the shell expands into a checked name: read from there with the
+  # name the shell makes of it in its place.
+  is_checked_name "${words[idx]##*/}" && continue
+  raw="${raw_words[idx]}"
+  [[ "${command_string:offsets[idx]:${#raw}}" == "${raw}" ]] || refuse "${CMD_MSG}"
+  command_end "${idx}"
+  word_expansions "${raw}" "${command_string:offsets[idx]+${#raw}:end_offset-offsets[idx]-${#raw}}"
+  for text in "${expansions[@]+"${expansions[@]}"}"; do
+    read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${text}"
   done
 done
 
