@@ -93,6 +93,7 @@ Start here depending on what you want:
 | see how `main` is protected | [`docs/branch-protection.md`](./docs/branch-protection.md) |
 | learn from past incidents, and see where the project is headed | [`docs/reflections/`](./docs/reflections/README.md), [`docs/strategy.md`](./docs/strategy.md) |
 | see which pins and decisions need a human later, and why `main` and runtime testing are set up as they are | [`docs/maintenance-watchlist.md`](./docs/maintenance-watchlist.md), [`docs/production-boundary-proposal.md`](./docs/production-boundary-proposal.md), [`docs/runtime-validation-proposal.md`](./docs/runtime-validation-proposal.md) |
+| see which shared build scripts differ from the sister project, and why | [`docs/sibling-delta.md`](./docs/sibling-delta.md) |
 | look up a term | [`docs/glossary.md`](./docs/glossary.md) |
 | see the whole documentation map | [`docs/documentation-guide.md`](./docs/documentation-guide.md) |
 
