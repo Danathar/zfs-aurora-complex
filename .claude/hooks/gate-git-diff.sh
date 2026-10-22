@@ -1644,9 +1644,12 @@ text_mentions_a_checked_name() {
 # backslashes removed first, some piece is git or begins a GATED_PREFIXES row,
 # each by its last path component. Over-reading is the safe direction: a
 # string read here is refused only when the command it would be refuses, and
-# a jq or awk program that merely mentions `gh` is not read.
+# a jq or awk program that merely mentions `gh` is not read. A string that
+# carries a `$'...'` or `$"..."` of its own is always read: the shell it is
+# handed to decodes that quoting, which this test does not.
 text_names_a_checked_command() {
   local plain="${1//[\'\"\\]/}" pieces=() k candidate prefix
+  [[ "$1" == *"\$'"* || "$1" == *'$"'* ]] && return 0
   plain="${plain//[$' \t\n;&|()<>`=']/ }"
   read -r -a pieces <<<"${plain}"
   for ((k = 0; k < ${#pieces[@]}; k++)); do
@@ -1876,7 +1879,7 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     command_end "${idx}"
     read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"
   fi
-  text_mentions_a_checked_name "${unquoted}" || continue
+  text_mentions_a_checked_name "${unquoted}" || [[ "${unquoted}" == *"\$'"* || "${unquoted}" == *'$"'* ]] || continue
   word_strings "${raw_words[idx]}"
   string_context
   for text in "${strings[@]+"${strings[@]}"}"; do

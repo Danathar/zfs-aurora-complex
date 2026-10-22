@@ -2345,6 +2345,20 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "command name",
+        "bash -c \"\\$'git' diff /dev/null ./.env\"",
+        "refused",
+        "the string handed to bash carries a $'...' of its own, which bash decodes to git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 bash -c \"\\$'\\x67it' diff /dev/null ./.env\"",
+        "refused",
+        "the same one level down, with \\x67 for g, so the string never spells git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
         "sh -c $'git status\\n'",
         "allowed",
         "a decoded string is read like any other, and this one is an ordinary command",
@@ -2820,6 +2834,19 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         '|| is_checked_name "${unquoted##*/}"; then',
         "; then",
         "setarch x86_64 $'git' diff /dev/null ./.env",
+    ),
+    (
+        "a $'...' inside a command string counted as naming a command",
+        """  [[ "$1" == *"\\$'"* || "$1" == *'$"'* ]] && return 0
+""",
+        "",
+        "bash -c \"\\$'git' diff /dev/null ./.env\"",
+    ),
+    (
+        "a $'...' inside a command string kept from being skipped",
+        """ || [[ "${unquoted}" == *"\\$'"* || "${unquoted}" == *'$"'* ]] || continue""",
+        " || continue",
+        "setarch x86_64 bash -c \"\\$'\\x67it' diff /dev/null ./.env\"",
     ),
     (
         "a string read only when it names a whole checked command",
