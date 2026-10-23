@@ -360,13 +360,14 @@ raw_words=()
 words=()
 kinds=()
 redirects=() # the operator, for a `target`; empty for anything else
-globs=()     # 1 when the word carries a `*`, `?` or `[` bash would expand
+globs=()     # 1 when the word carries a `*`, `?`, `[` or extglob bash would expand
 offsets=()   # where each entry starts in the command string
 raw_word=''
 raw_start=0 # where the word being read started
 raw_glob=0
 raw_quote=''
 raw_escaped=0
+extglob_depth=0 # open parentheses of an extended glob in the word being read
 redirect_pending=0 # the next word is the target of a redirection
 redirect_op=''     # the operator of that redirection, as typed
 after_redirect=0   # the previous unquoted character was `<` or `>`
@@ -426,6 +427,34 @@ for ((i = 0; i < ${#command_string}; i++)); do
     elif [[ "${raw_quote}" == '"' && "${ch}" == $'\\' ]]; then
       raw_escaped=1
     fi
+    continue
+  fi
+  # An extended glob. With `shopt -s extglob` -- one line of the command can
+  # set it for the next -- bash reads `@(`, `?(`, `*(`, `+(` and `!(` as the
+  # start of a pattern inside the word, up to the matching `)`, spaces and
+  # all, so `/usr/bin/g@(i)t` is one word that runs git. Split at the `(` it
+  # read as a word ending in `@` and a subshell, and neither half was a name
+  # this gate checks. It is kept as one word here and marked as a glob.
+  # Without extglob the same text is a syntax error and nothing runs, except
+  # `!(cmd)` in command position, which is then a negated subshell; that one
+  # is refused as a name (write `! (cmd)`).
+  if ((extglob_depth)); then
+    case "${ch}" in
+    $'\\' | "'" | '"') ;;
+    *)
+      raw_word+="${ch}"
+      if [[ "${ch}" == '(' ]]; then
+        ((extglob_depth++))
+      elif [[ "${ch}" == ')' ]]; then
+        ((extglob_depth--))
+      fi
+      continue
+      ;;
+    esac
+  elif [[ "${ch}" == '(' && "${raw_word}" == *[@?*+!] && "${raw_word}" != *$'\\'[@?*+!] ]]; then
+    extglob_depth=1
+    raw_glob=1
+    raw_word+="${ch}"
     continue
   fi
   case "${ch}" in
@@ -586,11 +615,12 @@ in_backtick=0
 name_stack=() # the outer command's state, while a `$(...)` is being read
 
 # Whether a word in the name position is spelled literally: no `$`, no
-# backtick, no glob and no brace bash would expand. `[` and `[[` are
-# commands, not globs.
+# backtick, no glob (an extended one included) and no brace bash would
+# expand. `[` and `[[` are commands, not globs.
 word_is_literal() {
   local raw="$1" plain="$2"
   [[ "${raw}" == *'$'* || "${raw}" == *'`'* || "${raw}" == *'*'* || "${raw}" == *'?'* ]] && return 1
+  [[ "${raw}" == *[@+!]'('* ]] && return 1
   brace_would_expand "${raw}" && return 1
   [[ "${raw}" == *'['* && "${plain}" != '[' && "${plain}" != '[[' ]] && return 1
   return 0
@@ -1650,19 +1680,33 @@ text_mentions_a_checked_name() {
   # A brace the shell expands hides the name (`g{,}it`), and a glob may
   # match one it never spells (`/usr/bin/g?t`).
   plain="${plain//[\{\},]/}"
-  [[ "${plain}" == *[*?[]* ]] && return 0
+  [[ "${plain}" == *[*?[]* || "${plain}" == *[@+!]'('* ]] && return 0
   for name in "${checked_names[@]}"; do
     [[ "${plain}" == *"${name}"* ]] && return 0
   done
   return 1
 }
 
+# Whether a glob spells no letter of a name: `*`, `docs/*`, `!(foo)`. That is
+# a list of files, not a name someone typed, and reading every checked name
+# in its place would refuse `ls docs/* tests/*`. The letters inside a `!(...)`
+# are the names it excludes, so they do not count.
+glob_is_nameless() {
+  local text="$1"
+  while [[ "${text}" =~ ^(.*)'!('[^\(\)]*')'(.*)$ ]]; do
+    text="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+  done
+  [[ -z "${text//[*?[\]@+()|]/}" ]]
+}
+
 # Whether a piece of a command is the name $2: as itself, or as a glob that
-# matches it.
+# matches it. `[[ == ]]` reads an extended glob (`g@(i)t`) whether or not
+# extglob is set, as bash does there.
 piece_names() {
   [[ "$1" == "$2" ]] && return 0
+  [[ "$1" == *[*?[]* || "$1" == *[@+!]'('* ]] || return 1
   # shellcheck disable=SC2053 # the piece is matched as a pattern on purpose
-  [[ "$1" == *[*?[]* && "$2" == $1 ]]
+  [[ "$2" == $1 ]]
 }
 
 # Whether a command string names a checked command: cut at whitespace, the
@@ -1676,6 +1720,18 @@ piece_names() {
 text_names_a_checked_command() {
   local plain="${1//[\'\"\\]/}" pieces=() k candidate prefix
   [[ "$1" == *"\$'"* || "$1" == *'$"'* ]] && return 0
+  # An extended glob is a name of its own up to its closing `)`, so it is
+  # read before the cut below takes it apart at its parentheses and `|`.
+  if [[ "${plain}" == *[@?*+!]'('* ]]; then
+    read -r -a pieces <<<"${plain//[$' \t\n;&<>`=']/ }"
+    for ((k = 0; k < ${#pieces[@]}; k++)); do
+      [[ "${pieces[k]}" == *[@?*+!]'('* ]] || continue
+      glob_is_nameless "${pieces[k]##*/}" && continue
+      for prefix in git "${GATED_PREFIXES[@]}"; do
+        piece_names "${pieces[k]##*/}" "${prefix%% *}" && return 0
+      done
+    done
+  fi
   plain="${plain//[$' \t\n;&|()<>`=']/ }"
   read -r -a pieces <<<"${plain}"
   for ((k = 0; k < ${#pieces[@]}; k++)); do
@@ -1748,11 +1804,7 @@ word_expansions() {
     done
   fi
   word_globs "$1" || return 0
-  # A glob that spells no letter of a name (`*`, `docs/*`) is a list of
-  # files, not a name someone typed, and reading every checked name in its
-  # place would refuse `ls docs/* tests/*`.
-  text="${spelled##*/}"
-  [[ -n "${text//[*?[\]]/}" ]] || return 0
+  glob_is_nameless "${spelled##*/}" && return 0
   for name in "${checked_names[@]}"; do
     piece_names "${spelled##*/}" "${name}" && text_names_a_checked_command "${name}$2" &&
       expansions+=("${name}$2")

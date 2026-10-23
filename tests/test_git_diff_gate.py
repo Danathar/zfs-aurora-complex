@@ -2473,6 +2473,92 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "the glob is read as git, and git alone passes",
     ),
+    # An extended glob: once a line of the command runs `shopt -s extglob`,
+    # bash reads `@(...)`, `?(...)`, `*(...)`, `+(...)` and `!(...)` as part
+    # of the word, so `/usr/bin/g@(i)t` is git. The split read it as a word
+    # ending in `@` and a subshell. Every refused row below exited 0 before,
+    # except the negated subshell, which the subshell reading already caught.
+    Row(
+        "command name",
+        "shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env",
+        "refused",
+        "the extended glob matches /usr/bin/git, so bash runs the plain-file read",
+        "not spelled literally",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\n/usr/bin/g@(i)t log -p --output=cosign.pub -1",
+        "refused",
+        "the same name with git's write primitive overwrites the trust anchor",
+        "not spelled literally",
+    ),
+    Row(
+        "command name",
+        "!(git diff /dev/null ./.env)",
+        "refused",
+        "without extglob a `!` hard against `(` negates a subshell that runs the read; with it "
+        "the word is a glob in command position",
+        "not spelled literally",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nsetarch x86_64 /usr/bin/g@(i)t diff /dev/null ./.env",
+        "refused",
+        "behind a program the extended glob is read as the git it matches",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nsetarch x86_64 /usr/bin/g?(x)h pr view 1 --json number --jq env",
+        "refused",
+        "`?(x)` matches nothing, so the name is gh and the filter prints GH_TOKEN",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nsetarch x86_64 /usr/bin/@(g@(i)t) diff /dev/null ./.env",
+        "refused",
+        "a pattern nests: the word runs to the `)` that closes the outer one",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nsetarch x86_64 *(g|i|t) diff /dev/null ./.env",
+        "refused",
+        "after `touch git` the pattern matches that file, which setarch looks up on PATH",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "bash -c 'shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env'",
+        "refused",
+        "a string handed to a shell can turn extglob on for its own next line",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nls !(foo)",
+        "allowed",
+        "a negated pattern spells no part of a name: it is a list of files, as `*` is",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nls @(README|AGENTS).md",
+        "allowed",
+        "an extended glob that names no checked command is a file list",
+    ),
+    Row(
+        "command name",
+        "sed -E 's/x*(y)/z/' README.md",
+        "allowed",
+        "a quoted regular expression is sed's, not a pattern bash expands",
+    ),
+    Row(
+        "command name",
+        "! (git status)",
+        "allowed",
+        "a negated subshell written with a space is the ordinary form",
+    ),
     Row(
         "command name",
         "jq -r '.[] | select(.name == \"gh\")' runs.json",
@@ -2966,7 +3052,7 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "a word with a glob always worth a closer look",
-        '[[ "${plain}" == *[*?[]* ]] && return 0',
+        """[[ "${plain}" == *[*?[]* || "${plain}" == *[@+!]'('* ]] && return 0""",
         ":",
         "setarch x86_64 g?t diff /dev/null ./.env",
     ),
@@ -2996,9 +3082,45 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "a glob that spells no part of a name left alone",
-        '[[ -n "${text//[*?[\\]]/}" ]] || return 0',
+        'glob_is_nameless "${spelled##*/}" && return 0',
         ":",
         "ls docs/* tests/*",
+    ),
+    (
+        "an extended glob kept as one word",
+        'extglob_depth=1\n    raw_glob=1\n    raw_word+="${ch}"\n    continue',
+        'push_sep "("\n    continue',
+        "shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env",
+    ),
+    (
+        "an extended glob read to its closing parenthesis",
+        "        ((extglob_depth--))",
+        "        extglob_depth=0",
+        "shopt -s extglob\nsetarch x86_64 /usr/bin/@(g@(i)t) diff /dev/null ./.env",
+    ),
+    (
+        "an extended glob not a literal name",
+        """  [[ "${raw}" == *[@+!]'('* ]] && return 1""",
+        ":",
+        "shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env",
+    ),
+    (
+        "an extended glob matched as a pattern",
+        """  [[ "$1" == *[*?[]* || "$1" == *[@+!]'('* ]] || return 1""",
+        """  [[ "$1" == *[*?[]* ]] || return 1""",
+        "shopt -s extglob\nsetarch x86_64 /usr/bin/g@(i)t diff /dev/null ./.env",
+    ),
+    (
+        "an extended glob in a command string read as a name",
+        'piece_names "${pieces[k]##*/}" "${prefix%% *}" && return 0',
+        "false && return 0",
+        "bash -c 'shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env'",
+    ),
+    (
+        "a negated pattern left alone as a file list",
+        'glob_is_nameless "${pieces[k]##*/}" && continue',
+        ":",
+        "shopt -s extglob\nls !(foo)",
     ),
 )
 
