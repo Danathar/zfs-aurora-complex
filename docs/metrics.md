@@ -186,9 +186,10 @@ for reading job durations: the slowest of the last `sample_size` completed runs.
 Sampling is left to this command on purpose. Nothing runs it on a schedule, and
 nothing rewrites a timeout from its output.
 
-Most jobs here set no `timeout-minutes` at all, which means GitHub's 360-minute
-default. That is why the useful reading is the slowest observed run rather than a
-comparison against a cap.
+Every job here sets `timeout-minutes`, and each cap is declared in
+`.github/auto-qa-tuning.json`. The useful reading is the slowest observed run set
+against that job's cap: a job whose slowest run is close to its cap is the one
+that will start being killed first.
 
 ```bash
 n=$(jq -r '.policy.sample_size' .github/auto-qa-tuning.json)

@@ -95,6 +95,20 @@ class JobDurationTests(unittest.TestCase):
         text = (WORKFLOWS / "build.yml").read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^  build-zfs-akmods:\n    name: Build Shared ZFS Akmods Cache$")
 
+    def test_every_job_sets_the_cap_the_page_says_it_does(self) -> None:
+        # The page once said most jobs had no cap, and stayed that way after every
+        # job gained one. test_auto_qa_tuning.py only compares jobs that set a cap,
+        # so a job added without one is caught here instead.
+        self.assertIn("Every job here sets `timeout-minutes`", " ".join(doc_text().split()))
+        declared = {(e["workflow"], e["job"]) for e in json.loads(TUNING.read_text(encoding="utf-8"))["jobs"]}
+        jobs = set()
+        for path in sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")]):
+            block = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", path.read_text(encoding="utf-8"))
+            self.assertIsNotNone(block, path.name)
+            jobs |= {(path.name, job) for job in re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", block.group(1))}
+        self.assertGreaterEqual(len(jobs), 2)
+        self.assertEqual(sorted(jobs - declared), [])
+
     def test_the_tuning_file_names_only_real_jobs(self) -> None:
         jobs = json.loads(TUNING.read_text(encoding="utf-8"))["jobs"]
         for entry in jobs:
