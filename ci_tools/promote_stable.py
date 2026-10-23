@@ -13,6 +13,8 @@ import os
 import re
 
 from ci_tools.common import (
+    COSIGN_TIMEOUT,
+    REGISTRY_METADATA_TIMEOUT,
     REPO_ROOT,
     CiToolError,
     normalize_owner,
@@ -42,7 +44,7 @@ def list_repository_tags(repository_ref: str, *, creds: str | None) -> list[str]
         if auth_dir:
             command.extend(["--authfile", registry_auth_file(auth_dir)])
         command.append(repository_ref)
-        listing = run_json_cmd(command)
+        listing = run_json_cmd(command, timeout=REGISTRY_METADATA_TIMEOUT)
     tags = listing.get("Tags")
     if not isinstance(tags, list):
         raise CiToolError(f"Missing tag list in skopeo list-tags output for {repository_ref}")
@@ -111,7 +113,8 @@ def verify_candidate_signature(*, image_org: str, image_name: str, candidate_dig
             "--key",
             verification_key,
             digest_ref,
-        ]
+        ],
+        timeout=COSIGN_TIMEOUT,
     )
     print(f"Verified candidate signature before promotion: {digest_ref}")
 

@@ -20,8 +20,14 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from ci_tools import sign_image
-from ci_tools.sign_image import SigningError, main, run_command, sign_published_image
+from ci_tools import common, sign_image
+from ci_tools.sign_image import (
+    COSIGN_TIMEOUT,
+    SigningError,
+    main,
+    run_command,
+    sign_published_image,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "ci_tools" / "sign_image.py"
@@ -128,6 +134,21 @@ class SigningCommandTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
         self.assertIn(str(REPO_ROOT / "cosign.pub"), calls[1][0])
+
+    def test_cosign_sign_and_verify_pass_cosign_timeout(self) -> None:
+        # Without a ceiling a stalled TLS handshake holds the job, and the key, open
+        # until the job's own timeout.
+        _ref, calls = self._sign()
+        self.assertEqual([kwargs.get("timeout") for _args, kwargs in calls], [COSIGN_TIMEOUT, COSIGN_TIMEOUT])
+
+    def test_the_timeout_is_the_one_the_rest_of_ci_tools_uses(self) -> None:
+        # sign_image.py keeps its own copy because it may import nothing from the repository.
+        self.assertEqual(COSIGN_TIMEOUT, common.COSIGN_TIMEOUT)
+
+    def test_a_command_that_outlives_its_timeout_raises(self) -> None:
+        with self.assertRaises(SigningError) as raised:
+            run_command([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2)
+        self.assertIn("timed out after 0.2s", str(raised.exception))
 
     def test_cosign_sign_prints_to_the_job_log_and_verify_is_captured(self) -> None:
         _ref, calls = self._sign()

@@ -12,6 +12,7 @@ import hashlib
 import re
 
 from ci_tools.common import (
+    REGISTRY_METADATA_TIMEOUT,
     CiToolError,
     normalize_owner,
     optional_env,
@@ -64,7 +65,8 @@ def pushed_config_hex(pinned_ref: str) -> str:
             "--raw",
             "--config",
             f"docker://{pinned_ref}",
-        ]
+        ],
+        timeout=REGISTRY_METADATA_TIMEOUT,
     )
     # `run_cmd` decodes stdout as text. The config is JSON, which is UTF-8 and
     # carries no raw carriage return, so encoding it back yields the bytes

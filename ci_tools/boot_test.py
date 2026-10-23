@@ -26,7 +26,7 @@ from ci_tools.common import (
     CiToolError,
     optional_env,
     require_env,
-    run_cmd,
+    run_cmd_with_retries,
     skopeo_inspect_digest,
 )
 
@@ -104,7 +104,7 @@ BOOT_ATTEMPTS = 2
 # bcvk mounts a --ro-bind directory at /run/virtiofs-mnt-<name> in the guest.
 GUEST_SCRIPT_MOUNT = "zac-checks"
 LOG_TAIL_LINES = 40
-PULL_RETRIES = 3
+PULL_TIMEOUT_SECONDS = 30 * 60
 
 
 def guest_script() -> str:
@@ -326,9 +326,7 @@ def main() -> None:
     # summary must name exactly the artifact that was booted.
     digest = skopeo_inspect_digest(f"docker://{image}")
     pinned = pinned_reference(image, digest)
-    # podman retries a failed layer transfer itself; the job's timeout-minutes
-    # bounds a pull that stalls instead.
-    run_cmd(["podman", "pull", "--quiet", "--retry", str(PULL_RETRIES), pinned])
+    run_cmd_with_retries(["podman", "pull", "--quiet", pinned], timeout=PULL_TIMEOUT_SECONDS)
 
     report, output, attempts = GuestReport(), "", 0
     for attempt in range(1, BOOT_ATTEMPTS + 1):

@@ -376,6 +376,12 @@ class MainTests(unittest.TestCase):
     def run_main(self, sessions: list[str]) -> tuple[list[str], dict, str, Exception | None]:
         booted: list[str] = []
         self.pulls: list[list[str]] = []
+        self.pull_kwargs: list[dict] = []
+
+        def record_pull(cmd: list[str], **kwargs: object) -> str:
+            self.pulls.append(cmd)
+            self.pull_kwargs.append(kwargs)
+            return ""
 
         def fake_boot(image: str, work: Path, attempt: int) -> tuple[GuestReport, str]:
             booted.append(image)
@@ -393,7 +399,7 @@ class MainTests(unittest.TestCase):
             stack.enter_context(patch.dict(os.environ, env))
             stack.enter_context(patch.object(script, "skopeo_inspect_digest", return_value=self.DIGEST))
             stack.enter_context(
-                patch.object(script, "run_cmd", side_effect=lambda cmd, **_: self.pulls.append(cmd) or "")
+                patch.object(script, "run_cmd_with_retries", side_effect=record_pull)
             )
             stack.enter_context(patch.object(script, "boot", side_effect=fake_boot))
             stack.enter_context(contextlib.redirect_stdout(open(os.devnull, "w")))  # noqa: SIM115
@@ -415,7 +421,9 @@ class MainTests(unittest.TestCase):
     def test_the_digest_is_pulled_and_the_tag_is_recorded_beside_it(self) -> None:
         _, result, _, _ = self.run_main([passing_session()])
         pinned = f"ghcr.io/danathar/zfs-aurora-complex@{self.DIGEST}"
-        self.assertEqual(self.pulls, [["podman", "pull", "--quiet", "--retry", "3", pinned]])
+        self.assertEqual(self.pulls, [["podman", "pull", "--quiet", pinned]])
+        # Retried around the whole pull, each attempt with its own ceiling.
+        self.assertEqual(self.pull_kwargs, [{"timeout": script.PULL_TIMEOUT_SECONDS}])
         self.assertEqual(result["image"], "ghcr.io/danathar/zfs-aurora-complex:latest")
         self.assertEqual(result["booted"], pinned)
 

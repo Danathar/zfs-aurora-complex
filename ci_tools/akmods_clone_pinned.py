@@ -15,6 +15,14 @@ from ci_tools.common import CiToolError, require_env_or_default, run_cmd
 
 AKMODS_WORKTREE = Path("/tmp/akmods")
 
+# Wall-clock ceiling for the one network call in this module. A depth-1 fetch of
+# a single akmods commit moves very little data, so ten minutes is far above any
+# healthy run; it is here so a stalled fetch against the akmods fork fails the
+# job in minutes instead of holding it until the job's own timeout. The
+# surrounding `git init`/`remote add`/`checkout`/`rev-parse` calls are local and
+# get no ceiling.
+GIT_FETCH_TIMEOUT = 600.0
+
 
 def clone_pinned(upstream_repo: str, upstream_ref: str) -> None:
     """
@@ -39,7 +47,11 @@ def clone_pinned(upstream_repo: str, upstream_ref: str) -> None:
     # Checking out the fetched commit directly keeps this step deterministic and fast.
     run_cmd(["git", "init", "."], cwd=str(AKMODS_WORKTREE))
     run_cmd(["git", "remote", "add", "origin", upstream_repo], cwd=str(AKMODS_WORKTREE))
-    run_cmd(["git", "fetch", "--depth", "1", "origin", upstream_ref], cwd=str(AKMODS_WORKTREE))
+    run_cmd(
+        ["git", "fetch", "--depth", "1", "origin", upstream_ref],
+        cwd=str(AKMODS_WORKTREE),
+        timeout=GIT_FETCH_TIMEOUT,
+    )
     run_cmd(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=str(AKMODS_WORKTREE))
 
     # Extra safety check: fail if Git resolved to anything other than the exact

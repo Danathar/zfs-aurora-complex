@@ -319,7 +319,7 @@ class UploadStepTests(unittest.TestCase):
             stack.enter_context(
                 patch.object(boot_test, "skopeo_inspect_digest", return_value="sha256:" + "c" * 64)
             )
-            stack.enter_context(patch.object(boot_test, "run_cmd", return_value=""))
+            stack.enter_context(patch.object(boot_test, "run_cmd_with_retries", return_value=""))
             stack.enter_context(patch.object(boot_test.subprocess, "run", side_effect=fake_run))
             stack.enter_context(contextlib.redirect_stdout(open(os.devnull, "w")))  # noqa: SIM115
             with contextlib.suppress(CiToolError):

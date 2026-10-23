@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_tools.common import (
+    REGISTRY_RETRY_ATTEMPTS,
+    REGISTRY_TRANSFER_TIMEOUT,
     CiToolError,
     extract_fedora_version,
     git_ls_remote_resolve,
@@ -23,6 +25,7 @@ from ci_tools.common import (
     require_env,
     require_env_or_default,
     run_cmd,
+    run_cmd_with_retries,
     skopeo_inspect_digest,
     skopeo_inspect_json,
     sort_kernel_releases,
@@ -216,7 +219,32 @@ def detect_base_image_kernel_releases(image_ref: str) -> list[str]:
     We intentionally inspect `/lib/modules` from a real container view instead
     of trusting a single metadata label, because installonly kernel packages
     can leave more than one kernel in the final merged root filesystem.
+
+    The image is pulled explicitly first. `podman run` would pull it implicitly,
+    but that implicit pull was the only registry transfer here with nothing
+    retrying it and no ceiling on it: `skopeo copy` passes `--retry-times`, and
+    `podman pull` takes `--retry`, while `podman run` exposes no such flag. This
+    is the first registry read of the build, so one truncated blob from the
+    registry's CDN ends the whole run before a single akmod is compiled (the
+    sister project lost a run that way). Both belts are worn: the `--retry`
+    podman applies inside one invocation, and `run_cmd_with_retries` around the
+    invocation itself. Each wrapper attempt gets one-third of the transfer
+    timeout, so exhausting all three takes about one transfer timeout in total,
+    not three; the job's own `timeout-minutes` still bounds the whole step.
     """
+    run_cmd_with_retries(
+        [
+            "podman",
+            "pull",
+            "--retry",
+            str(REGISTRY_RETRY_ATTEMPTS),
+            image_ref,
+        ],
+        capture_output=False,
+        timeout=REGISTRY_TRANSFER_TIMEOUT / REGISTRY_RETRY_ATTEMPTS,
+    )
+    # Now a local image; `podman run` transfers nothing and keeps its unbounded
+    # runtime, which is a `find` over /lib/modules.
     output = run_cmd(
         [
             "podman",

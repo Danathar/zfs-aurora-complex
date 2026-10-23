@@ -39,20 +39,20 @@ Last sister commit reviewed: `af6e15f00b267019259eb460448e932d7ec06e73`
 |---|---|---|
 | `__init__.py` | same | |
 | `akmods_build_and_publish.py` | same | |
-| `akmods_clone_pinned.py` | port pending: #209 | Behind here: no timeout on the akmods `git fetch` (sister 0a05e37). |
+| `akmods_clone_pinned.py` | differs on purpose: the comment on the fetch timeout says the job's own timeout is what else bounds it (the jobs that run it here set `timeout-minutes`), where the sister's comment names GitHub's 360-minute default | The `git fetch` timeout itself (sister 0a05e37) is the same. |
 | `akmods_configure_zfs_target.py` | same | |
-| `boot_test.py` | port pending: #209 | The `ZAC` names and the Aurora wording differ on purpose. Behind here: the image pull uses `podman pull --retry` and the job's time limit, because `run_cmd` has no timeout yet; the sister uses `run_cmd_with_retries` with a pull timeout (sister 0a05e37, cfdb192). |
+| `boot_test.py` | differs on purpose: the `ZAC` names and the Aurora wording; this copy also records that stock aurora-dx passes the same checks, and says sshd is started whether or not the image enables it | The image pull is the sister's `run_cmd_with_retries` with a pull timeout (sister 0a05e37, cfdb192). |
 | `check_akmods_cache.py` | port pending: #209 | Both copies now require the registry login (the sister since af6e15f). Behind here: the shared credential helper and the cache-tag helper from `pin_akmods_cache.py` (sister 3b5c1c7). The comment about who can republish the cache differs on purpose: this repository builds the cache only on `main`. |
 | `check_stable_signal.py` | port pending: #209 | Label names and Aurora wording differ on purpose. Behind here: builds the registry login inline instead of with the shared credential helper (sister 3b5c1c7). |
 | `classify_akmods_failure.py` | differs on purpose: the same transient-network fix landed separately in each repository; the wording of the summary and docstrings differs, and this repository matches the curl error case-insensitively | The kinds and their precedence are the same. |
 | `cli.py` | differs on purpose: the sister has a `prune-registry` command this repository does not | |
-| `common.py` | port pending: #209 | Behind here: no `timeout=` on `run_cmd`/`run_json_cmd`, no `*_TIMEOUT` ceilings and no `run_cmd_with_retries` (sister 0a05e37, 43c9350, cfdb192); no `registry_creds_from_env`, and `registry_auth_dir` does not refuse a login that names no registry (sister 3b5c1c7, 5ca41bd). |
+| `common.py` | port pending: #209 | Behind here: no `registry_creds_from_env`, and `registry_auth_dir` does not refuse a login that names no registry (sister 3b5c1c7, 5ca41bd). The timeouts and `run_cmd_with_retries` (sister 0a05e37, 43c9350, cfdb192) are ported. |
 | `export_repo_defaults.py` | same | |
-| `pin_akmods_cache.py` | port pending: #209 | Behind here: no timeout on the registry read (sister 0a05e37). |
+| `pin_akmods_cache.py` | same | |
 | `prepare_validation_build.py` | differs on purpose: the same private-package hint for a registry permission error landed separately in each repository (the sister's in af6e15f); the comment wording differs, and only this copy's hint adds that the image build also pulls the package anonymously | |
-| `promote_stable.py` | port pending: #209 | Behind here: no timeout on `cosign verify` (sister 43c9350); no shared credential helper (sister 3b5c1c7). The refusal to move `latest` back to an older run (sister 8a9a09d) is ported; this copy defines `STABLE_RE` itself, because the sister imports it from `prune_registry.py`, which this repository does not have. |
-| `resolve_build_inputs.py` | port pending: #209 | The sister's brew image inputs differ on purpose. Behind here: no explicit, retried `podman pull` before the kernel listing (sister cfdb192). |
-| `sign_image.py` | port pending: #209 | Behind here: no timeout on `cosign sign`/`cosign verify` (sister 0a05e37, 43c9350). |
+| `promote_stable.py` | port pending: #209 | Behind here: no shared credential helper (sister 3b5c1c7). The refusal to move `latest` back to an older run (sister 8a9a09d) and the `cosign verify` timeout (sister 43c9350) are ported; this copy defines `STABLE_RE` itself, because the sister imports it from `prune_registry.py`, which this repository does not have. |
+| `resolve_build_inputs.py` | differs on purpose: the sister's brew image inputs; the docstring of the retried base-image pull names no sister run or job length | The explicit, retried `podman pull` before the kernel listing is ported, with its per-attempt share of the transfer timeout (sister cfdb192, 05b2fd9). |
+| `sign_image.py` | same | |
 | `tagging_context.py` | same | |
 | `write_akmods_badge.py` | same | |
 | `write_build_inputs_manifest.py` | differs on purpose: the sister records its brew image inputs, which this repository does not build with | |
