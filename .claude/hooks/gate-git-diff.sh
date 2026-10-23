@@ -260,6 +260,9 @@ BLAME_MSG='blocked: git blame (and annotate) reads a file named by a blame optio
 # shellcheck disable=SC2016 # the literal $HOME is what the reader has to see
 TILDE_MSG='blocked: an unquoted leading ~ is $HOME to bash and a literal directory inside this checkout to this gate, so the path checked here is not the path git would open: `git diff -- ~/.aws/credentials ~/.bashrc` resolved both operands inside the working tree and printed both files out of the home directory as a plain-file diff, past the Read(...) deny rules in .claude/settings.json. A word of a git invocation that begins with an unquoted ~ (~/..., ~user/..., or ~ alone) is refused rather than expanded. Spell the path out in full, relative to the checkout. A tilde inside a word (HEAD~1) and a quoted or escaped one are literals to bash and are not refused by this rule.'
 
+# shellcheck disable=SC2016 # the literal $(...) and backticks are what the reader has to see
+EXTGLOB_SUBST_MSG='blocked: a command substitution (`$(...)`, a backtick) or a process substitution (`<(...)`, `>(...)`) is written inside an extended glob (`@(...)`, `?(...)`, `*(...)`, `+(...)`, `!(...)`). Bash runs that command before it matches the pattern -- with `shopt -s extglob`, `echo x@(a|$(cat .env))` prints the file and `echo @($(git diff HEAD --output=cosign.pub))` overwrites the trust anchor -- and this gate reads the pattern as the letters of one word, so it never checks the command inside. Run the command on its own line, outside the pattern, or quote the pattern in single quotes if it is meant literally.'
+
 # shellcheck disable=SC2016 # the literal $G and $(...) are what the reader has to see
 CMD_MSG='blocked: the name of a command in this string is not spelled literally -- it is built by an expansion (`$G diff ...`, `$(printf git) diff ...`, a backtick in command position), by a brace (`{,git} diff ...`), or by a glob (`g?t`, `/usr/bin/g[i]t`) -- so neither this gate nor the allow rule that matched the string'"'"'s literal prefix can tell which command bash will run, and `G=git; $G diff /dev/null ./cosign.key` runs the plain-file read this gate exists to refuse. Spell every command name literally, and drop a variable assignment that only exists to build one. After a wrapper such as command, env, exec or timeout the same holds for every word of that command, since the wrapper'"'"'s own options are not modelled here; xargs'"'"'s own options are read, and held to the same test. A literal name after an assignment is not what this rule refuses -- the assignment has a refusal of its own -- and a literal path to git (`/usr/bin/git diff`) is read as git. env -S (--split-string) splits a quoted string into a command this gate never sees and is refused outright.'
 
@@ -419,6 +422,19 @@ for ((i = 0; i < ${#command_string}; i++)); do
       raw_word+="${ch}"
     fi
     continue
+  fi
+  # A command inside an extended glob. Bash expands the pattern before it
+  # matches it, so `x@(a|$(cat .env))` runs `cat .env`. A `$(` or a backtick
+  # there runs unquoted or in double quotes, and a `<(` or `>(` runs
+  # unquoted. The reader below keeps the pattern as the letters of one word,
+  # so none of these reaches the substitution handling that splits its body
+  # as a command. They are refused rather than split: a command inside a
+  # glob has no use worth a second reader.
+  if ((extglob_depth)) && [[ "${raw_quote}" != "'" ]]; then
+    if [[ "${ch}" == '`' || "${ch}${next}" == '$(' ]] ||
+      [[ -z "${raw_quote}" && "${ch}" == [\<\>] && "${next}" == '(' ]]; then
+      refuse "${EXTGLOB_SUBST_MSG}"
+    fi
   fi
   if [[ -n "${raw_quote}" ]]; then
     raw_word+="${ch}"

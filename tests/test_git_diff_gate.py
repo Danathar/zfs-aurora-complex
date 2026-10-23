@@ -2535,6 +2535,64 @@ CORPUS: tuple[Row, ...] = (
         "a string handed to a shell can turn extglob on for its own next line",
         "as a command of its own",
     ),
+    # Bash expands an extended glob's pattern before matching it, so a
+    # command written inside one runs. The reader keeps the pattern as one
+    # word, so the command inside it is refused rather than read.
+    Row(
+        "command name",
+        "shopt -s extglob\necho @($(git diff HEAD > cosign.pub))",
+        "refused",
+        "the substitution runs before the pattern is matched and overwrites the trust anchor",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\necho @($(git diff --output=cosign.pub HEAD))",
+        "refused",
+        "git's write primitive inside the pattern overwrites the trust anchor",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\necho @(`git diff --output=cosign.pub HEAD`)",
+        "refused",
+        "a backtick inside the pattern is the same substitution",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\necho x@(a|$(git diff HEAD --output=cosign.pub))",
+        "refused",
+        "the substitution can stand in any branch of the pattern",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\necho x@(a|$(cat .env))",
+        "refused",
+        "the pattern expands to the file's contents, so echo prints the secret",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        'shopt -s extglob\necho @("$(git diff HEAD --output=cosign.pub)")',
+        "refused",
+        "double quotes inside the pattern still expand the substitution",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\necho x@(a|<(git diff HEAD --output=cosign.pub))",
+        "refused",
+        "a process substitution inside the pattern runs as well",
+        "inside an extended glob",
+    ),
+    Row(
+        "command name",
+        "shopt -s extglob\nls @(a|'$(b)')",
+        "allowed",
+        "single quotes inside the pattern keep the `$(` literal",
+    ),
     Row(
         "command name",
         "shopt -s extglob\nls !(foo)",
@@ -3115,6 +3173,24 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         'piece_names "${pieces[k]##*/}" "${prefix%% *}" && return 0',
         "false && return 0",
         "bash -c 'shopt -s extglob\n/usr/bin/g@(i)t diff /dev/null ./.env'",
+    ),
+    (
+        "a command inside an extended glob refused",
+        'refuse "${EXTGLOB_SUBST_MSG}"',
+        ":",
+        "shopt -s extglob\necho @($(git diff HEAD > cosign.pub))",
+    ),
+    (
+        "a substitution in double quotes inside an extended glob refused",
+        """[[ "${ch}" == '`' || "${ch}${next}" == '$(' ]] ||""",
+        """[[ -z "${raw_quote}" && "${ch}${next}" == '$(' ]] ||""",
+        'shopt -s extglob\necho @("$(git diff HEAD --output=cosign.pub)")',
+    ),
+    (
+        "a single-quoted pattern left alone",
+        """if ((extglob_depth)) && [[ "${raw_quote}" != "'" ]]; then""",
+        "if ((extglob_depth)); then",
+        "shopt -s extglob\nls @(a|'$(b)')",
     ),
     (
         "a negated pattern left alone as a file list",
