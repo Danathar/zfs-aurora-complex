@@ -50,7 +50,7 @@ Last sister commit reviewed: `af6e15f00b267019259eb460448e932d7ec06e73`
 | `export_repo_defaults.py` | same | |
 | `pin_akmods_cache.py` | port pending: #209 | Behind here: no timeout on the registry read (sister 0a05e37). |
 | `prepare_validation_build.py` | differs on purpose: the same private-package hint for a registry permission error landed separately in each repository (the sister's in af6e15f); the comment wording differs, and only this copy's hint adds that the image build also pulls the package anonymously | |
-| `promote_stable.py` | port pending: #209 | Behind here: no refusal to move `latest` back to an older run (sister 8a9a09d); no timeout on `cosign verify` (sister 43c9350); no shared credential helper (sister 3b5c1c7). The sister imports `STABLE_RE` from `prune_registry.py`, which this repository does not have. |
+| `promote_stable.py` | port pending: #209 | Behind here: no timeout on `cosign verify` (sister 43c9350); no shared credential helper (sister 3b5c1c7). The refusal to move `latest` back to an older run (sister 8a9a09d) is ported; this copy defines `STABLE_RE` itself, because the sister imports it from `prune_registry.py`, which this repository does not have. |
 | `resolve_build_inputs.py` | port pending: #209 | The sister's brew image inputs differ on purpose. Behind here: no explicit, retried `podman pull` before the kernel listing (sister cfdb192). |
 | `sign_image.py` | port pending: #209 | Behind here: no timeout on `cosign sign`/`cosign verify` (sister 0a05e37, 43c9350). |
 | `tagging_context.py` | same | |

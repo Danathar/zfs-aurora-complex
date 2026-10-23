@@ -524,8 +524,10 @@ It:
 
 1. resolves the candidate tag digest
 2. re-verifies that digest's cosign signature against the committed `cosign.pub`
-3. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
-4. copies that digest to `latest`
+3. refuses to go on if a newer run has already promoted, that is if any
+   `stable-<run>-<sha>` tag carries a higher run number than this run's
+4. copies that digest to `stable-<run>-<sha>` (the immutable audit tag)
+5. copies that digest to `latest`
 
 Step 2 is deliberately redundant with the signing that already happened in
 `sign-candidate-image`. Promotion runs as a separate job on a fresh runner, and
@@ -535,6 +537,13 @@ to promote is signed. It verifies with the same committed public key that is
 baked into the image and enforced by booted systems, so a key mismatch or a
 missing signature fails in CI instead of at a user's next `bootc upgrade`. If
 verification fails, neither tag moves.
+
+Step 3 exists because re-running an old, finished workflow run keeps that run's
+number, and the `concurrency` cancel only stops runs that are still in
+progress. Without it, a re-run of an older build would move `latest` back to an
+older image, which may not be able to import pools whose features a newer image
+enabled. A re-run of the same run is allowed; a deliberate rollback is a new
+run, which gets a higher number. If this check refuses, neither tag moves.
 
 Audit-before-`latest` is deliberate: `build.yml` cancels an in-progress
 promotion when a newer push starts a fresh run (see the workflow's

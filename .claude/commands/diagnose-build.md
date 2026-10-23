@@ -8,7 +8,7 @@ That file is the procedure; do not restate it here. In particular:
 
 - Read the failing step's stderr line before forming a theory. A known refusal
   exits 1 with one line, and that line is the diagnosis.
-- Match the message against the guard table before proposing anything. Three
+- Match the message against the guard table before proposing anything. Five
   of the entries have no fix in this repository, and a digest mismatch on
   `:latest` is an escalation, not a patch.
 - `unexpected EOF` during a blob transfer is a registry or CDN failure, not a
