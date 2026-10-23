@@ -19,14 +19,22 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ci_tools.common import (
+    COSIGN_TIMEOUT,
+    GIT_REMOTE_TIMEOUT,
+    REGISTRY_METADATA_TIMEOUT,
+    REGISTRY_RETRY_ATTEMPTS,
+    REGISTRY_RETRY_DELAY_SECONDS,
+    REGISTRY_TRANSFER_TIMEOUT,
     CiToolError,
     cosign_verify,
     git_ls_remote_resolve,
     is_missing_image_error,
     registry_auth_dir,
     registry_auth_file,
+    registry_creds_from_env,
     registry_host,
     run_cmd,
+    run_cmd_with_retries,
     run_json_cmd,
     skopeo_copy,
     skopeo_inspect_digest,
@@ -247,6 +255,120 @@ class CommonTests(unittest.TestCase):
         self.assertNotIn("json-secret", message)
         self.assertIn("--creds ***REDACTED***", message)
 
+    def test_run_cmd_passes_timeout_through_to_subprocess(self) -> None:
+        with patch("ci_tools.common.subprocess.run") as subprocess_run:
+            subprocess_run.return_value = subprocess.CompletedProcess([], 0, stdout="ok")
+            run_cmd(["skopeo", "inspect", "example"], timeout=12.5)
+
+        self.assertEqual(subprocess_run.call_args.kwargs["timeout"], 12.5)
+
+    def test_run_cmd_defaults_to_no_timeout(self) -> None:
+        # Callers with no defensible ceiling must keep waiting rather than
+        # inherit an arbitrary one.
+        with patch("ci_tools.common.subprocess.run") as subprocess_run:
+            subprocess_run.return_value = subprocess.CompletedProcess([], 0, stdout="ok")
+            run_cmd(["rpm", "-E", "%fedora"])
+
+        self.assertIsNone(subprocess_run.call_args.kwargs["timeout"])
+
+    def test_run_cmd_raises_ci_tool_error_on_timeout(self) -> None:
+        # A hung child must fail the job the same way a nonzero exit does,
+        # not escape as a bare subprocess.TimeoutExpired traceback.
+        with (
+            patch(
+                "ci_tools.common.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["skopeo", "inspect"], 120.0),
+            ),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_cmd(["skopeo", "inspect", "example"], timeout=120.0)
+
+        self.assertIn("timed out", str(context.exception))
+
+    def test_run_cmd_redacts_secret_args_in_timeout_message(self) -> None:
+        args = ["skopeo", "copy", "--src-creds", "actor:timeout-secret"]
+        with (
+            patch(
+                "ci_tools.common.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(args, 30.0),
+            ),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_cmd(args, timeout=30.0)
+
+        message = str(context.exception)
+        self.assertNotIn("timeout-secret", message)
+        self.assertIn("--src-creds ***REDACTED***", message)
+
+    def test_timeout_message_is_not_classified_as_a_missing_image(self) -> None:
+        # This is the one that matters for reuse decisions:
+        # skopeo_inspect_json_optional classifies inspect failures by message
+        # text, and returning None for a timeout would turn "we could not
+        # tell" into "the image does not exist" -- which downstream code reads
+        # as a definitive answer.
+        with (
+            patch(
+                "ci_tools.common.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["skopeo", "inspect"], 120.0),
+            ),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_cmd(["skopeo", "inspect", "example"], timeout=120.0)
+
+        message = str(context.exception)
+        self.assertFalse(is_missing_image_error(message))
+
+    def test_skopeo_inspect_json_optional_reraises_timeouts(self) -> None:
+        # End-to-end form of the check above, through the real classifier.
+        with (
+            patch(
+                "ci_tools.common.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["skopeo", "inspect"], 120.0),
+            ),
+            self.assertRaises(CiToolError),
+        ):
+            skopeo_inspect_json_optional("ghcr.io/example/image:tag")
+
+    def test_registry_and_signing_helpers_bound_their_calls(self) -> None:
+        # Each helper that talks to a registry, a git remote, or a signature
+        # store passes a ceiling. Asserting the constant rather than a literal
+        # keeps this test about "is it bounded", not about the exact number.
+        cases = (
+            (
+                "inspect",
+                lambda: skopeo_inspect_digest("ghcr.io/example/image:tag"),
+                REGISTRY_METADATA_TIMEOUT,
+            ),
+            (
+                "copy",
+                lambda: skopeo_copy("docker://a", "docker://b"),
+                REGISTRY_TRANSFER_TIMEOUT,
+            ),
+            (
+                "ls-remote",
+                lambda: git_ls_remote_resolve("https://example.invalid/r.git", "main"),
+                GIT_REMOTE_TIMEOUT,
+            ),
+            (
+                "cosign-verify",
+                lambda: cosign_verify("ghcr.io/example/image@sha256:x", key_path="cosign.pub"),
+                COSIGN_TIMEOUT,
+            ),
+        )
+        for label, invoke, expected_timeout in cases:
+            with self.subTest(helper=label):
+                with patch("ci_tools.common.run_cmd") as run_cmd_mock:
+                    run_cmd_mock.return_value = (
+                        '{"Digest": "sha256:x"}'
+                        if label == "inspect"
+                        else "0000000000000000000000000000000000000000\trefs/heads/main"
+                    )
+                    invoke()
+
+                self.assertEqual(
+                    run_cmd_mock.call_args.kwargs.get("timeout"), expected_timeout
+                )
+
     def test_write_github_outputs_uses_safe_heredoc_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_file = Path(temp_dir) / "output"
@@ -333,12 +455,19 @@ class RegistryAuthDirTests(unittest.TestCase):
         self.assertEqual(mode, 0o600, f"auth file is {mode:o}, not 0600")
         self.assertFalse(config_path.exists(), "the auth file outlived the call")
 
-    def test_a_local_only_copy_gets_an_auth_file_with_no_registry_entry(self) -> None:
-        # A `dir:` end is not a registry. It must not turn into an auths key.
-        with registry_auth_dir(self._CREDS, "dir:/var/tmp/layout") as auth_dir:
-            payload = json.loads(Path(registry_auth_file(auth_dir)).read_text(encoding="utf-8"))
-
-        self.assertEqual(payload, {"auths": {}})
+    def test_a_credential_with_no_registry_end_is_an_error(self) -> None:
+        # A `dir:` end is not a registry, so it must not turn into an auths
+        # key -- and with no other reference there is no key at all. Writing
+        # `{"auths": {}}` would still yield a truthy directory, so the caller
+        # would pass `--authfile` pointing at a file holding no credential and
+        # the command would run anonymously with the credential ignored --
+        # and against an anonymously-readable package that still passes every
+        # positive check, so nothing downstream would notice.
+        with (
+            self.assertRaises(CiToolError),
+            registry_auth_dir(self._CREDS, "dir:/var/tmp/layout"),
+        ):
+            self.fail("registry_auth_dir yielded an auth dir with no registry entry")
 
     def test_no_credential_means_no_directory_and_no_override(self) -> None:
         # The anonymous callers must keep resolving credentials the way they
@@ -422,6 +551,9 @@ class CredentialArgvTests(unittest.TestCase):
         self.assertEqual(argv[-1], "docker://ghcr.io/example/image:tag")
         self.assert_secret_is_absent(argv)
         self.assertEqual(seen["auths"], {"ghcr.io": self._CREDS})
+        self.assertEqual(
+            run_json_cmd_mock.call_args.kwargs["timeout"], REGISTRY_METADATA_TIMEOUT
+        )
 
     def test_skopeo_inspect_json_omits_the_auth_file_when_no_creds_are_given(self) -> None:
         # The anonymous form has to stay anonymous: `--authfile` pointing at a
@@ -511,6 +643,7 @@ class CredentialArgvTests(unittest.TestCase):
 
         self.assert_secret_is_absent(run_cmd_mock.call_args.args[0])
         self.assertEqual(seen["auths"], {"ghcr.io": self._CREDS})
+        self.assertEqual(run_cmd_mock.call_args.kwargs["timeout"], COSIGN_TIMEOUT)
 
     def test_cosign_verify_without_creds_sets_no_docker_config_override(self) -> None:
         # A job that ran `docker/login-action` relies on its own Docker config.
@@ -519,6 +652,167 @@ class CredentialArgvTests(unittest.TestCase):
             cosign_verify("ghcr.io/example/image@sha256:abc", key_path="/tmp/cosign.pub")
 
         self.assertIsNone(run_cmd_mock.call_args.kwargs.get("env"))
+
+
+class RegistryCredsFromEnvTests(unittest.TestCase):
+    """
+    One decision for how REGISTRY_ACTOR/REGISTRY_TOKEN become a `creds` pair.
+
+    `promote-stable`, `check-stable-signal` and the akmods cache check require
+    the pair; the last-good-build badge falls back to anonymous. Half a
+    credential is never sent: optional callers get `None`, required ones stop.
+    """
+
+    @staticmethod
+    def _env(**values: str):
+        environ = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("REGISTRY_ACTOR", "REGISTRY_TOKEN")
+        }
+        environ.update(values)
+        return patch.dict(os.environ, environ, clear=True)
+
+    def test_both_halves_make_one_actor_token_pair(self) -> None:
+        with self._env(REGISTRY_ACTOR="Danathar", REGISTRY_TOKEN="token"):
+            self.assertEqual(registry_creds_from_env(), "Danathar:token")
+            self.assertEqual(registry_creds_from_env(required=True), "Danathar:token")
+
+    def test_optional_pair_is_anonymous_unless_both_halves_are_set(self) -> None:
+        for values in (
+            {},
+            {"REGISTRY_ACTOR": "Danathar"},
+            {"REGISTRY_TOKEN": "token"},
+            {"REGISTRY_ACTOR": "Danathar", "REGISTRY_TOKEN": ""},
+        ):
+            with self.subTest(values=values), self._env(**values):
+                self.assertIsNone(registry_creds_from_env())
+
+    def test_required_pair_names_the_missing_half(self) -> None:
+        for values, missing in (
+            ({"REGISTRY_TOKEN": "token"}, "REGISTRY_ACTOR"),
+            ({"REGISTRY_ACTOR": "Danathar"}, "REGISTRY_TOKEN"),
+            ({"REGISTRY_ACTOR": "Danathar", "REGISTRY_TOKEN": ""}, "REGISTRY_TOKEN"),
+        ):
+            with self.subTest(values=values), self._env(**values), self.assertRaises(
+                CiToolError
+            ) as context:
+                registry_creds_from_env(required=True)
+            self.assertIn(missing, str(context.exception))
+            self.assertNotIn("token", str(context.exception).replace("REGISTRY_TOKEN", ""))
+
+
+class RunCmdWithRetriesTests(unittest.TestCase):
+    """
+    The retry wrapper around a transient registry read.
+
+    Every case patches `ci_tools.common.run_cmd`, so nothing here runs a real
+    command, and patches `time.sleep`, so the delay is asserted rather than
+    waited out. What matters is the count: how many attempts a caller gets, and
+    that a caller who asked for retries never silently gets one attempt.
+    """
+
+    def test_a_first_attempt_that_succeeds_runs_once_and_does_not_sleep(self) -> None:
+        with (
+            patch("ci_tools.common.run_cmd", return_value="output\n") as run_cmd_mock,
+            patch("ci_tools.common.time.sleep") as sleep_mock,
+        ):
+            result = run_cmd_with_retries(["podman", "pull", "example"])
+
+        self.assertEqual(result, "output\n")
+        self.assertEqual(run_cmd_mock.call_count, 1)
+        sleep_mock.assert_not_called()
+
+    def test_a_transient_failure_is_retried_and_its_later_success_returned(self) -> None:
+        # The failure this exists for: one truncated blob, then a clean pull.
+        with (
+            patch(
+                "ci_tools.common.run_cmd",
+                side_effect=[CiToolError("unexpected EOF"), "output\n"],
+            ) as run_cmd_mock,
+            patch("ci_tools.common.time.sleep") as sleep_mock,
+        ):
+            result = run_cmd_with_retries(["podman", "pull", "example"])
+
+        self.assertEqual(result, "output\n")
+        self.assertEqual(run_cmd_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(REGISTRY_RETRY_DELAY_SECONDS)
+
+    def test_every_attempt_failing_raises_naming_the_count_and_the_last_error(self) -> None:
+        with (
+            patch(
+                "ci_tools.common.run_cmd",
+                side_effect=CiToolError("unexpected EOF"),
+            ) as run_cmd_mock,
+            patch("ci_tools.common.time.sleep") as sleep_mock,
+            self.assertRaises(CiToolError) as caught,
+        ):
+            run_cmd_with_retries(["podman", "pull", "example"], attempts=3)
+
+        self.assertEqual(run_cmd_mock.call_count, 3)
+        # Sleeps happen between attempts, not after the last one.
+        self.assertEqual(sleep_mock.call_count, 2)
+        self.assertEqual(
+            str(caught.exception),
+            "Command failed after 3 attempts: unexpected EOF",
+        )
+
+    def test_a_timeout_is_retried_like_any_other_transient_failure(self) -> None:
+        # `run_cmd` raises CiToolError for a timeout too. A stalled transfer and
+        # a truncated one are the same class here, so both get the same budget.
+        with (
+            patch(
+                "ci_tools.common.run_cmd",
+                side_effect=[CiToolError("Command timed out after 1800.0s: podman pull"), ""],
+            ) as run_cmd_mock,
+            patch("ci_tools.common.time.sleep"),
+        ):
+            run_cmd_with_retries(["podman", "pull", "example"])
+
+        self.assertEqual(run_cmd_mock.call_count, 2)
+
+    def test_keyword_arguments_reach_run_cmd_unchanged(self) -> None:
+        # The wrapper must not swallow the timeout or the capture setting: a
+        # retried transfer with no ceiling is the hang this repo already guards.
+        with (
+            patch("ci_tools.common.run_cmd", return_value="") as run_cmd_mock,
+            patch("ci_tools.common.time.sleep"),
+        ):
+            run_cmd_with_retries(
+                ["podman", "pull", "example"],
+                capture_output=False,
+                timeout=REGISTRY_TRANSFER_TIMEOUT,
+            )
+
+        self.assertEqual(run_cmd_mock.call_args.args[0], ["podman", "pull", "example"])
+        self.assertEqual(
+            run_cmd_mock.call_args.kwargs,
+            {"capture_output": False, "timeout": REGISTRY_TRANSFER_TIMEOUT},
+        )
+
+    def test_a_nonsense_attempt_count_is_rejected_rather_than_run_once(self) -> None:
+        # `attempts=0` would otherwise fall out of the loop and raise the
+        # unreachable branch, reporting a failure that never ran.
+        with (
+            patch("ci_tools.common.run_cmd") as run_cmd_mock,
+            self.assertRaises(ValueError),
+        ):
+            run_cmd_with_retries(["podman", "pull", "example"], attempts=0)
+
+        run_cmd_mock.assert_not_called()
+
+    def test_the_default_attempt_count_is_the_registry_constant(self) -> None:
+        with (
+            patch(
+                "ci_tools.common.run_cmd",
+                side_effect=CiToolError("unexpected EOF"),
+            ) as run_cmd_mock,
+            patch("ci_tools.common.time.sleep"),
+            self.assertRaises(CiToolError),
+        ):
+            run_cmd_with_retries(["podman", "pull", "example"])
+
+        self.assertEqual(run_cmd_mock.call_count, REGISTRY_RETRY_ATTEMPTS)
 
 
 if __name__ == "__main__":

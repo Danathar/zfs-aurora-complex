@@ -127,14 +127,18 @@ class CodeFactTests(unittest.TestCase):
     """What the entries say the code does, still true."""
 
     def test_the_akmods_cache_check_requires_registry_credentials(self) -> None:
+        # Both halves are read through the shared helper, which raises as
+        # `require_env` does when either is missing.
         source = text(REPO_ROOT / "ci_tools" / "check_akmods_cache.py")
-        self.assertIn('require_env("REGISTRY_ACTOR")', source)
-        self.assertIn('require_env("REGISTRY_TOKEN")', source)
+        self.assertIn("registry_creds_from_env(required=True)", source)
+        common = text(REPO_ROOT / "ci_tools" / "common.py")
+        self.assertIn("require_env('REGISTRY_ACTOR')", common)
+        self.assertIn("require_env('REGISTRY_TOKEN')", common)
 
     def test_the_other_helpers_the_entry_names_also_authenticate(self) -> None:
         for name in ("check_stable_signal", "promote_stable", "write_last_good_build_badge"):
             with self.subTest(helper=name):
-                self.assertIn("REGISTRY_ACTOR", text(REPO_ROOT / "ci_tools" / f"{name}.py"))
+                self.assertIn("registry_creds_from_env(", text(REPO_ROOT / "ci_tools" / f"{name}.py"))
 
     def test_the_rechunk_step_passes_only_the_config_element(self) -> None:
         action = text(REPO_ROOT / ".github" / "actions" / "rechunk-native-image" / "action.yml")

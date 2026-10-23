@@ -1,7 +1,8 @@
 """
 Script: tests/test_promote_stable.py
 What: Tests for candidate-to-stable promotion in the single-repository flow.
-Doing: Verifies the candidate tag naming rule, copy order, and digest-preserving flags.
+Doing: Verifies the candidate tag naming rule, copy order, digest-preserving flags, and the
+refusal to move `latest` backwards.
 Why: Promotion is the safety gate that advances `latest`, so it should be covered directly.
 Goal: Keep the promotion contract explicit while the workflow evolves.
 """
@@ -12,8 +13,8 @@ import os
 import unittest
 from unittest.mock import patch
 
-from ci_tools.common import CiToolError
-from ci_tools.promote_stable import main
+from ci_tools.common import COSIGN_TIMEOUT, CiToolError
+from ci_tools.promote_stable import list_repository_tags, main, refuse_older_than_published
 
 
 def _env() -> dict[str, str]:
@@ -29,6 +30,15 @@ def _env() -> dict[str, str]:
 
 
 class PromoteStableTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Run 12 is promoting; the newest published audit tag is from run 11.
+        tags = patch(
+            "ci_tools.promote_stable.list_repository_tags",
+            return_value=["latest", "stable-11-c0ffee1", "candidate-deadbee-43"],
+        )
+        self.list_tags = tags.start()
+        self.addCleanup(tags.stop)
+
     def test_promotes_audit_tag_before_latest_with_digest_preserving_flags(self) -> None:
         with patch.dict(os.environ, _env(), clear=True):
             with patch(
@@ -169,6 +179,7 @@ class PromoteStableTests(unittest.TestCase):
             verify_args[-1], "ghcr.io/danathar/zfs-aurora-complex@sha256:abc"
         )
         self.assertIn("--new-bundle-format=false", verify_args)
+        self.assertEqual(run_cmd.call_args.kwargs.get("timeout"), COSIGN_TIMEOUT)
         self.assertEqual(skopeo_copy.call_count, 2)
 
     def test_unsigned_candidate_is_never_promoted(self) -> None:
@@ -188,6 +199,115 @@ class PromoteStableTests(unittest.TestCase):
 
         self.assertIn("no matching signatures", str(context.exception))
         skopeo_copy.assert_not_called()
+
+    def test_lists_tags_of_the_image_repository_with_credentials(self) -> None:
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy"),
+            patch("ci_tools.promote_stable.run_cmd"),
+        ):
+            main()
+
+        self.list_tags.assert_called_once_with(
+            "docker://ghcr.io/danathar/zfs-aurora-complex", creds="actor:token"
+        )
+
+    def test_rerun_of_older_build_never_moves_any_tag(self) -> None:
+        # Run 12 re-run after run 13 promoted: `latest` would move backwards.
+        self.list_tags.return_value = ["latest", "stable-11-c0ffee1", "stable-13-feedfac"]
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch("ci_tools.promote_stable.run_cmd"),
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
+
+        self.assertIn("run 13", str(context.exception))
+        skopeo_copy.assert_not_called()
+
+    def test_tag_listing_failure_never_moves_any_tag(self) -> None:
+        self.list_tags.side_effect = CiToolError("toomanyrequests")
+        with (
+            patch.dict(os.environ, _env(), clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch("ci_tools.promote_stable.run_cmd"),
+            self.assertRaises(CiToolError),
+        ):
+            main()
+
+        skopeo_copy.assert_not_called()
+
+    def test_non_numeric_run_number_is_refused(self) -> None:
+        env = _env() | {"GITHUB_RUN_NUMBER": "12a"}
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch("ci_tools.promote_stable.run_cmd"),
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
+
+        self.assertIn("not a run number", str(context.exception))
+        skopeo_copy.assert_not_called()
+
+
+# Two consecutive audit tags in the shape `main()` writes.
+PUBLISHED = ["stable-220-e6f14f7", "stable-221-c6d1dee"]
+
+
+class RefuseOlderThanPublishedTests(unittest.TestCase):
+    def test_allows_first_promotion_with_no_audit_tags(self) -> None:
+        refuse_older_than_published(run_number="1", tags=["latest", "candidate-deadbee-43"])
+
+    def test_allows_newer_run(self) -> None:
+        refuse_older_than_published(run_number="222", tags=PUBLISHED)
+
+    def test_allows_rerun_of_the_newest_promoted_run(self) -> None:
+        # A promotion that failed between the audit copy and the `latest` copy,
+        # re-run before any newer build promoted, must still finish.
+        refuse_older_than_published(run_number="221", tags=PUBLISHED)
+
+    def test_refuses_older_run(self) -> None:
+        with self.assertRaises(CiToolError) as context:
+            refuse_older_than_published(run_number="220", tags=PUBLISHED)
+        self.assertIn("Refusing to promote run 220", str(context.exception))
+
+    def test_compares_run_numbers_numerically_not_as_text(self) -> None:
+        with self.assertRaises(CiToolError):
+            refuse_older_than_published(run_number="99", tags=["stable-100-e6f14f7"])
+
+    def test_ignores_tags_outside_the_audit_family(self) -> None:
+        refuse_older_than_published(
+            run_number="5", tags=["stable-999", "stable-999-NOTHEX", "br-stable-999-abc", "999"]
+        )
+
+
+class ListRepositoryTagsTests(unittest.TestCase):
+    def test_passes_credentials_as_authfile_and_returns_tags(self) -> None:
+        with patch(
+            "ci_tools.promote_stable.run_json_cmd",
+            return_value={"Repository": "ghcr.io/o/i", "Tags": ["latest", "stable-1-abc"]},
+        ) as run_json_cmd:
+            tags = list_repository_tags("docker://ghcr.io/o/i", creds="actor:token")
+
+        self.assertEqual(tags, ["latest", "stable-1-abc"])
+        command = run_json_cmd.call_args.args[0]
+        self.assertEqual(command[:2], ["skopeo", "list-tags"])
+        self.assertIn("--authfile", command)
+        self.assertEqual(command[-1], "docker://ghcr.io/o/i")
+        self.assertNotIn("actor:token", " ".join(command))
+
+    def test_missing_tag_list_fails_closed(self) -> None:
+        with (
+            patch("ci_tools.promote_stable.run_json_cmd", return_value={"Repository": "x"}),
+            self.assertRaises(CiToolError),
+        ):
+            list_repository_tags("docker://ghcr.io/o/i", creds=None)
 
 
 if __name__ == "__main__":

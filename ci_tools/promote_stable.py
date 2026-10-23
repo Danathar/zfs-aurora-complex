@@ -1,7 +1,8 @@
 """
 Script: ci_tools/promote_stable.py
 What: Promotes the tested candidate tag to stable tags in the same image repository.
-Doing: Copies the candidate digest to one immutable audit tag, then to `latest`.
+Doing: Refuses when a newer run already promoted, then copies the candidate digest to one
+immutable audit tag, then to `latest`.
 Why: Candidate-first promotion keeps broken builds from advancing the normal user-facing tag.
 Goal: Update stable tags without rebuilding the image a second time.
 """
@@ -9,17 +10,78 @@ Goal: Update stable tags without rebuilding the image a second time.
 from __future__ import annotations
 
 import os
+import re
 
 from ci_tools.common import (
+    COSIGN_TIMEOUT,
+    REGISTRY_METADATA_TIMEOUT,
     REPO_ROOT,
     CiToolError,
     normalize_owner,
+    registry_auth_dir,
+    registry_auth_file,
+    registry_creds_from_env,
     require_env,
     run_cmd,
+    run_json_cmd,
     skopeo_copy,
     skopeo_inspect_digest,
 )
 from ci_tools.tagging_context import build_candidate_tag
+
+# The immutable audit tag `main()` writes: `stable-<run_number>-<sha_short>`.
+STABLE_RE = re.compile(r"^stable-\d+-[0-9a-f]+$")
+
+
+def list_repository_tags(repository_ref: str, *, creds: str | None) -> list[str]:
+    """
+    Return every tag in one image repository (`docker://host/org/name`).
+
+    `creds` reaches `skopeo` as an `--authfile`, never as `--creds`; see
+    `registry_auth_dir` for why.
+    """
+    with registry_auth_dir(creds, repository_ref) as auth_dir:
+        command = ["skopeo", "list-tags"]
+        if auth_dir:
+            command.extend(["--authfile", registry_auth_file(auth_dir)])
+        command.append(repository_ref)
+        listing = run_json_cmd(command, timeout=REGISTRY_METADATA_TIMEOUT)
+    tags = listing.get("Tags")
+    if not isinstance(tags, list):
+        raise CiToolError(f"Missing tag list in skopeo list-tags output for {repository_ref}")
+    return [str(tag) for tag in tags]
+
+
+def refuse_older_than_published(*, run_number: str, tags: list[str]) -> None:
+    """
+    Refuse to promote when a newer run has already promoted.
+
+    Every promotion writes `stable-<run>-<sha7>` before it moves `latest`, so
+    the highest run number among those tags is the newest build that reached
+    users. Re-running an old, finished run keeps that run's
+    `GITHUB_RUN_NUMBER`, and the in-progress `concurrency` cancel in
+    `build.yml` does not stop it. Without this check such a re-run would move
+    `latest` back to an older image, and an older image may be unable to
+    import pools whose features a newer one enabled (`docs/SECURITY-AI.md`).
+
+    An equal run number is allowed: that is a re-run of the same build, which
+    resolves the same candidate. A deliberate rollback is a new dispatch,
+    which gets a new, higher run number.
+
+    `GITHUB_RUN_NUMBER` counts per workflow. If promotion ever moves to a
+    workflow whose count is lower than the existing `stable-*` tags, this check
+    refuses every promotion until those tags are removed. That is the
+    fail-closed direction.
+    """
+    if not run_number.isdigit():
+        raise CiToolError(f"GITHUB_RUN_NUMBER is not a run number: {run_number!r}")
+    published = [int(tag.split("-")[1]) for tag in tags if STABLE_RE.match(tag)]
+    if published and max(published) > int(run_number):
+        raise CiToolError(
+            f"Refusing to promote run {run_number}: run {max(published)} has already "
+            "promoted a newer image to latest. Re-running an older build's promotion "
+            "would move latest backwards. To roll back on purpose, start a new run."
+        )
 
 
 def verify_candidate_signature(*, image_org: str, image_name: str, candidate_digest: str) -> None:
@@ -52,7 +114,8 @@ def verify_candidate_signature(*, image_org: str, image_name: str, candidate_dig
             "--key",
             verification_key,
             digest_ref,
-        ]
+        ],
+        timeout=COSIGN_TIMEOUT,
     )
     print(f"Verified candidate signature before promotion: {digest_ref}")
 
@@ -79,8 +142,7 @@ def _copy_and_verify_digest(*, source_digest: str, source_ref: str, destination_
 def main() -> None:
     # Inputs from workflow context and job env.
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
-    registry_actor = require_env("REGISTRY_ACTOR")
-    registry_token = require_env("REGISTRY_TOKEN")
+    creds = registry_creds_from_env(required=True)
     fedora_version = require_env("FEDORA_VERSION")
     image_name = require_env("IMAGE_NAME")
     run_number = require_env("GITHUB_RUN_NUMBER")
@@ -91,7 +153,6 @@ def main() -> None:
     # repository path. Promotion only moves stable-facing tags after that build passes.
     candidate_tag = build_candidate_tag(github_sha=github_sha, fedora_version=fedora_version)
     candidate_by_tag = f"docker://ghcr.io/{image_org}/{image_name}:{candidate_tag}"
-    creds = f"{registry_actor}:{registry_token}"
     candidate_digest = skopeo_inspect_digest(candidate_by_tag, creds=creds)
     candidate_ref = f"docker://ghcr.io/{image_org}/{image_name}@{candidate_digest}"
 
@@ -99,6 +160,13 @@ def main() -> None:
     # is signed by this repo's committed key.
     verify_candidate_signature(
         image_org=image_org, image_name=image_name, candidate_digest=candidate_digest
+    )
+
+    # Fail closed before any tag moves: never move `latest` backwards to an
+    # image older than the one a newer run already promoted.
+    refuse_older_than_published(
+        run_number=run_number,
+        tags=list_repository_tags(f"docker://ghcr.io/{image_org}/{image_name}", creds=creds),
     )
 
     stable_ref = f"docker://ghcr.io/{image_org}/{image_name}:latest"

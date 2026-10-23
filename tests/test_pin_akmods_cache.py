@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ci_tools.common import CiToolError
+from ci_tools.common import REGISTRY_METADATA_TIMEOUT, CiToolError
 from ci_tools.pin_akmods_cache import (
     akmods_cache_image_tag,
     main,
@@ -75,7 +75,8 @@ class PinAkmodsCacheTests(unittest.TestCase):
                 "--raw",
                 "--config",
                 f"docker://{PINNED}",
-            ]
+            ],
+            timeout=REGISTRY_METADATA_TIMEOUT,
         )
 
     def test_pushed_config_hex_hashes_the_raw_config_skopeo_prints(self) -> None:

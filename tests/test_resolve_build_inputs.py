@@ -18,7 +18,12 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from ci_tools.common import CiToolError, sort_kernel_releases
+from ci_tools.common import (
+    REGISTRY_RETRY_ATTEMPTS,
+    REGISTRY_TRANSFER_TIMEOUT,
+    CiToolError,
+    sort_kernel_releases,
+)
 from ci_tools.resolve_build_inputs import (
     BuildInputResolution,
     ResolvedBuildInputs,
@@ -535,10 +540,13 @@ class DetectBaseImageKernelReleasesTests(unittest.TestCase):
     """
 
     def test_returns_kernel_releases_in_natural_sort_order(self) -> None:
-        with patch(
-            "ci_tools.resolve_build_inputs.run_cmd",
-            return_value="6.16.4-200.fc43.x86_64\n6.16.10-200.fc43.x86_64\n",
-        ) as run_cmd_mock:
+        with (
+            patch("ci_tools.resolve_build_inputs.run_cmd_with_retries"),
+            patch(
+                "ci_tools.resolve_build_inputs.run_cmd",
+                return_value="6.16.4-200.fc43.x86_64\n6.16.10-200.fc43.x86_64\n",
+            ) as run_cmd_mock,
+        ):
             detected = detect_base_image_kernel_releases("ghcr.io/example/base@sha256:deadbeef")
 
         self.assertEqual(
@@ -554,6 +562,7 @@ class DetectBaseImageKernelReleasesTests(unittest.TestCase):
 
     def test_empty_module_directory_listing_raises_with_image_ref(self) -> None:
         with (
+            patch("ci_tools.resolve_build_inputs.run_cmd_with_retries"),
             # `find ... -printf '%f\n'` prints nothing when no directory matches.
             patch("ci_tools.resolve_build_inputs.run_cmd", return_value=""),
             self.assertRaises(CiToolError) as caught,
@@ -564,6 +573,59 @@ class DetectBaseImageKernelReleasesTests(unittest.TestCase):
             str(caught.exception),
             "No installed kernel directories found in ghcr.io/example/base@sha256:deadbeef",
         )
+
+    def test_the_image_is_pulled_through_the_retrying_wrapper_before_the_probe(self) -> None:
+        # The regression this guards: `podman run` pulling the image implicitly,
+        # with nothing retrying the transfer. One truncated blob from a registry
+        # CDN then ends the build at its first step.
+        with (
+            patch(
+                "ci_tools.resolve_build_inputs.run_cmd_with_retries",
+                return_value="",
+            ) as pull_mock,
+            patch(
+                "ci_tools.resolve_build_inputs.run_cmd",
+                return_value="6.16.4-200.fc43.x86_64\n",
+            ) as run_cmd_mock,
+        ):
+            detect_base_image_kernel_releases("ghcr.io/example/base@sha256:deadbeef")
+
+        pull_argv = pull_mock.call_args.args[0]
+        self.assertEqual(pull_argv[:2], ["podman", "pull"])
+        # Pinned by digest, and the same reference the probe then runs against,
+        # so the retried transfer cannot fetch one image and the probe read
+        # another.
+        self.assertEqual(pull_argv[-1], "ghcr.io/example/base@sha256:deadbeef")
+        self.assertIn("ghcr.io/example/base@sha256:deadbeef", run_cmd_mock.call_args.args[0])
+        self.assertEqual(
+            pull_mock.call_args.kwargs,
+            {
+                "capture_output": False,
+                "timeout": REGISTRY_TRANSFER_TIMEOUT / REGISTRY_RETRY_ATTEMPTS,
+            },
+        )
+        # Belt and braces: podman retries within the invocation as well.
+        self.assertEqual(
+            pull_argv[pull_argv.index("--retry") + 1],
+            str(REGISTRY_RETRY_ATTEMPTS),
+        )
+
+    def test_a_pull_that_exhausts_its_retries_raises_without_probing(self) -> None:
+        # A failed transfer must not fall through to `podman run` against an
+        # image that is not there: that turns a clear transfer error into an
+        # obscure one.
+        with (
+            patch(
+                "ci_tools.resolve_build_inputs.run_cmd_with_retries",
+                side_effect=CiToolError("Command failed after 3 attempts: unexpected EOF"),
+            ),
+            patch("ci_tools.resolve_build_inputs.run_cmd") as run_cmd_mock,
+            self.assertRaises(CiToolError) as caught,
+        ):
+            detect_base_image_kernel_releases("ghcr.io/example/base@sha256:deadbeef")
+
+        self.assertIn("unexpected EOF", str(caught.exception))
+        run_cmd_mock.assert_not_called()
 
 
 class ResolveBuildInputsRegistryGuardTests(unittest.TestCase):
@@ -625,6 +687,10 @@ class ResolveBuildInputsRegistryGuardTests(unittest.TestCase):
             patch.dict(os.environ, self._env(**(env or {})), clear=False),
             patch("ci_tools.resolve_build_inputs.skopeo_inspect_json", side_effect=inspect_json),
             patch("ci_tools.resolve_build_inputs.skopeo_inspect_digest", side_effect=digest_lookup),
+            # The base-image pull is a real registry transfer, stubbed here for
+            # the same reason skopeo is: these cases are about the guards, not
+            # about the network.
+            patch("ci_tools.resolve_build_inputs.run_cmd_with_retries", return_value=""),
             patch(
                 "ci_tools.resolve_build_inputs.run_cmd",
                 return_value="6.16.4-200.fc43.x86_64\n6.16.10-200.fc43.x86_64\n",

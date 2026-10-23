@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -33,6 +34,41 @@ class CiToolError(RuntimeError):
 FEDORA_FROM_KERNEL_RE = re.compile(r".*fc([0-9]+).*")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPO_DEFAULTS_FILE = REPO_ROOT / "ci" / "defaults.json"
+# Wall-clock ceilings for external commands, in seconds.
+#
+# These exist to turn a hung child process into a fast, readable failure --
+# not to police normal runtimes. Every value is far above what these commands
+# actually take in CI, so a healthy run never approaches one. Without them the
+# only backstop is the job's `timeout-minutes`, which bounds the whole job
+# rather than the one command, so a stalled TLS handshake against ghcr.io
+# holds a privileged job and its package-write token open until then.
+#
+# Commands whose runtime scales with hardware and network throughput -- the
+# `just build`/`push` image builds, `dnf5`/`depmod` inside the image build --
+# deliberately get no per-command ceiling here, because any number would be a
+# guess. Those are covered by each workflow job's `timeout-minutes`.
+REGISTRY_METADATA_TIMEOUT = 120.0
+"""`skopeo inspect`: reads a manifest, transfers no layers."""
+
+REGISTRY_TRANSFER_TIMEOUT = 1800.0
+"""`skopeo copy` and `podman pull`: full layer transfer, retried."""
+
+# How a transient registry read is retried. `skopeo copy` gets this from
+# `--retry-times`; anything else goes through `run_cmd_with_retries` below.
+#
+# Three attempts and a fixed five-second wait are chosen against what actually
+# fails here: a CDN truncating one blob mid-transfer. That either clears on the
+# next attempt or is an outage no retry budget survives, so a longer ladder buys
+# nothing and delays the real failure. The delay stays a constant rather than a
+# backoff for the same reason.
+REGISTRY_RETRY_ATTEMPTS = 3
+REGISTRY_RETRY_DELAY_SECONDS = 5.0
+
+GIT_REMOTE_TIMEOUT = 120.0
+"""`git ls-remote`: ref listing only, no object transfer."""
+
+COSIGN_TIMEOUT = 300.0
+"""`cosign sign` and `cosign verify`: signature payload upload or verification."""
 
 
 def require_env(name: str) -> str:
@@ -46,6 +82,24 @@ def require_env(name: str) -> str:
 def optional_env(name: str, default: str = "") -> str:
     """Return an environment variable with a fallback default."""
     return os.environ.get(name, default)
+
+
+def registry_creds_from_env(*, required: bool = False) -> str | None:
+    """
+    Return the `REGISTRY_ACTOR:REGISTRY_TOKEN` pair every registry helper takes.
+
+    With `required=True` a missing half raises exactly as `require_env` does, for
+    tools that must never fall back to an anonymous pull. Otherwise the pair is
+    `None` unless both halves are set, which the helpers below read as
+    anonymous: half a credential is treated the same as none.
+    """
+    if required:
+        return f"{require_env('REGISTRY_ACTOR')}:{require_env('REGISTRY_TOKEN')}"
+    registry_actor = optional_env("REGISTRY_ACTOR")
+    registry_token = optional_env("REGISTRY_TOKEN")
+    if registry_actor and registry_token:
+        return f"{registry_actor}:{registry_token}"
+    return None
 
 
 def load_repo_defaults() -> dict[str, str]:
@@ -97,8 +151,18 @@ def run_cmd(
     capture_output: bool = True,
     cwd: str | None = None,
     env: Mapping[str, str] | None = None,
+    timeout: float | None = None,
 ) -> str:
-    """Run a command and return stdout, raising a readable error on failure."""
+    """
+    Run a command and return stdout, raising a readable error on failure.
+
+    `timeout` is a wall-clock ceiling in seconds. It defaults to `None` (wait
+    forever) so callers that have no defensible bound keep their current
+    behavior; callers that talk to a registry or a git remote pass one of the
+    module-level `*_TIMEOUT` constants. Exceeding it raises `CiToolError`, the
+    same type a nonzero exit raises, so a hang fails the job exactly the way a
+    command failure already does instead of surfacing as a bare traceback.
+    """
     try:
         command_env = None
         if env is not None:
@@ -113,7 +177,16 @@ def run_cmd(
             capture_output=capture_output,
             cwd=cwd,
             env=command_env,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        command = " ".join(redact_command_args(args))
+        # Deliberately worded to share no substring with
+        # `_MISSING_IMAGE_ERROR_MARKERS`. `skopeo_inspect_json_optional`
+        # classifies failures by message text, and a timeout must never be
+        # read as "the image does not exist" -- that would turn "we could not
+        # tell" into a reuse/rebuild decision made from unknown state.
+        raise CiToolError(f"Command timed out after {timeout}s: {command}") from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
@@ -124,6 +197,52 @@ def run_cmd(
     if not capture_output:
         return ""
     return result.stdout
+
+
+def run_cmd_with_retries(
+    args: Sequence[str],
+    *,
+    attempts: int = REGISTRY_RETRY_ATTEMPTS,
+    delay: float = REGISTRY_RETRY_DELAY_SECONDS,
+    **kwargs,
+) -> str:
+    """
+    Run a command, retrying a failure up to `attempts` times.
+
+    For commands whose failure mode is a transient registry read rather than a
+    wrong answer. `skopeo copy` does not need this -- it retries internally via
+    `--retry-times` -- but `podman` has no equivalent flag on every subcommand
+    that moves layers, and a truncated blob from a registry CDN can fail a
+    whole build at its first step with nothing behind it.
+
+    Retries every `CiToolError` `run_cmd` raises, including a timeout: both a
+    stalled transfer and a truncated one are the same transient class here, and
+    a command that fails for a non-transient reason fails the same way on every
+    attempt, `attempts` times, and then raises. That is a bounded cost paid only
+    on a path that was already failing.
+
+    Deliberately not used for anything that decides state. Callers that read a
+    manifest to choose between reuse and rebuild keep their single attempt, so a
+    retry can never turn "we could not tell" into an answer.
+    """
+    if attempts < 1:
+        raise ValueError(f"attempts must be at least 1, got {attempts}")
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return run_cmd(args, **kwargs)
+        except CiToolError as exc:
+            if attempt == attempts:
+                raise CiToolError(f"Command failed after {attempts} attempts: {exc}") from exc
+            # `run_cmd` has already redacted the command line inside `exc`.
+            print(
+                f"Attempt {attempt} of {attempts} failed, retrying in {delay}s: {exc}",
+                flush=True,
+            )
+            time.sleep(delay)
+
+    # Unreachable: the loop above either returns or raises on its last attempt.
+    raise CiToolError(f"Command failed after {attempts} attempts")
 
 
 def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
@@ -140,7 +259,9 @@ def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
     if not ref:
         raise CiToolError("git_ls_remote_resolve requires a non-empty ref")
 
-    output = run_cmd(["git", "ls-remote", "--exit-code", repo_url, ref])
+    output = run_cmd(
+        ["git", "ls-remote", "--exit-code", repo_url, ref], timeout=GIT_REMOTE_TIMEOUT
+    )
     matches: dict[str, str] = {}
     for line in output.splitlines():
         line = line.strip()
@@ -175,9 +296,9 @@ def git_ls_remote_resolve(repo_url: str, ref: str) -> str:
     raise CiToolError(f"git ls-remote did not return a resolvable commit SHA for {ref} at {repo_url}")
 
 
-def run_json_cmd(args: Sequence[str]) -> dict:
+def run_json_cmd(args: Sequence[str], *, timeout: float | None = None) -> dict:
     """Run a command that returns JSON and parse it."""
-    output = run_cmd(args)
+    output = run_cmd(args, timeout=timeout)
     try:
         return json.loads(output)
     except json.JSONDecodeError as exc:
@@ -283,14 +404,25 @@ def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
     Yield a directory holding a `config.json` carrying `creds`, or `""`.
 
     This is how a registry credential reaches `skopeo` and `cosign` without
-    ever appearing in a command line. `/proc/<pid>/cmdline` is world-readable
-    for the lifetime of a process, so a token passed as `--creds` or
-    `--registry-password` is readable by anything else running on the runner
-    while the child is alive -- including a process left behind by a step this
-    repository did not write. A `0600` file in a per-call temporary directory
-    is readable only by the uid that created it and is deleted when the call
-    returns. That is what gotcha 6 in `docs/signing-and-bootc.md` ("do not pass
-    registry secrets in command argv") asks for.
+    ever appearing in a command line. `/proc/<pid>/cmdline` is mode 0444, so a
+    token passed as `--creds` or `--registry-password` is readable by *every*
+    uid on the runner for as long as the child lives. A `0600` file in a
+    per-call temporary directory narrows that to the uid that created it, for
+    the duration of one command. That is what gotcha 6 in
+    `docs/signing-and-bootc.md` ("do not pass registry secrets in command
+    argv") asks for.
+
+    What this deliberately does not claim is protection from a hostile process
+    running as the *same* uid in this job. Such a process can read the
+    auth-file path out of argv and open the file -- but it does not need to:
+    the credential reaches these helpers as `REGISTRY_TOKEN` in the calling
+    step's environment (`.github/actions/prepare-main-akmods/action.yml`), and
+    `/proc/<pid>/environ` is mode 0400, i.e. readable by that same uid. No
+    credential-transfer mechanism available inside a job fixes that; the
+    job-level `docker/login-action` alternative is weaker on this exact axis,
+    since `docker login` leaves the token in `~/.docker/config.json` for the
+    whole job instead of one command. What changes here is the cross-uid
+    exposure, which was real and is now gone.
 
     One directory serves both tools because both read the ordinary
     Docker/containers auth format: `skopeo` takes the file path through
@@ -300,12 +432,24 @@ def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
     Yields `""` when `creds` is empty, so the anonymous callers keep their
     exact current behavior: no flag, no `DOCKER_CONFIG` override, and
     therefore whatever `docker/login-action` already left in the job.
+
+    Raises `CiToolError` when `creds` is given but no reference names a
+    registry. Writing `{"auths": {}}` there would yield a truthy directory, so
+    the caller would still point `--authfile` / `DOCKER_CONFIG` at a file
+    carrying no credential and the command would run anonymously with the
+    credential silently unused -- the same failure mode a public package hides
+    from every positive check. A caller in that state has a bug; say so.
     """
     if not creds:
         yield ""
         return
 
     hosts = [host for host in (registry_host(ref) for ref in image_refs) if host]
+    if not hosts:
+        raise CiToolError(
+            "registry_auth_dir was given a credential but no registry reference to "
+            f"use it against: {list(image_refs)}"
+        )
     encoded = base64.b64encode(creds.encode("utf-8")).decode("ascii")
     auths = {host: {"auth": encoded} for host in dict.fromkeys(hosts)}
     with tempfile.TemporaryDirectory() as auth_dir:
@@ -335,7 +479,7 @@ def skopeo_inspect_json(image_ref: str, *, creds: str | None = None) -> dict:
         if auth_dir:
             command.extend(["--authfile", registry_auth_file(auth_dir)])
         command.append(image_ref)
-        return run_json_cmd(command)
+        return run_json_cmd(command, timeout=REGISTRY_METADATA_TIMEOUT)
 
 
 def skopeo_inspect_digest(image_ref: str, *, creds: str | None = None) -> str:
@@ -412,7 +556,7 @@ def skopeo_copy(
         if multi_arch:
             command.append(f"--multi-arch={multi_arch}")
         command.extend([source, destination])
-        run_cmd(command, capture_output=False)
+        run_cmd(command, capture_output=False, timeout=REGISTRY_TRANSFER_TIMEOUT)
 
 
 def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) -> None:
@@ -454,7 +598,11 @@ def cosign_verify(image_ref: str, *, key_path: str, creds: str | None = None) ->
     """
     with registry_auth_dir(creds, image_ref) as auth_dir:
         command = ["cosign", "verify", "--key", key_path, image_ref]
-        run_cmd(command, env={"DOCKER_CONFIG": auth_dir} if auth_dir else None)
+        run_cmd(
+            command,
+            env={"DOCKER_CONFIG": auth_dir} if auth_dir else None,
+            timeout=COSIGN_TIMEOUT,
+        )
 
 
 def sort_kernel_releases(kernel_releases: Sequence[str]) -> list[str]:

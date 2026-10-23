@@ -33,7 +33,11 @@ class AkmodsClonePinnedTests(unittest.TestCase):
             [
                 call(["git", "init", "."], cwd=str(worktree)),
                 call(["git", "remote", "add", "origin", "https://github.com/Danathar/akmods.git"], cwd=str(worktree)),
-                call(["git", "fetch", "--depth", "1", "origin", "abcdef123456"], cwd=str(worktree)),
+                call(
+                    ["git", "fetch", "--depth", "1", "origin", "abcdef123456"],
+                    cwd=str(worktree),
+                    timeout=script.GIT_FETCH_TIMEOUT,
+                ),
                 call(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=str(worktree)),
                 call(["git", "rev-parse", "HEAD"], cwd=str(worktree)),
             ],

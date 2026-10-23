@@ -27,6 +27,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
 IMAGE_REPO_RE = re.compile(r"ghcr\.io/[a-z0-9._-]+/[a-z0-9._-]+")
 
+# `cosign sign` and `cosign verify`: signature payload upload or verification.
+# The same ceiling ci_tools/common.py's COSIGN_TIMEOUT sets, kept here because
+# this file imports nothing from the repository. Without it a stalled TLS
+# handshake holds the job, and the key, open until the job's own timeout.
+COSIGN_TIMEOUT = 300.0
+
 
 class SigningError(Exception):
     """A refusal or a failed command; `main` prints it and exits 1."""
@@ -37,8 +43,9 @@ def run_command(
     *,
     capture_output: bool = True,
     env: Mapping[str, str] | None = None,
+    timeout: float | None = None,
 ) -> str:
-    """Run a command and return stdout, raising a readable error on failure."""
+    """Run a command and return stdout, raising a readable error on failure or timeout."""
 
     command_env = None
     if env is not None:
@@ -51,7 +58,10 @@ def run_command(
             text=True,
             capture_output=capture_output,
             env=command_env,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise SigningError(f"Command timed out after {timeout}s: {' '.join(args)}") from exc
     except subprocess.CalledProcessError as exc:
         details = (exc.stderr or "").strip() or (exc.stdout or "").strip() or str(exc)
         # The key travels in the environment, never in argv, so argv is safe to print.
@@ -109,6 +119,7 @@ def sign_published_image(
             "COSIGN_PASSWORD": os.environ.get("COSIGN_PASSWORD", ""),
             "COSIGN_PRIVATE_KEY": cosign_private_key,
         },
+        timeout=COSIGN_TIMEOUT,
     )
     command_runner(
         [
@@ -118,7 +129,8 @@ def sign_published_image(
             "--key",
             verification_key,
             digest_ref,
-        ]
+        ],
+        timeout=COSIGN_TIMEOUT,
     )
 
     print(f"Signed published image digest: {digest_ref}")

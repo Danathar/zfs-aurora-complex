@@ -1046,7 +1046,7 @@ class ClaudeCommandTests(unittest.TestCase):
 class DiagnoseGuardTableTests(unittest.TestCase):
     """`.claude/commands/diagnose-build.md` counts rows in someone else's table.
 
-    It says "three of the entries have no fix in this repository", which is a
+    It says "five of the entries have no fix in this repository", which is a
     number about `diagnose-build-failure.prompt.md`'s guard table. Adding or
     removing a row there makes the count wrong in a file nobody would think to
     reopen.
@@ -1064,6 +1064,10 @@ class DiagnoseGuardTableTests(unittest.TestCase):
         # Escalate: a moved shared tag, or a push that rewrote the config. The guard is ours.
         "Refusing to pin akmods cache": True,
         "Promoted digest mismatch": True,  # escalate, and the guard is ours
+        # Correct refusal of a re-run that would move `:latest` backwards.
+        "Refusing to promote run": False,
+        "Missing tag list": False,  # transient registry failure
+        "GITHUB_RUN_NUMBER is not a run number": True,  # the workflow's environment
         "Missing digest in skopeo inspect output": False,  # transient registry/CDN failure
         "SIGNING_SECRET is empty": False,  # wrong trigger context, not a defect
         "Missing required verification key file": True,  # a repository problem
