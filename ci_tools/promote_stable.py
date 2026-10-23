@@ -20,6 +20,7 @@ from ci_tools.common import (
     normalize_owner,
     registry_auth_dir,
     registry_auth_file,
+    registry_creds_from_env,
     require_env,
     run_cmd,
     run_json_cmd,
@@ -141,8 +142,7 @@ def _copy_and_verify_digest(*, source_digest: str, source_ref: str, destination_
 def main() -> None:
     # Inputs from workflow context and job env.
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
-    registry_actor = require_env("REGISTRY_ACTOR")
-    registry_token = require_env("REGISTRY_TOKEN")
+    creds = registry_creds_from_env(required=True)
     fedora_version = require_env("FEDORA_VERSION")
     image_name = require_env("IMAGE_NAME")
     run_number = require_env("GITHUB_RUN_NUMBER")
@@ -153,7 +153,6 @@ def main() -> None:
     # repository path. Promotion only moves stable-facing tags after that build passes.
     candidate_tag = build_candidate_tag(github_sha=github_sha, fedora_version=fedora_version)
     candidate_by_tag = f"docker://ghcr.io/{image_org}/{image_name}:{candidate_tag}"
-    creds = f"{registry_actor}:{registry_token}"
     candidate_digest = skopeo_inspect_digest(candidate_by_tag, creds=creds)
     candidate_ref = f"docker://ghcr.io/{image_org}/{image_name}@{candidate_digest}"
 

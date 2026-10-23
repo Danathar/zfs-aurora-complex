@@ -84,6 +84,24 @@ def optional_env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def registry_creds_from_env(*, required: bool = False) -> str | None:
+    """
+    Return the `REGISTRY_ACTOR:REGISTRY_TOKEN` pair every registry helper takes.
+
+    With `required=True` a missing half raises exactly as `require_env` does, for
+    tools that must never fall back to an anonymous pull. Otherwise the pair is
+    `None` unless both halves are set, which the helpers below read as
+    anonymous: half a credential is treated the same as none.
+    """
+    if required:
+        return f"{require_env('REGISTRY_ACTOR')}:{require_env('REGISTRY_TOKEN')}"
+    registry_actor = optional_env("REGISTRY_ACTOR")
+    registry_token = optional_env("REGISTRY_TOKEN")
+    if registry_actor and registry_token:
+        return f"{registry_actor}:{registry_token}"
+    return None
+
+
 def load_repo_defaults() -> dict[str, str]:
     """
     Load checked-in repository defaults from `ci/defaults.json`.
@@ -386,14 +404,25 @@ def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
     Yield a directory holding a `config.json` carrying `creds`, or `""`.
 
     This is how a registry credential reaches `skopeo` and `cosign` without
-    ever appearing in a command line. `/proc/<pid>/cmdline` is world-readable
-    for the lifetime of a process, so a token passed as `--creds` or
-    `--registry-password` is readable by anything else running on the runner
-    while the child is alive -- including a process left behind by a step this
-    repository did not write. A `0600` file in a per-call temporary directory
-    is readable only by the uid that created it and is deleted when the call
-    returns. That is what gotcha 6 in `docs/signing-and-bootc.md` ("do not pass
-    registry secrets in command argv") asks for.
+    ever appearing in a command line. `/proc/<pid>/cmdline` is mode 0444, so a
+    token passed as `--creds` or `--registry-password` is readable by *every*
+    uid on the runner for as long as the child lives. A `0600` file in a
+    per-call temporary directory narrows that to the uid that created it, for
+    the duration of one command. That is what gotcha 6 in
+    `docs/signing-and-bootc.md` ("do not pass registry secrets in command
+    argv") asks for.
+
+    What this deliberately does not claim is protection from a hostile process
+    running as the *same* uid in this job. Such a process can read the
+    auth-file path out of argv and open the file -- but it does not need to:
+    the credential reaches these helpers as `REGISTRY_TOKEN` in the calling
+    step's environment (`.github/actions/prepare-main-akmods/action.yml`), and
+    `/proc/<pid>/environ` is mode 0400, i.e. readable by that same uid. No
+    credential-transfer mechanism available inside a job fixes that; the
+    job-level `docker/login-action` alternative is weaker on this exact axis,
+    since `docker login` leaves the token in `~/.docker/config.json` for the
+    whole job instead of one command. What changes here is the cross-uid
+    exposure, which was real and is now gone.
 
     One directory serves both tools because both read the ordinary
     Docker/containers auth format: `skopeo` takes the file path through
@@ -403,12 +432,24 @@ def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
     Yields `""` when `creds` is empty, so the anonymous callers keep their
     exact current behavior: no flag, no `DOCKER_CONFIG` override, and
     therefore whatever `docker/login-action` already left in the job.
+
+    Raises `CiToolError` when `creds` is given but no reference names a
+    registry. Writing `{"auths": {}}` there would yield a truthy directory, so
+    the caller would still point `--authfile` / `DOCKER_CONFIG` at a file
+    carrying no credential and the command would run anonymously with the
+    credential silently unused -- the same failure mode a public package hides
+    from every positive check. A caller in that state has a bug; say so.
     """
     if not creds:
         yield ""
         return
 
     hosts = [host for host in (registry_host(ref) for ref in image_refs) if host]
+    if not hosts:
+        raise CiToolError(
+            "registry_auth_dir was given a credential but no registry reference to "
+            f"use it against: {list(image_refs)}"
+        )
     encoded = base64.b64encode(creds.encode("utf-8")).decode("ascii")
     auths = {host: {"auth": encoded} for host in dict.fromkeys(hosts)}
     with tempfile.TemporaryDirectory() as auth_dir:

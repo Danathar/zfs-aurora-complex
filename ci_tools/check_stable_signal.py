@@ -20,6 +20,7 @@ from ci_tools.common import (
     CiToolError,
     normalize_owner,
     optional_env,
+    registry_creds_from_env,
     require_env,
     require_env_or_default,
     skopeo_inspect_json,
@@ -197,9 +198,7 @@ def main() -> None:
         decision = _bypass_decision(stable_signal_image)
     else:
         image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
-        registry_actor = require_env("REGISTRY_ACTOR")
-        registry_token = require_env("REGISTRY_TOKEN")
-        creds = f"{registry_actor}:{registry_token}"
+        creds = registry_creds_from_env(required=True)
         zfs_minor_version = require_env_or_default("DEFAULT_ZFS_MINOR_VERSION")
 
         decision = evaluate_stable_signal_gate(

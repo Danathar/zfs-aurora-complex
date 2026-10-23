@@ -21,11 +21,13 @@ from ci_tools.common import (
     cosign_verify,
     normalize_owner,
     optional_env,
+    registry_creds_from_env,
     require_env,
     skopeo_copy,
     skopeo_inspect_json_optional,
     write_github_outputs,
 )
+from ci_tools.pin_akmods_cache import akmods_cache_image_tag
 from shared.oci_layout import load_layer_files_from_oci_layout, unpack_layer_tarballs
 
 
@@ -156,7 +158,9 @@ def inspect_akmods_cache(
     read of the mutable tag could land on a different image.
     """
 
-    source_image = f"ghcr.io/{image_org}/{source_repo}:main-{fedora_version}"
+    source_image = akmods_cache_image_tag(
+        image_org=image_org, source_repo=source_repo, fedora_version=fedora_version
+    )
     if pinned_image:
         source_image_pinned = _require_cache_digest_ref(
             pinned_image, image_org=image_org, source_repo=source_repo
@@ -255,9 +259,7 @@ def main() -> None:
     # omission stays invisible until someone forks the repo and hits a
     # `denied` on their first cache probe. Failing here names the real problem
     # instead. Same pattern as check_stable_signal.py and promote_stable.py.
-    registry_actor = require_env("REGISTRY_ACTOR")
-    registry_token = require_env("REGISTRY_TOKEN")
-    creds = f"{registry_actor}:{registry_token}"
+    creds = registry_creds_from_env(required=True)
     # Strict mode is used after a rebuild, where "no reusable cache" is not a
     # normal answer but a failure: it means the cache this run just published
     # does not contain the ZFS version this run resolved and is about to label

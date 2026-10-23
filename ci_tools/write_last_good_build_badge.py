@@ -18,6 +18,7 @@ from pathlib import Path
 from ci_tools.common import (
     normalize_owner,
     optional_env,
+    registry_creds_from_env,
     require_env,
     require_env_or_default,
     skopeo_inspect_json_optional,
@@ -55,9 +56,7 @@ def build_last_good_build_badge(*, created_iso: str, now: datetime) -> dict | No
 def main() -> None:
     image_name = require_env_or_default("IMAGE_NAME")
     image_org = normalize_owner(require_env("GITHUB_REPOSITORY_OWNER"))
-    registry_actor = optional_env("REGISTRY_ACTOR")
-    registry_token = optional_env("REGISTRY_TOKEN")
-    creds = f"{registry_actor}:{registry_token}" if registry_actor and registry_token else None
+    creds = registry_creds_from_env()
     badge_output_path = optional_env("BADGE_OUTPUT_PATH") or "artifacts/last-good-build-badge.json"
 
     image_ref = f"docker://ghcr.io/{image_org}/{image_name}:latest"

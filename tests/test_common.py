@@ -31,6 +31,7 @@ from ci_tools.common import (
     is_missing_image_error,
     registry_auth_dir,
     registry_auth_file,
+    registry_creds_from_env,
     registry_host,
     run_cmd,
     run_cmd_with_retries,
@@ -454,12 +455,19 @@ class RegistryAuthDirTests(unittest.TestCase):
         self.assertEqual(mode, 0o600, f"auth file is {mode:o}, not 0600")
         self.assertFalse(config_path.exists(), "the auth file outlived the call")
 
-    def test_a_local_only_copy_gets_an_auth_file_with_no_registry_entry(self) -> None:
-        # A `dir:` end is not a registry. It must not turn into an auths key.
-        with registry_auth_dir(self._CREDS, "dir:/var/tmp/layout") as auth_dir:
-            payload = json.loads(Path(registry_auth_file(auth_dir)).read_text(encoding="utf-8"))
-
-        self.assertEqual(payload, {"auths": {}})
+    def test_a_credential_with_no_registry_end_is_an_error(self) -> None:
+        # A `dir:` end is not a registry, so it must not turn into an auths
+        # key -- and with no other reference there is no key at all. Writing
+        # `{"auths": {}}` would still yield a truthy directory, so the caller
+        # would pass `--authfile` pointing at a file holding no credential and
+        # the command would run anonymously with the credential ignored --
+        # and against an anonymously-readable package that still passes every
+        # positive check, so nothing downstream would notice.
+        with (
+            self.assertRaises(CiToolError),
+            registry_auth_dir(self._CREDS, "dir:/var/tmp/layout"),
+        ):
+            self.fail("registry_auth_dir yielded an auth dir with no registry entry")
 
     def test_no_credential_means_no_directory_and_no_override(self) -> None:
         # The anonymous callers must keep resolving credentials the way they
@@ -644,6 +652,54 @@ class CredentialArgvTests(unittest.TestCase):
             cosign_verify("ghcr.io/example/image@sha256:abc", key_path="/tmp/cosign.pub")
 
         self.assertIsNone(run_cmd_mock.call_args.kwargs.get("env"))
+
+
+class RegistryCredsFromEnvTests(unittest.TestCase):
+    """
+    One decision for how REGISTRY_ACTOR/REGISTRY_TOKEN become a `creds` pair.
+
+    `promote-stable`, `check-stable-signal` and the akmods cache check require
+    the pair; the last-good-build badge falls back to anonymous. Half a
+    credential is never sent: optional callers get `None`, required ones stop.
+    """
+
+    @staticmethod
+    def _env(**values: str):
+        environ = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("REGISTRY_ACTOR", "REGISTRY_TOKEN")
+        }
+        environ.update(values)
+        return patch.dict(os.environ, environ, clear=True)
+
+    def test_both_halves_make_one_actor_token_pair(self) -> None:
+        with self._env(REGISTRY_ACTOR="Danathar", REGISTRY_TOKEN="token"):
+            self.assertEqual(registry_creds_from_env(), "Danathar:token")
+            self.assertEqual(registry_creds_from_env(required=True), "Danathar:token")
+
+    def test_optional_pair_is_anonymous_unless_both_halves_are_set(self) -> None:
+        for values in (
+            {},
+            {"REGISTRY_ACTOR": "Danathar"},
+            {"REGISTRY_TOKEN": "token"},
+            {"REGISTRY_ACTOR": "Danathar", "REGISTRY_TOKEN": ""},
+        ):
+            with self.subTest(values=values), self._env(**values):
+                self.assertIsNone(registry_creds_from_env())
+
+    def test_required_pair_names_the_missing_half(self) -> None:
+        for values, missing in (
+            ({"REGISTRY_TOKEN": "token"}, "REGISTRY_ACTOR"),
+            ({"REGISTRY_ACTOR": "Danathar"}, "REGISTRY_TOKEN"),
+            ({"REGISTRY_ACTOR": "Danathar", "REGISTRY_TOKEN": ""}, "REGISTRY_TOKEN"),
+        ):
+            with self.subTest(values=values), self._env(**values), self.assertRaises(
+                CiToolError
+            ) as context:
+                registry_creds_from_env(required=True)
+            self.assertIn(missing, str(context.exception))
+            self.assertNotIn("token", str(context.exception).replace("REGISTRY_TOKEN", ""))
 
 
 class RunCmdWithRetriesTests(unittest.TestCase):
