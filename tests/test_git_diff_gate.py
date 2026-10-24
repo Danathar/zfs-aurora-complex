@@ -2617,6 +2617,71 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "a negated subshell written with a space is the ordinary form",
     ),
+    # A backslash-newline inside a single-quoted command string: the quotes
+    # keep it from the join this gate makes of the command it is given, and
+    # the shell the string is handed to drops it before it reads a word, so
+    # `gi\<newline>t` is git there. Every refused row below exited 0 before.
+    Row(
+        "command name",
+        "bash -c 'gi\\\nt diff /dev/null ./.env'",
+        "refused",
+        "the shell bash -c starts joins gi and t into git and prints the file beside /dev/null",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "sh -c 'g\\\nit log -p --output=cosign.pub -1'",
+        "refused",
+        "the joined name with git's write primitive overwrites the trust anchor",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "script -qc 'gi\\\nt diff /dev/null ./.env' /dev/null",
+        "refused",
+        "the shell script -c starts joins the pair the same way",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "watch 'gi\\\nt diff /dev/null ./.env'",
+        "refused",
+        "watch hands its words to sh -c, which joins the pair",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "bash -O extglob -c '/usr/bin/g@\\\n(i)t diff /dev/null ./.env'",
+        "refused",
+        "joined, the string is the extended glob /usr/bin/g@(i)t, which matches /usr/bin/git",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "bash -c 'g\\\nh pr view 1 --json number --jq env'",
+        "refused",
+        "joined, the name is gh and the filter prints GH_TOKEN",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "setarch x86_64 bash -c 'gi\\\nt diff /dev/null ./.env'",
+        "refused",
+        "the string is read the same way behind a further program",
+        "as a command of its own",
+    ),
+    Row(
+        "command name",
+        "bash -c 'gi\\\nt status'",
+        "allowed",
+        "the joined command is git status, which passes on its own",
+    ),
+    Row(
+        "command name",
+        "bash -c 'ls \\\ndocs'",
+        "allowed",
+        "a continuation that joins no checked name is left alone",
+    ),
     Row(
         "command name",
         "jq -r '.[] | select(.name == \"gh\")' runs.json",
@@ -3191,6 +3256,18 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         """if ((extglob_depth)) && [[ "${raw_quote}" != "'" ]]; then""",
         "if ((extglob_depth)); then",
         "shopt -s extglob\nls @(a|'$(b)')",
+    ),
+    (
+        "a command string read with its backslash-newline pairs joined",
+        """    [[ "${strings[k]}" == *$'\\\\\\n'* ]] && strings+=("${strings[k]//$'\\\\\\n'/}")""",
+        "    :",
+        "bash -c 'gi\\\nt diff /dev/null ./.env'",
+    ),
+    (
+        "a word read when its joined text names a checked command",
+        """|| text_mentions_a_checked_name "${unquoted//$'\\\\\\n'/}" ||""",
+        "||",
+        "bash -c 'gi\\\nt diff /dev/null ./.env'",
     ),
     (
         "a negated pattern left alone as a file list",
