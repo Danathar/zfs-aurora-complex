@@ -1892,9 +1892,17 @@ unquote_word() {
 # one word of its own, the value after a long option's `=`, and every tail of
 # a short-option cluster, since `-qc'...'` and `-cCMD` attach the string to
 # the option that takes it.
+#
+# Each string is read a second time with its backslash-newline pairs
+# removed, when it has any. The shell the string is handed to drops a
+# `\<newline>` outside single quotes before it reads a word, so
+# `bash -c 'gi\<newline>t diff ...'` runs git while neither `gi` nor `t` is a
+# checked name; the single quotes around the string kept the pair from the
+# join this gate makes of the command it was given. The second reading can
+# only add a refusal.
 string_separators=$' \t\n;&|<>()`'
 word_strings() {
-  local cut cluster
+  local cut cluster k count
   strings=()
   unquote_word "$1"
   [[ "${unquoted}" == *["${string_separators}"]* ]] && strings+=("${unquoted}")
@@ -1906,6 +1914,11 @@ word_strings() {
       strings+=("${unquoted:cut}")
     done
   fi
+  count=${#strings[@]}
+  for ((k = 0; k < count; k++)); do
+    [[ "${strings[k]}" == *$'\\\n'* ]] && strings+=("${strings[k]//$'\\\n'/}")
+  done
+  return 0
 }
 
 # Whether each separator opens a nested command (`$(`, a subshell's or a
@@ -2031,7 +2044,7 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     command_end "${idx}"
     read_on_its_own "${program}" "${command_string:cmd_start:offsets[program_idx]-cmd_start}${command_string:offsets[idx]:end_offset-offsets[idx]}"
   fi
-  text_mentions_a_checked_name "${unquoted}" || [[ "${unquoted}" == *"\$'"* || "${unquoted}" == *'$"'* ]] || continue
+  text_mentions_a_checked_name "${unquoted}" || text_mentions_a_checked_name "${unquoted//$'\\\n'/}" || [[ "${unquoted}" == *"\$'"* || "${unquoted}" == *'$"'* ]] || continue
   word_strings "${raw_words[idx]}"
   string_context
   for text in "${strings[@]+"${strings[@]}"}"; do
