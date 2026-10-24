@@ -31,7 +31,7 @@ to the sister repository too, open a port issue there and mark the row
   that issue links the sister's port issue.
 - `only here: <reason>` -- the sister repository has no copy.
 
-Last sister commit reviewed: `af6e15f00b267019259eb460448e932d7ec06e73`
+Last sister commit reviewed: `27fff1c809002433c90dd3dccfd49e49f5b28a7f`
 
 ## Modules
 
@@ -45,8 +45,8 @@ Last sister commit reviewed: `af6e15f00b267019259eb460448e932d7ec06e73`
 | `check_akmods_cache.py` | differs on purpose: `main()` reads the required login once and passes it to `inspect_akmods_cache` as `creds`, where the sister's `inspect_akmods_cache` reads it from the environment itself; the docstring and comments explaining that differ to match, the comment about who can republish the cache says this repository builds the cache only on `main`, and the refusal names this repository's ZFS version label | Both copies require the login through the shared credential helper and build the cache tag with `akmods_cache_image_tag` (sister 3b5c1c7, 0059e42, af6e15f). |
 | `check_stable_signal.py` | differs on purpose: label names and Aurora wording | The shared credential helper (sister 3b5c1c7) is ported. |
 | `classify_akmods_failure.py` | differs on purpose: the same transient-network fix landed separately in each repository; the wording of the summary and docstrings differs, and this repository matches the curl error case-insensitively | The kinds and their precedence are the same. |
-| `cli.py` | differs on purpose: the sister has a `prune-registry` command this repository does not | |
-| `common.py` | differs on purpose: comments and docstrings only; this copy's timeout comments say the job's own `timeout-minutes` is the other bound and name no sister run, and it leaves out the sister's record of the skopeo and cosign versions it checked the auth file against, which was made against the sister's own image | The timeouts and `run_cmd_with_retries` (sister 0a05e37, 43c9350, cfdb192), `registry_creds_from_env` and the refusal of a login that names no registry (sister 3b5c1c7, 5ca41bd), and the `registry_auth_dir` docstring (sister fd7d7a4) are ported. |
+| `cli.py` | differs on purpose: the sister has `prune-registry` and `check-ruleset-drift` commands this repository does not, and passes the options written after a command name to `check-ruleset-drift` | The merge-rule drift check (sister b6220f7, 3afefd3) runs only in the sister, which checks this repository's rules too. |
+| `common.py` | differs on purpose: comments and docstrings only; this copy's timeout comments say the job's own `timeout-minutes` is the other bound and name no sister run, and it leaves out the sister's record of the skopeo and cosign versions it checked the auth file against, which was made against the sister's own image | The timeouts and `run_cmd_with_retries` (sister 0a05e37, 43c9350, cfdb192), `registry_creds_from_env` and the refusal of a login that names no registry (sister 3b5c1c7, 5ca41bd), the `registry_auth_dir` docstring (sister fd7d7a4), and `skopeo_inspect_json` skipping the tag list (sister 27fff1c) are ported. |
 | `export_repo_defaults.py` | same | |
 | `pin_akmods_cache.py` | same | |
 | `prepare_validation_build.py` | differs on purpose: the same private-package hint for a registry permission error landed separately in each repository (the sister's in af6e15f); the comment wording differs, and only this copy's hint adds that the image build also pulls the package anonymously | |
