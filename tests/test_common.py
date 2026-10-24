@@ -564,8 +564,16 @@ class CredentialArgvTests(unittest.TestCase):
 
         self.assertEqual(
             run_json_cmd_mock.call_args.args[0],
-            ["skopeo", "inspect", "docker://ghcr.io/example/image:tag"],
+            ["skopeo", "inspect", "--no-tags", "docker://ghcr.io/example/image:tag"],
         )
+
+    def test_skopeo_inspect_json_does_not_request_the_tag_list(self) -> None:
+        # The tag list is a second registry request that no caller reads, and
+        # a 503 on it alone failed the sister repository's nightly build.
+        with patch("ci_tools.common.run_json_cmd") as run_json_cmd_mock:
+            skopeo_inspect_json("docker://quay.io/example/image:tag", creds=self._CREDS)
+
+        self.assertIn("--no-tags", run_json_cmd_mock.call_args.args[0])
 
     def test_skopeo_copy_authenticates_both_ends_from_the_auth_file(self) -> None:
         # The promotion shape: candidate tag to stable tag inside one private

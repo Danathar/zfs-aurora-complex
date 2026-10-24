@@ -473,9 +473,14 @@ def skopeo_inspect_json(image_ref: str, *, creds: str | None = None) -> dict:
 
     `creds` is an `actor:token` pair. It reaches `skopeo` as an `--authfile`,
     never as `--creds`; see `registry_auth_dir` for why.
+
+    `--no-tags` skips the repository's tag list, a second registry request
+    skopeo makes after the manifest read and fails the whole inspect on. No
+    caller reads `RepoTags`, and in the sister repository a 503 on that list
+    alone failed a nightly build at its first read.
     """
     with registry_auth_dir(creds, image_ref) as auth_dir:
-        command = ["skopeo", "inspect"]
+        command = ["skopeo", "inspect", "--no-tags"]
         if auth_dir:
             command.extend(["--authfile", registry_auth_file(auth_dir)])
         command.append(image_ref)
