@@ -223,7 +223,7 @@ class VerifyPublishedSignatureStepTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             _recorded(self.skopeo_argv),
-            ["inspect", "--format", "{{ .Digest }}", f"docker://{self.image}"],
+            ["inspect", "--no-tags", "--format", "{{ .Digest }}", f"docker://{self.image}"],
             "the step no longer asks skopeo for the digest of the image it declares",
         )
 

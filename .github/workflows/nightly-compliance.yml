@@ -94,7 +94,7 @@ jobs:
           IMAGE: ghcr.io/danathar/zfs-aurora-complex:latest
         run: |
           set -euo pipefail
-          digest="$(skopeo inspect --format '{{ .Digest }}' "docker://${IMAGE}")"
+          digest="$(skopeo inspect --no-tags --format '{{ .Digest }}' "docker://${IMAGE}")"
           echo "### Published image" >> "${GITHUB_STEP_SUMMARY}"
           echo "" >> "${GITHUB_STEP_SUMMARY}"
           echo "\`${IMAGE}\` is \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
