@@ -278,24 +278,21 @@ runs:
         KERNEL_RELEASE: ${{ steps.resolve.outputs.kernel_release }}
         AKMODS_REPO: ${{ inputs.akmods_repo }}
         AKMODS_TARGET: zfs
-        # Deliberately the exact resolved patch version (e.g. "2.4.4"), not the
-        # line (e.g. "2.4"), despite the variable's name. The fork's
-        # build_files/zfs/build-kmod-zfs.sh uses this value only as a prefix:
-        #   select(.tag_name | startswith("zfs-" + $ZMV))][0]
-        # so passing "2.4" makes it choose the newest release on the line
-        # itself, independently of what this repo resolved. Those two lookups
-        # can disagree -- a release published between them, or the fork reading
-        # only the API's first page while this repo paginates -- and the image
-        # would then carry an org.zfs-aurora-complex.zfs-version label that
-        # does not match the module it ships. Passing the exact version makes
-        # the fork select precisely what this repo resolved, and if that
-        # release is not visible to the fork it exits nonzero with a clear
-        # message rather than quietly building something else.
+        # The exact patch version this run resolved (e.g. "2.4.4"). The akmods
+        # fork's Justfile reads ZFS_VERSION as an override of the `zfs.*.version`
+        # pin in its images.yaml, and build_files/zfs/build-kmod-zfs.sh accepts
+        # only a full X.Y.Z and downloads exactly that release. Without it the
+        # fork builds whatever its own pin says, which lags a new OpenZFS patch
+        # until Renovate bumps it there, and the image would then carry an
+        # org.zfs-aurora-complex.zfs-version label
+        # that does not match the module it ships.
+        # The fork stopped reading ZFS_MINOR_VERSION on 2026-10-24, when it
+        # moved from a release lookup to a full version pin, so that name is
+        # now ignored.
         #
-        # The "Verify the rebuilt cache" step below still checks the result,
-        # because this narrows the mismatch window rather than closing it: the
-        # prefix match would also accept a hypothetical "2.4.44" for "2.4.4".
-        ZFS_MINOR_VERSION: ${{ steps.resolve.outputs.zfs_version }}
+        # The "Verify the rebuilt cache" step below still checks the result, so
+        # a fork that ignored this variable again would fail there, not publish.
+        ZFS_VERSION: ${{ steps.resolve.outputs.zfs_version }}
         CI: "1"
         REGISTRY_ACTOR: ${{ inputs.registry_actor }}
         REGISTRY_TOKEN: ${{ inputs.registry_token }}

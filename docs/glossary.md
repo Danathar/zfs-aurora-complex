@@ -83,7 +83,7 @@ This page defines terms used across this repository's docs and workflow comments
 - `AKMODS_UPSTREAM_REF`: exact akmods source commit or ref override used for a run.
 - `AKMODS_UPSTREAM_TRACK`: floating akmods branch or tag resolved to a concrete SHA when no explicit upstream ref is pinned.
 - `DEFAULT_AKMODS_REF`: process-level environment override that can force one akmods source ref for a run; it is not wired as a formal workflow-dispatch input.
-- `ZFS_MINOR_VERSION`: OpenZFS minor line (for example `2.4`) passed into the akmods build.
+- `ZFS_MINOR_VERSION`: OpenZFS minor line (for example `2.4`) that `zfs_version` is resolved on. It is not passed to the akmods build: the fork stopped reading it, and gets the exact patch as `ZFS_VERSION` instead.
 - `zfs_version`: the exact OpenZFS patch version (for example `2.4.3`) resolved on that line for one run, via [`ci_tools/zfs_release.py`](../ci_tools/zfs_release.py). The scheduled-build gate and the akmods cache-reuse check both compare on this exact value, not the minor line, so a new patch release forces a rebuild instead of being masked by a cache that only matches the line.
 - `AKMODS_KERNEL`: kernel flavor value passed to upstream akmods tooling; this repo uses `main`.
 - `AKMODS_TARGET`: akmods target name; this repo uses `zfs`.
