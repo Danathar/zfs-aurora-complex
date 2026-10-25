@@ -47,6 +47,13 @@ point:
     service and prints the link. A paste cannot be taken back, which is the
     outward-facing, irreversible kind of operation the deny list exists to
     stop. See `REFUSED_SEND_OPTIONS`.
+  * **Closed:** an option nobody reviewed. The refusals above are a list of
+    what someone thought of, and every one after the first was a route the
+    list had missed. `FORWARDED` names every other option the installed
+    pytest and pytest-cov accept, each judged safe to pass through, and
+    tests/test_run_tests.py fails when the live parser offers an option on
+    neither side -- so an option an upgrade adds is decided before it reaches
+    this command, not after an audit finds it.
   * **Closed:** a file dropped into the checkout and not committed. Checking
     only the `*.py` under a selection was not enough, because pytest and
     Python load code from further afield: `python3 -m pytest` puts the
@@ -151,6 +158,10 @@ TESTS_DIR = REPO_ROOT / "tests"
 # (`-W ignore::mod.W` runs `mod`), and `--pdbcls=mod:Cls` imports `mod` for the
 # debugger. `--cov-config` names a coverage rc file, whose `plugins =` imports
 # modules by name and whose `data_file =` writes wherever it says.
+# `--typeguard-typecheck-fail-callback=mod:func` belongs to typeguard's pytest
+# plugin, which test.yml does not install but the CI runner image does, and
+# loads automatically: it imports `mod` while pytest configures, the same
+# route as `--pdbcls`.
 REFUSED_IMPORT_OPTIONS = (
     "-p",
     "--pyargs",
@@ -165,6 +176,7 @@ REFUSED_IMPORT_OPTIONS = (
     "--pythonwarnings",
     "--pdbcls",
     "--cov-config",
+    "--typeguard-typecheck-fail-callback",
 )
 
 # Options whose job is to write a file at a path the caller names. These have
@@ -231,6 +243,79 @@ REFUSED_DEBUGGER_OPTIONS = (
 REFUSED_SEND_OPTIONS = ("--pastebin",)
 
 REFUSED_OPTIONS = REFUSED_IMPORT_OPTIONS + REFUSED_WRITE_OPTIONS + REFUSED_DEBUGGER_OPTIONS + REFUSED_SEND_OPTIONS
+
+# Every other option pytest 9.1.1 and pytest-cov 7.1.0 accept -- what test.yml
+# installs -- and typeguard 4.4.4's plugin, which the CI runner image brings, each
+# reviewed and judged safe to forward. `main` does not consult
+# this set: anything not refused above is forwarded whether or not it is here.
+# The suite does. `test_every_pytest_option_is_forwarded_or_refused` reads the
+# live parser and fails on an option in neither this set nor a refused one, so
+# an option a pytest or plugin upgrade adds turns the suite red until someone
+# decides which side it belongs on, instead of reaching this unprompted command
+# unread. Moving an option from here to a refused list is always allowed;
+# adding one here needs the review the refused lists got.
+FORWARDED = frozenset(
+    {
+        # Selection and collection. None names a path pytest writes or a module
+        # it imports by name. `--ignore`, `--ignore-glob` and `--deselect` only
+        # narrow what the selection check already allowed, and the doctest
+        # options collect only files under that selection, which the
+        # untracked-file check has already read.
+        *("-k", "-m", "-x", "--exitfirst", "--maxfail", "--max-warnings"),
+        *("--strict", "--strict-config", "--strict-markers", "--runxfail"),
+        *("--co", "--collect-only", "--collectonly", "--noconftest"),
+        *("--ignore", "--ignore-glob", "--deselect", "--collect-in-virtualenv"),
+        *("--keep-duplicates", "--keepduplicates", "--disable-plugin-autoload"),
+        "--continue-on-collection-errors",
+        *("--doctest-modules", "--doctest-glob", "--doctest-report"),
+        *("--doctest-ignore-import-errors", "--doctest-continue-on-failure"),
+        *("--assert", "--trace-config", "--traceconfig"),
+        # Listing instead of running, and the help and version output. `main`
+        # answers `-h` and `--help` itself before pytest sees them.
+        *("--fixtures", "--funcargs", "--fixtures-per-test", "--markers"),
+        *("--setup-only", "--setuponly", "--setup-show", "--setupshow"),
+        *("--setup-plan", "--setupplan", "-h", "--help", "-V", "--version"),
+        # Terminal output only. `-s` and `--capture` decide whether a test's
+        # output is captured, not what runs; `--junit-prefix` does nothing
+        # without the refused `--junitxml`.
+        *("-v", "--verbose", "-q", "--quiet", "--verbosity"),
+        *("-r", "--report-chars", "--tb", "--show-capture", "--xfail-tb"),
+        *("--no-header", "--no-summary", "--no-fold-skipped"),
+        *("--force-short-summary", "--disable-warnings", "--disable-pytest-warnings"),
+        *("-l", "--showlocals", "--no-showlocals", "--full-trace", "--fulltrace"),
+        *("--color", "--code-highlight", "--durations", "--durations-min"),
+        *("-s", "--capture", "--junit-prefix", "--junitprefix"),
+        # The cache and stepwise state. They read and write only the root
+        # directory's `.pytest_cache/`, which is this repository's while
+        # `--rootdir` and `-o cache_dir=...` are refused.
+        *("--lf", "--last-failed", "--ff", "--failed-first", "--nf"),
+        *("--new-first", "--lfnf", "--last-failed-no-failures"),
+        *("--cache-show", "--cache-clear", "--sw", "--stepwise"),
+        *("--sw-skip", "--stepwise-skip", "--sw-reset", "--stepwise-reset"),
+        # Logging levels and formats. The one that names a file, `--log-file`,
+        # is refused, and the file's mode, level and format are inert without
+        # it.
+        *("--log-level", "--log-format", "--log-date-format", "--log-cli-level"),
+        *("--log-cli-format", "--log-cli-date-format", "--log-file-mode"),
+        *("--log-file-level", "--log-file-format", "--log-file-date-format"),
+        *("--log-auto-indent", "--log-disable"),
+        # pytest-cov: what is measured and how it is judged. The data file goes
+        # to `.coverage` at the root. The options that choose where a report or
+        # the data go are `--cov-config` and `--cov-report`, both refused, and a
+        # `--cov` value is read by `refused_coverage_source`.
+        *("--cov", "--cov-reset", "--cov-append", "--cov-branch"),
+        *("--cov-fail-under", "--cov-precision", "--cov-context"),
+        *("--no-cov", "--no-cov-on-fail"),
+        # typeguard: which already-selected modules get type checks added as
+        # they are imported, and how strict those checks are. None imports a
+        # module by name -- the packages list only matches names as other code
+        # imports them -- and the debug switch prints the instrumented source
+        # to stderr. Its one option that imports, the fail callback, is
+        # refused.
+        *("--typeguard-packages", "--typeguard-debug-instrumentation"),
+        *("--typeguard-forward-ref-policy", "--typeguard-collection-check-strategy"),
+    }
+)
 
 # pytest builds its argparse parser with `fromfile_prefix_chars="@"`, so an
 # argument starting with this character is not an argument at all: argparse

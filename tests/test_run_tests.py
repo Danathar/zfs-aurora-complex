@@ -41,6 +41,7 @@ only `run_pytest` is observed being called.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 import sys
@@ -330,7 +331,8 @@ class RunnerRefusalTests(unittest.TestCase):
         # names, `-p` loads a plugin, `-o` can set `addopts` to either, and
         # the other three move what pytest treats as the project, and with
         # it conftest collection. `-W` and `--pdbcls` import the module they
-        # name, and a `--cov-config` rc file can name plugins to import.
+        # name, and a `--cov-config` rc file can name plugins to import, as
+        # typeguard's fail callback names the module it imports.
         self.assertEqual(
             set(run_tests.REFUSED_IMPORT_OPTIONS),
             {
@@ -347,6 +349,7 @@ class RunnerRefusalTests(unittest.TestCase):
                 "--pythonwarnings",
                 "--pdbcls",
                 "--cov-config",
+                "--typeguard-typecheck-fail-callback",
             },
         )
 
@@ -541,6 +544,47 @@ class RunnerRefusalTests(unittest.TestCase):
             if match and match.group(2) is None:
                 flags.add(match.group(1))
         self.assertEqual(flags, set(run_tests.SHORT_FLAGS))
+
+
+class OptionReviewTests(unittest.TestCase):
+    """Every option the installed pytest accepts has been put on one side."""
+
+    def test_no_option_is_both_forwarded_and_refused(self) -> None:
+        self.assertEqual(run_tests.FORWARDED & set(run_tests.REFUSED_OPTIONS), set())
+
+    def test_every_pytest_option_is_forwarded_or_refused(self) -> None:
+        # The refused lists are a denylist, and a denylist misses what nobody
+        # read: each change to run_tests.py after the first closed a route the
+        # lists had missed, `--pastebin` the latest. This reads the parser of
+        # the pytest installed here -- its own options and every plugin's,
+        # which `_prepareconfig` loads and `get_config` alone does not -- so an
+        # option an upgrade adds fails the suite the first time it runs with
+        # it. Only a missing pytest skips; the table is private to pytest, so
+        # an upgrade that renames it fails here rather than passing.
+        if importlib.util.find_spec("pytest") is None:
+            self.skipTest("pytest is not installed; the lists are held against 9.1.1's options")
+        list_options = (
+            "from _pytest.config import _prepareconfig\n"
+            "parser = _prepareconfig([])._parser\n"
+            "for group in [*parser._groups, parser._anonymous]:\n"
+            "    for argument in group.options:\n"
+            "        print(*argument.names())\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", list_options],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        live = set(completed.stdout.split())
+        self.assertIn("--junitxml", live, "the option table came back without pytest's own")
+        unreviewed = live - run_tests.FORWARDED - set(run_tests.REFUSED_OPTIONS)
+        self.assertEqual(
+            unreviewed,
+            set(),
+            "forward or refuse each of these in tests/run_tests.py",
+        )
 
 
 class UnittestFallbackTests(unittest.TestCase):

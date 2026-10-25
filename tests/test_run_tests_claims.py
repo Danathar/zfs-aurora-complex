@@ -48,11 +48,14 @@ ALIAS_GROUPS = (
     frozenset({"--junitxml", "--junit-xml"}),
 )
 
-# `--report-log`, `--cov-report` and `--cov-config` belong to plugins, which
-# `get_config()` does not load, so they are absent from the table read below;
-# the runner refuses them whether or not the plugin is installed, see its
-# comment on `REFUSED_WRITE_OPTIONS`.
-PLUGIN_OPTIONS = frozenset({"--report-log", "--cov-report", "--cov-config"})
+# `--report-log`, `--cov-report`, `--cov-config` and
+# `--typeguard-typecheck-fail-callback` belong to plugins, which `get_config()`
+# does not load, so they are absent from the table read below; the runner
+# refuses them whether or not the plugin is installed, see its comment on
+# `REFUSED_WRITE_OPTIONS`.
+PLUGIN_OPTIONS = frozenset(
+    {"--report-log", "--cov-report", "--cov-config", "--typeguard-typecheck-fail-callback"}
+)
 
 BACKTICKED = re.compile(r"`([^`]+)`")
 
