@@ -1,7 +1,7 @@
 """
 Script: tests/run_tests.py
 What: Runs this repository's test suite, refusing any selection that would import Python from outside tests/.
-Doing: Rejects the pytest options that move collection off this tree, import a module by name, write to a path they name or open the interactive debugger, resolves every positional selection inside tests/, requires every file Python or pytest could load from the checkout to be tracked by git, then execs pytest.
+Doing: Rejects the pytest options that move collection off this tree, import a module by name, write to a path they name, upload the session log or open the interactive debugger, resolves every positional selection inside tests/, requires every file Python or pytest could load from the checkout to be tracked by git, then execs pytest.
 Why: `.claude/settings.json` has to allow *some* test command unattended, and an unrestricted one is unbounded local code execution -- pytest imports every module it collects, and an import is not a tool call, so nothing in the deny list is consulted.
 Goal: Make the one command an agent may run without a prompt able to import only code that is already in the diff.
 
@@ -41,6 +41,12 @@ point:
     `printf '!stmt\\nc\\n' | python3 tests/run_tests.py --trace tests`
     runs code that is in no file at all, which no untracked-file check below
     can see. See `REFUSED_DEBUGGER_OPTIONS`.
+  * **Closed:** the option that uploads. `--pastebin=all` (or `=failed`)
+    posts the session log -- the absolute rootdir, the plugin list, every
+    failure's traceback and, under `-l`, its locals -- to a public paste
+    service and prints the link. A paste cannot be taken back, which is the
+    outward-facing, irreversible kind of operation the deny list exists to
+    stop. See `REFUSED_SEND_OPTIONS`.
   * **Closed:** a file dropped into the checkout and not committed. Checking
     only the `*.py` under a selection was not enough, because pytest and
     Python load code from further afield: `python3 -m pytest` puts the
@@ -214,7 +220,17 @@ REFUSED_DEBUGGER_OPTIONS = (
     "--trace",
 )
 
-REFUSED_OPTIONS = REFUSED_IMPORT_OPTIONS + REFUSED_WRITE_OPTIONS + REFUSED_DEBUGGER_OPTIONS
+# Options that send something off this machine. pytest's built-in pastebin
+# plugin, on by default, reads `--pastebin=all` or `--pastebin=failed` as an
+# instruction to POST the session log to https://bpa.st and print the URL. The
+# log carries the absolute rootdir, the plugin list and each failure's
+# traceback, and with `-l` each frame's locals. The command this runner stands
+# in front of is allow-listed, so nothing asks first, and a public paste cannot
+# be withdrawn. No CI job or documented command uses it. Option abbreviation is
+# rejected by pytest's parser, so `--pastebin` is the only spelling.
+REFUSED_SEND_OPTIONS = ("--pastebin",)
+
+REFUSED_OPTIONS = REFUSED_IMPORT_OPTIONS + REFUSED_WRITE_OPTIONS + REFUSED_DEBUGGER_OPTIONS + REFUSED_SEND_OPTIONS
 
 # pytest builds its argparse parser with `fromfile_prefix_chars="@"`, so an
 # argument starting with this character is not an argument at all: argparse
@@ -302,7 +318,7 @@ def refused_coverage_source(arguments: list[str]) -> str | None:
 def refusal_message(option: str) -> str:
     """Why `option` is refused, in the words that apply to it.
 
-    The three lists are refused for unrelated reasons, and one message
+    The four lists are refused for unrelated reasons, and one message
     covering all of them would have to be vague enough to explain none. A reader who sees
     `--basetemp` refused for letting pytest import outside code learns nothing
     they can act on.
@@ -316,6 +332,12 @@ def refusal_message(option: str) -> str:
             f"{option} is refused here: it opens pytest's interactive debugger, "
             "which runs any Python statement it reads from standard input, and "
             f"this command runs unattended. {tail}"
+        )
+    if option in REFUSED_SEND_OPTIONS:
+        return (
+            f"{option} is refused here: it uploads pytest's session log to a "
+            "public paste service, which cannot be taken back, and this command "
+            f"runs unattended. {tail}"
         )
     if option in REFUSED_WRITE_OPTIONS:
         return (
