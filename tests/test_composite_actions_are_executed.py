@@ -40,20 +40,7 @@ ACTION_TEST_GLOB = "test_action_*.py"
 # Actions with shell whose test file has not been ported from Danathar/zfs-kinoite-complex yet,
 # each with the issue that ports it. The port removes its entries in the same pull request: an
 # entry left behind once a test names the action fails test_no_waived_action_has_a_test.
-WAIVED_ACTIONS = {
-    # #228: port tests/test_action_build_native_image.py
-    "build-native-image": 228,
-    # #229: port tests/test_action_ci_context.py (covers all three of these actions)
-    "install-signing-tools": 229,
-    "load-ci-defaults": 229,
-    "prepare-registry-context": 229,
-    # #230: port tests/test_action_prepare_rechunk_host.py
-    "prepare-rechunk-host": 230,
-    # #231: port tests/test_action_publish_native_image.py
-    "publish-native-image": 231,
-    # #230 also carries this port, tests/test_action_rechunk_native_image.py (see its comments)
-    "rechunk-native-image": 230,
-}
+WAIVED_ACTIONS: dict[str, int] = {}
 
 # A `run:` key at the start of a line, either opening a step (`- run:`) or inside one. Anchoring
 # on the line start keeps out comments and `runs:`.
