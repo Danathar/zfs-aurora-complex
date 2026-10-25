@@ -88,7 +88,7 @@ def action_test_texts() -> dict[str, str]:
     }
 
 
-def tests_reading(name: str, texts: dict[str, str]) -> list[str]:
+def files_reading(name: str, texts: dict[str, str]) -> list[str]:
     return [file_name for file_name, text in texts.items() if references_action(text, name)]
 
 
@@ -112,7 +112,7 @@ class CompositeActionsAreExecutedTests(unittest.TestCase):
                 continue
             with self.subTest(action=name):
                 self.assertTrue(
-                    tests_reading(name, texts),
+                    files_reading(name, texts),
                     f".github/actions/{name}/action.yml has run: steps, but no "
                     f"tests/{ACTION_TEST_GLOB} references .github/actions/{name}. Add a test "
                     "that executes its shell.",
@@ -123,7 +123,7 @@ class CompositeActionsAreExecutedTests(unittest.TestCase):
         for name, issue in WAIVED_ACTIONS.items():
             with self.subTest(action=name):
                 self.assertEqual(
-                    tests_reading(name, texts),
+                    files_reading(name, texts),
                     [],
                     f"{name} is waived for #{issue} but a test now references it; remove its "
                     "entry from WAIVED_ACTIONS",
