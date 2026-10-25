@@ -360,7 +360,7 @@ class SigningTargetTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             (temp / "skopeo.log").read_text(encoding="utf-8").splitlines(),
-            [f"inspect --format {{{{ .Digest }}}} docker://{repo}:{transient}"],
+            [f"inspect --no-tags --format {{{{ .Digest }}}} docker://{repo}:{transient}"],
         )
 
         result, _temp = self._run("Confirm the pushed digest", {**env, "REGISTRY_DIGEST": "sha256:" + "2" * 64})
@@ -379,7 +379,7 @@ class SigningTargetTests(unittest.TestCase):
             (temp / "skopeo.log").read_text(encoding="utf-8").splitlines(),
             [
                 f"copy --multi-arch=all --preserve-digests docker://{repo}@{signed} docker://{repo}:{tag}",
-                f"inspect --format {{{{ .Digest }}}} docker://{repo}:{tag}",
+                f"inspect --no-tags --format {{{{ .Digest }}}} docker://{repo}:{tag}",
             ],
         )
 
