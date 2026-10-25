@@ -391,6 +391,47 @@ class RunnerRefusalTests(unittest.TestCase):
                 self.run_pytest.assert_not_called()
         self.assertIsNone(run_tests.refused_option("--trace-config"))
 
+    def test_the_refused_list_covers_the_option_that_uploads(self) -> None:
+        # `--pastebin=all` posted the session log of an allow-listed run to
+        # https://bpa.st and printed the link, with no prompt in the way.
+        self.assertEqual(set(run_tests.REFUSED_SEND_OPTIONS), {"--pastebin"})
+
+    def test_an_upload_option_is_refused_in_both_spellings(self) -> None:
+        for arguments in (
+            ["--pastebin=all", "tests"],
+            ["--pastebin", "failed", "tests"],
+            ["tests", "-x", "--pastebin=failed"],
+        ):
+            with self.subTest(arguments=arguments):
+                self.run_pytest.reset_mock()
+                self.assertEqual(run_tests.main(arguments), 2)
+                self.run_pytest.assert_not_called()
+        self.assertIn("public paste service", run_tests.refusal_message("--pastebin"))
+
+    def test_the_upload_option_is_pytests_own(self) -> None:
+        # Held against the installed pytest's option table for the reason the
+        # write options are: a renamed option would leave a refusal here that
+        # protects nothing.
+        list_options = (
+            "from _pytest.config import get_config\n"
+            "parser = get_config()._parser\n"
+            "for group in [*parser._groups, parser._anonymous]:\n"
+            "    for argument in group.options:\n"
+            "        print(*argument.names())\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", list_options],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            self.skipTest("pytest is not installed; the list is held against 9.1.1's options")
+        registered = set(completed.stdout.split())
+        for option in run_tests.REFUSED_SEND_OPTIONS:
+            with self.subTest(option=option):
+                self.assertIn(option, registered)
+
     def test_a_dotted_coverage_source_is_refused(self) -> None:
         # coverage reads a `--cov` value that is not a directory as a package
         # name and resolves it with importlib.util.find_spec, which imports
@@ -433,6 +474,7 @@ class RunnerRefusalTests(unittest.TestCase):
             set(run_tests.REFUSED_IMPORT_OPTIONS),
             set(run_tests.REFUSED_WRITE_OPTIONS),
             set(run_tests.REFUSED_DEBUGGER_OPTIONS),
+            set(run_tests.REFUSED_SEND_OPTIONS),
         )
         for index, first in enumerate(lists):
             for second in lists[index + 1 :]:
