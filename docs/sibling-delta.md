@@ -12,12 +12,14 @@ own, and that has already let safety fixes land in one and not the other.
 
 This page is the record of where the two copies differ, and whether each
 difference is meant. It has one row per `ci_tools/*.py` module in this
-repository. `tests/test_sibling_delta_doc.py` fails when a module has no row,
-when a row names a module that no longer exists, or when a status is not one
+repository, and one row per shared build step (`.github/actions/<name>/action.yml`).
+`tests/test_sibling_delta_doc.py` fails when a module or build step has no
+row, when a row names one that no longer exists, or when a status is not one
 of the forms below.
 
 **When to update it:** in the same pull request that changes a `ci_tools/`
-module, and whenever you compare the two repositories. If the change applies
+module or a `.github/actions/` build step, and whenever you compare the two
+repositories. If the change applies
 to the sister repository too, open a port issue there and mark the row
 `port pending`. If it does not, say why in the row.
 
@@ -31,7 +33,7 @@ to the sister repository too, open a port issue there and mark the row
   that issue links the sister's port issue.
 - `only here: <reason>` -- the sister repository has no copy.
 
-Last sister commit reviewed: `27fff1c809002433c90dd3dccfd49e49f5b28a7f`
+Last sister commit reviewed: `a4a4d705f059a7799bbb7a1ff3b3e84759e0bbfc`
 
 ## Modules
 
@@ -71,3 +73,19 @@ which `tests/test_run_tests.py` holds against the installed pytest. This copy
 forwards the four options typeguard 4.4.4, the version on the CI runner,
 offers, and no other typeguard option; compare the two sets when either side
 changes one.
+
+## Shared build steps
+
+The composite actions the workflows run. Both repositories have all eight,
+under the same names.
+
+| Build step | Status | Note |
+|---|---|---|
+| `build-native-image` | differs on purpose: the sister builds its Homebrew payload in (a `brew_image` input, the `BREW_IMAGE` build argument and its label), and the image labels and description name each repository | |
+| `install-signing-tools` | port pending: #234 | Only the comment differs. The sister tracks the `cosign-release` pin with a Renovate manager; here the comment says it is updated by hand, because `renovate.json` has no such manager. |
+| `load-ci-defaults` | same | |
+| `prepare-main-akmods` | port pending: #234 | The sister has no pinned `just` (#151); #234 links its port issue. The sister's Homebrew outputs are on purpose, and the comments on the credential passing and failure kinds differ in wording only. |
+| `prepare-rechunk-host` | same | |
+| `prepare-registry-context` | same | |
+| `publish-native-image` | differs on purpose: comments only (each names its own issue for the signing split), and the push step lists `id` before `name` here | |
+| `rechunk-native-image` | port pending: #234 | Behind both ways: the sister passes the whole `podman inspect` output rather than `.Config` (#72), and this copy has no explicit retried Chunkah pull (sister 69caea7). The Chunkah version (v0.7.0 here, v0.7.1 there) is Renovate's to move. |

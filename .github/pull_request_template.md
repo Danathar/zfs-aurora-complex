@@ -46,9 +46,9 @@ otherwise.
       (AGENTS.md section 0 rule 1)
 - [ ] Every changed line traces to the change this PR set out to make; adjacent
       cleanups are not included
-- [ ] If this changes a shared `ci_tools/` module, I updated
-      `docs/sibling-delta.md` and opened the port issue in the sister repo, or
-      marked it as differing on purpose
+- [ ] If this changes a shared `ci_tools/` module or `.github/actions/` build
+      step, I updated `docs/sibling-delta.md` and opened the port issue in the
+      sister repo, or marked it as differing on purpose
 
 ## Verification
 

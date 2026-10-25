@@ -1,9 +1,9 @@
 """
 Script: tests/test_sibling_delta_doc.py
-What: Joins docs/sibling-delta.md's module table to the `ci_tools/*.py` modules in the tree.
-Doing: Reads the table's rows, set-compares their module names to the files in `ci_tools/`, and checks each status is one of the forms the page defines.
-Why: Most of `ci_tools/` is shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a module records nothing about it.
-Goal: Make a new module with no row, a row for a removed module, or a `port pending` row that names no issue fail here.
+What: Joins docs/sibling-delta.md's tables to the `ci_tools/*.py` modules and the `.github/actions/*/action.yml` build steps in the tree.
+Doing: Reads each table's rows, set-compares their names to the files on disk, and checks each status is one of the forms the page defines.
+Why: Most of `ci_tools/` and every build step in `.github/actions/` is shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
+Goal: Make a new module or build step with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
 
 Whether a row is *true* -- whether the two copies really match, or a
 difference really is deliberate -- is a review question; this file does not
@@ -20,6 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER = REPO_ROOT / "docs" / "sibling-delta.md"
 CI_TOOLS = REPO_ROOT / "ci_tools"
+ACTIONS = REPO_ROOT / ".github" / "actions"
 
 ROW_RE = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|")
 # The issue a `port pending` row names, in this repository (`#N`). A port the
@@ -31,18 +32,32 @@ REASON_PREFIXES = ("differs on purpose: ", "only here: ")
 PORT_PREFIX = "port pending: "
 
 
-def module_rows() -> dict[str, str]:
-    """{module: status} for each row of the table under `## Modules`."""
+def section_rows(heading: str) -> dict[str, str]:
+    """{name: status} for each row of the table under `## <heading>`."""
 
-    section = LEDGER.read_text(encoding="utf-8").split("\n## Modules\n", 1)[1].split("\n## ", 1)[0]
+    section = (
+        LEDGER.read_text(encoding="utf-8").split(f"\n## {heading}\n", 1)[1].split("\n## ", 1)[0]
+    )
     rows: dict[str, str] = {}
     for line in section.splitlines():
         match = ROW_RE.match(line)
         if match:
-            module, status = match.groups()
-            assert module not in rows, f"{module} has two rows"
-            rows[module] = status
+            name, status = match.groups()
+            assert name not in rows, f"{name} has two rows"
+            rows[name] = status
     return rows
+
+
+def module_rows() -> dict[str, str]:
+    """{module: status} for each row of the table under `## Modules`."""
+
+    return section_rows("Modules")
+
+
+def build_step_rows() -> dict[str, str]:
+    """{action directory: status} for each row of the table under `## Shared build steps`."""
+
+    return section_rows("Shared build steps")
 
 
 def status_problem(status: str) -> str | None:
@@ -87,6 +102,27 @@ class SiblingDeltaTests(unittest.TestCase):
             with self.subTest(module=module):
                 problem = status_problem(status)
                 self.assertIsNone(problem, f"{module}: status {status!r} {problem}")
+
+    def test_every_build_step_has_a_row_and_every_row_a_build_step(self) -> None:
+        steps = {path.parent.name for path in ACTIONS.glob("*/action.yml")}
+        rows = build_step_rows()
+        self.assertIn("publish-native-image", steps)
+        self.assertEqual(
+            sorted(steps - set(rows)),
+            [],
+            ".github/actions build steps docs/sibling-delta.md has no row for",
+        )
+        self.assertEqual(
+            sorted(set(rows) - steps),
+            [],
+            "docs/sibling-delta.md rows for build steps .github/actions no longer has",
+        )
+
+    def test_every_build_step_status_is_an_allowed_form(self) -> None:
+        for step, status in sorted(build_step_rows().items()):
+            with self.subTest(step=step):
+                problem = status_problem(status)
+                self.assertIsNone(problem, f"{step}: status {status!r} {problem}")
 
     def test_the_last_sister_commit_reviewed_is_recorded(self) -> None:
         self.assertRegex(LEDGER.read_text(encoding="utf-8"), SISTER_COMMIT_RE)
