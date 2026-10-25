@@ -443,7 +443,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-candidate-image.outputs.digest }}
         run: |
           set -euo pipefail
-          registry_digest="$(skopeo inspect --format '{{ .Digest }}' "docker://${IMAGE_REPO}:${TRANSIENT_TAG}")"
+          registry_digest="$(skopeo inspect --no-tags --format '{{ .Digest }}' "docker://${IMAGE_REPO}:${TRANSIENT_TAG}")"
           if [ "${registry_digest}" != "${IMAGE_DIGEST}" ]; then
             echo "Transient tag ${TRANSIENT_TAG} resolves to ${registry_digest}, not the pushed digest ${IMAGE_DIGEST}. Refusing to sign." >&2
             exit 1
@@ -473,7 +473,7 @@ jobs:
           # letting skopeo re-encode the manifest, which would silently drop
           # Chunkah's layer annotations.
           skopeo copy --multi-arch=all --preserve-digests "docker://${IMAGE_REPO}@${IMAGE_DIGEST}" "${final_ref}"
-          final_digest="$(skopeo inspect --format '{{ .Digest }}' "${final_ref}")"
+          final_digest="$(skopeo inspect --no-tags --format '{{ .Digest }}' "${final_ref}")"
           if [ "${final_digest}" != "${IMAGE_DIGEST}" ]; then
             echo "Promoted tag digest ${final_digest} does not match signed digest ${IMAGE_DIGEST}" >&2
             exit 1
