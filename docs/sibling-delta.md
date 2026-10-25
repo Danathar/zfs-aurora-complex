@@ -63,3 +63,11 @@ The sister repository also has `prune_registry.py`, which removes old image
 versions from the registry. This repository has no copy. The table lists only
 the modules this repository has, so whether to adopt it is a separate
 decision, not a row.
+
+`tests/run_tests.py` is not a `ci_tools/` module, so it has no row, but it is
+shared with the sister too and kept in step by hand. Both copies refuse the
+same pytest options and list every other option they forward in `FORWARDED`,
+which `tests/test_run_tests.py` holds against the installed pytest. This copy
+forwards the four options typeguard 4.4.4, the version on the CI runner,
+offers, and no other typeguard option; compare the two sets when either side
+changes one.
