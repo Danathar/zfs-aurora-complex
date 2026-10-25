@@ -189,9 +189,10 @@ These are still in scope. File them as usual:
   the command runs unchecked.
 - **An ordinary spelling gets through.** The command is written the way an
   agent would type it doing normal work: the plain name, its full path
-  (`/usr/bin/git`), a documented short option or alias (`git blame -S`,
-  `git annotate`), or a common wrapper used for a real reason (`env`,
-  `timeout`, `xargs`).
+  (`/usr/bin/git`), a documented short option or alias (`git blame -S`, `git
+  annotate`), or the plain command behind a wrapper program (`timeout`,
+  `xargs`, `flock`, `watch`). Wrapped commands stay in scope under the
+  ruling on Danathar/atomic-image-builder#772.
 - **A regression.** A case the hook's tests already cover stops being
   refused.
 - **The hook blocks normal work it should allow.**
