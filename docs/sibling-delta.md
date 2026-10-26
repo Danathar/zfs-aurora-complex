@@ -88,4 +88,4 @@ under the same names.
 | `prepare-rechunk-host` | same | |
 | `prepare-registry-context` | same | |
 | `publish-native-image` | differs on purpose: comments only (each names its own issue for the signing split), and the push step lists `id` before `name` here | |
-| `rechunk-native-image` | differs on purpose: the Chunkah version (v0.7.0 here, v0.7.1 there) is Renovate's to move, and the comments name which project's base hit E2BIG and which project's nightly the Chunkah pull failed in | Both pass only `.Config` to Chunkah (#72; sister 2f04bdc, its #513) and pull Chunkah explicitly with `--retry 5 --retry-delay 30s` before `podman run` (sister 69caea7, its #487). |
+| `rechunk-native-image` | differs on purpose: comments only; they name which project's base hit E2BIG and which project's nightly the Chunkah pull failed in | Both pass only `.Config` to Chunkah (#72; sister 2f04bdc, its #513) and pull Chunkah explicitly with `--retry 5 --retry-delay 30s` before `podman run` (sister 69caea7, its #487). |

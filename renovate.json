@@ -66,7 +66,7 @@
     },
     {
       "customType": "regex",
-      "description": "Track the cosign version pinned for image signing/verification, so a new release surfaces as a reviewable PR instead of drifting stale by hand. Renovate's built-in github-actions manager already bumps the sigstore/cosign-installer SHA itself, but that action's `cosign-release` input is a plain string it does not read -- .github/actions/install-signing-tools/action.yml said so directly (\"the cosign-release input must be updated manually when a new cosign version is needed\") until this manager closed that gap. docs/architecture-overview.md documents the same pinned version as part of a compatibility claim against the akmods build container's preinstalled cosign, so it is tracked here too: both files must move together, in one reviewable PR, so the doc's version-specific claims get re-checked rather than silently going stale.",
+      "description": "Track the cosign version pinned for image signing/verification, so a new release surfaces as a reviewable PR instead of drifting stale by hand. Renovate's built-in github-actions manager bumps the sigstore/cosign-installer SHA and, as a `uses-with` dependency, its `cosign-release` input too, but it does not read docs/architecture-overview.md, which documents the same pinned version as part of a compatibility claim against the akmods build container's preinstalled cosign. This manager reads both files, so the action input and the doc sentence move together, in one reviewable PR, so the doc's version-specific claims get re-checked rather than silently going stale.",
       "managerFilePatterns": [
         "/^\\.github/actions/install-signing-tools/action\\.ya?ml$/",
         "/^docs/architecture-overview\\.md$/"
