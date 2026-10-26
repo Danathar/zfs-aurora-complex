@@ -236,7 +236,7 @@ refusal too, never a fallback to the tag.
 One environment detail worth knowing: this signature check runs inside the
 same `ghcr.io/ublue-os/devcontainer` container as the rest of the akmods job,
 which ships its own preinstalled cosign (currently v2.4.1) rather than the
-v3.1.2 this repo installs elsewhere via `install-signing-tools`. The
+v3.1.3 this repo installs elsewhere via `install-signing-tools`. The
 `cosign_verify` helper deliberately does not pass `--new-bundle-format=false`
 (a flag v2.4.1 does not recognize at all) because both versions verify this
 repo's legacy-format signatures correctly without it -- verified directly

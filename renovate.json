@@ -63,6 +63,21 @@
       ],
       "depNameTemplate": "ruff",
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the cosign version pinned for image signing/verification, so a new release surfaces as a reviewable PR instead of drifting stale by hand. Renovate's built-in github-actions manager already bumps the sigstore/cosign-installer SHA itself, but that action's `cosign-release` input is a plain string it does not read -- .github/actions/install-signing-tools/action.yml said so directly (\"the cosign-release input must be updated manually when a new cosign version is needed\") until this manager closed that gap. docs/architecture-overview.md documents the same pinned version as part of a compatibility claim against the akmods build container's preinstalled cosign, so it is tracked here too: both files must move together, in one reviewable PR, so the doc's version-specific claims get re-checked rather than silently going stale.",
+      "managerFilePatterns": [
+        "/^\\.github/actions/install-signing-tools/action\\.ya?ml$/",
+        "/^docs/architecture-overview\\.md$/"
+      ],
+      "matchStrings": [
+        "cosign-release:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "(?<currentValue>v\\d+\\.\\d+\\.\\d+) this repo installs elsewhere via"
+      ],
+      "depNameTemplate": "sigstore/cosign",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
     }
   ],
 
@@ -83,12 +98,17 @@
       "matchPackageNames": ["openzfs/zfs"]
     },
     {
+      "description": "Never automerge a cosign version bump. docs/architecture-overview.md carries version-specific compatibility claims (legacy signature format, the --new-bundle-format flag the akmods build container's preinstalled cosign does not recognize) checked against the currently pinned version and that preinstalled cosign; a new pin needs those claims re-verified, not just installed.",
+      "automerge": false,
+      "matchPackageNames": ["sigstore/cosign"]
+    },
+    {
       "description": "The privileged akmods build container is pinned by digest in two places: the `container: image:` literal in build.yml (tracked by Renovate's github-actions manager) and DEFAULT_BUILD_CONTAINER_IMAGE in ci/defaults.json (tracked by the custom regex manager above). tests/test_workflow_build_container.py::test_container_literals_match_the_checked_in_default requires both to be identical. The two managers report different currentValue values, so without grouping Renovate opens two PRs for one digest bump and each fails that test on its own, so neither can merge. A shared groupName puts both updates on one branch and in one PR.",
       "groupName": "akmods build container",
       "matchPackageNames": ["ghcr.io/ublue-os/devcontainer"]
     },
     {
-      "description": "docs/architecture-overview.md names the Chunkah version in prose so the Chunkah manager can keep it in step with the action. Prose has no digest, but config:best-practices digest-pins every docker dependency, so without this rule Renovate queues a pinDigest update for the sentence that can never be applied (#173). Version updates for the doc are unaffected and still share the action's branch.",
+      "description": "docs/architecture-overview.md names the Chunkah version in prose so the Chunkah manager can keep it in step with the action. Prose has no digest, but config:best-practices digest-pins every docker dependency, so without this rule Renovate queues a pinDigest update for the sentence that can never be applied (#173). Version updates for the doc are unaffected and still share the action's branch. The cosign manager also reads this file, but its github-releases datasource has no digests, so this rule does not change it.",
       "matchFileNames": ["docs/architecture-overview.md"],
       "pinDigests": false
     }
