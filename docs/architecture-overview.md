@@ -408,7 +408,7 @@ signed:
    `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
    `--preserve-digests` for the same reason.
 
-The Chunkah container image (currently `v0.7.0`) is both version- and
+The Chunkah container image (currently `v0.7.1`) is both version- and
 digest-pinned as the `chunkah_image` input default inside
 `rechunk-native-image/action.yml`, tracked by a Renovate custom manager in the
 root [`renovate.json`](../renovate.json) whose regex captures both
