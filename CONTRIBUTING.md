@@ -39,7 +39,7 @@ the layout and the reading order. To match what
 [`.github/workflows/test.yml`](./.github/workflows/test.yml) installs today:
 
 ```bash
-pip install pytest pytest-cov "ruff==0.17.1" pyyaml
+pip install pytest pytest-cov "ruff==0.17.2" pyyaml
 python3 -m pytest tests/ -v
 ruff check ci_tools/ shared/ tests/ files/ containerfiles/
 ```
