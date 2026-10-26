@@ -91,6 +91,12 @@
       "description": "docs/architecture-overview.md names the Chunkah version in prose so the Chunkah manager can keep it in step with the action. Prose has no digest, but config:best-practices digest-pins every docker dependency, so without this rule Renovate queues a pinDigest update for the sentence that can never be applied (#173). Version updates for the doc are unaffected and still share the action's branch.",
       "matchFileNames": ["docs/architecture-overview.md"],
       "pinDigests": false
+    },
+    {
+      "description": "Put every minor, patch and digest update in one weekly PR. Nearly every dependency here is pinned in a workflow or in ci/defaults.json, which .github/CODEOWNERS holds for the owner's approval, so each separate Renovate PR waited on the owner by itself (three of them in the week of 2026-10-26). Grouping changes how many PRs there are, not what needs approving: nothing here automerges, and the ruleset still requires the code owner's review on the grouped PR. Two dependencies stay out. An OpenZFS minor-line bump stays its own deliberate decision (see the OpenZFS rule above), and Chunkah is pinned only in files no code owner holds, so its updates keep merging without waiting for the week's bundle. Major updates stay separate too. This rule is last so its groupName replaces the akmods build container group, which keeps both devcontainer copies together in the one weekly PR.",
+      "groupName": "weekly dependency updates",
+      "matchPackageNames": ["!openzfs/zfs", "!quay.io/coreos/chunkah"],
+      "matchUpdateTypes": ["minor", "patch", "digest"]
     }
   ]
 }
