@@ -44,6 +44,7 @@ refs and version pins, which are exactly the text these files are grepped for.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import subprocess
@@ -85,6 +86,162 @@ EXPECTED_MANAGERS = {
     "ghcr.io/ublue-os/devcontainer": {"ci/defaults.json"},
     "ruff": RUFF_PIN_FILES,
 }
+
+
+# The two dependencies Renovate produces for the build container digest, as
+# packageRules see them. The workflow copy comes from the built-in
+# github-actions manager, which reads a job's `container: image:` as a docker
+# dependency of depType "container"; a digest-only reference has no tag, so it
+# has no currentValue. The ci/defaults.json copy comes from the custom regex
+# manager, which has no depType and takes its currentValue from
+# currentValueTemplate. A digest bump is updateType "digest" for both.
+# Same shapes as in zfs-kinoite-complex's copy of this file.
+DEVCONTAINER_DEPENDENCIES = (
+    {
+        "manager": "github-actions",
+        "fileName": ".github/workflows/build.yml",
+        "packageName": "ghcr.io/ublue-os/devcontainer",
+        "depName": "ghcr.io/ublue-os/devcontainer",
+        "datasource": "docker",
+        "depType": "container",
+        "currentValue": None,
+        "updateType": "digest",
+    },
+    {
+        "manager": "custom.regex",
+        "fileName": "ci/defaults.json",
+        "packageName": "ghcr.io/ublue-os/devcontainer",
+        "depName": "ghcr.io/ublue-os/devcontainer",
+        "datasource": "docker",
+        "depType": None,
+        "currentValue": "latest",
+        "updateType": "digest",
+    },
+)
+
+# The one group every minor, patch and digest update goes into, so the owner
+# approves one Renovate PR a week. The dependencies below are the shapes
+# Renovate offered in the week of 2026-10-26, as packageRules see them, plus
+# the updates the group must leave alone. The devcontainer copies above belong
+# to the group too. cosign comes from the github-actions manager reading
+# cosign-installer's `cosign-release` input, which it reports as depType
+# "uses-with".
+WEEKLY_GROUP = "weekly dependency updates"
+
+WEEKLY_DEPENDENCIES = (
+    {
+        "manager": "github-actions",
+        "fileName": ".github/actions/install-signing-tools/action.yml",
+        "packageName": "sigstore/cosign",
+        "depName": "sigstore/cosign",
+        "datasource": "github-releases",
+        "depType": "uses-with",
+        "currentValue": "v3.1.3",
+        "updateType": "patch",
+    },
+    {
+        "manager": "github-actions",
+        "fileName": ".github/workflows/build.yml",
+        "packageName": "actions/checkout",
+        "depName": "actions/checkout",
+        "datasource": "github-tags",
+        "depType": "action",
+        "currentValue": "v7.0.1",
+        "updateType": "minor",
+    },
+    *(
+        {
+            "manager": "custom.regex",
+            "fileName": name,
+            "packageName": "ruff",
+            "depName": "ruff",
+            "datasource": "pypi",
+            "depType": None,
+            "currentValue": "0.17.1",
+            "updateType": "patch",
+        }
+        for name in sorted(RUFF_PIN_FILES)
+    ),
+)
+
+UNGROUPED_DEPENDENCIES = (
+    {
+        "manager": "custom.regex",
+        "fileName": "ci/defaults.json",
+        "packageName": "openzfs/zfs",
+        "depName": "openzfs/zfs",
+        "datasource": "github-releases",
+        "depType": None,
+        "currentValue": "2.4",
+        "updateType": "minor",
+    },
+    {
+        "manager": "custom.regex",
+        "fileName": ".github/actions/rechunk-native-image/action.yml",
+        "packageName": "quay.io/coreos/chunkah",
+        "depName": "quay.io/coreos/chunkah",
+        "datasource": "docker",
+        "depType": None,
+        "currentValue": "v0.7.0",
+        "updateType": "patch",
+    },
+    {
+        "manager": "github-actions",
+        "fileName": ".github/workflows/build.yml",
+        "packageName": "actions/checkout",
+        "depName": "actions/checkout",
+        "datasource": "github-tags",
+        "depType": "action",
+        "currentValue": "v7.0.1",
+        "updateType": "major",
+    },
+)
+
+# packageRules match keys this file knows how to evaluate, mapped to the
+# dependency field each one reads.
+RULE_MATCH_FIELDS = {
+    "matchPackageNames": "packageName",
+    "matchDepNames": "depName",
+    "matchManagers": "manager",
+    "matchFileNames": "fileName",
+    "matchDatasources": "datasource",
+    "matchDepTypes": "depType",
+    "matchUpdateTypes": "updateType",
+    "matchCurrentValue": "currentValue",
+}
+
+
+def pattern_matches(pattern: str, value: str | None) -> bool:
+    """One Renovate match pattern: `/regex/`, a glob, or an exact string."""
+    if value is None:
+        return False
+    if len(pattern) > 2 and pattern.startswith("/") and pattern.endswith("/"):
+        return js_regex(pattern[1:-1]).search(value) is not None
+    return fnmatch.fnmatchcase(value, pattern)
+
+
+def patterns_match(patterns: list[str] | str, value: str | None) -> bool:
+    """A list of patterns: any positive one matches and no `!` one does."""
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    positive = [pattern for pattern in patterns if not pattern.startswith("!")]
+    negative = [pattern[1:] for pattern in patterns if pattern.startswith("!")]
+    if positive and not any(pattern_matches(pattern, value) for pattern in positive):
+        return False
+    return not any(pattern_matches(pattern, value) for pattern in negative)
+
+
+def resolve_package_rules(rules: list[dict], dependency: dict) -> dict:
+    """Apply every rule whose match keys all match, in order; later values win."""
+    settings: dict = {}
+    for rule in rules:
+        keys = [key for key in rule if key.startswith(("match", "exclude"))]
+        unknown = sorted(set(keys) - set(RULE_MATCH_FIELDS))
+        if unknown:
+            raise AssertionError(f"packageRule uses unmodelled match keys {unknown}: {rule}")
+        if all(patterns_match(rule[key], dependency[RULE_MATCH_FIELDS[key]]) for key in keys):
+            settings.update({key: value for key, value in rule.items() if key not in keys})
+    return settings
 
 
 def js_regex(pattern: str) -> re.Pattern[str]:
@@ -351,7 +508,11 @@ class PackageRuleTests(unittest.TestCase):
         self,
     ) -> None:
         """`matchPackageNames` is matched exactly; a near-miss name silences the rule."""
-        matching = [rule for rule in self.rules if "matchPackageNames" in rule]
+        matching = [
+            rule
+            for rule in self.rules
+            if "matchPackageNames" in rule and rule.get("groupName") != WEEKLY_GROUP
+        ]
         expected = {"openzfs/zfs", "ghcr.io/ublue-os/devcontainer"}
         seen = {tuple(rule["matchPackageNames"]) for rule in matching}
         self.assertEqual(seen, {(name,) for name in expected})
@@ -383,6 +544,39 @@ class PackageRuleTests(unittest.TestCase):
         for narrowing in ("matchManagers", "matchFileNames", "matchDepTypes", "matchUpdateTypes"):
             with self.subTest(key=narrowing):
                 self.assertNotIn(narrowing, matching[0])
+
+    def test_the_weekly_group_gathers_every_minor_patch_and_digest_update(self) -> None:
+        """One Renovate PR a week for the owner to approve, instead of one per dependency."""
+        for dependency in (*WEEKLY_DEPENDENCIES, *DEVCONTAINER_DEPENDENCIES):
+            with self.subTest(dependency=f"{dependency['packageName']} in {dependency['fileName']}"):
+                settings = resolve_package_rules(self.rules, dependency)
+                self.assertEqual(settings.get("groupName"), WEEKLY_GROUP)
+                self.assertIsNot(settings.get("enabled"), False)
+                self.assertIsNot(settings.get("automerge"), True)
+
+    def test_the_weekly_group_leaves_out_the_updates_that_stay_on_their_own(self) -> None:
+        """An OpenZFS line is a decision, Chunkah needs no owner, and a major stays apart."""
+        for dependency in UNGROUPED_DEPENDENCIES:
+            with self.subTest(dependency=f"{dependency['packageName']} {dependency['updateType']}"):
+                settings = resolve_package_rules(self.rules, dependency)
+                self.assertNotEqual(settings.get("groupName"), WEEKLY_GROUP)
+
+    def test_the_weekly_group_leaves_out_only_dependencies_a_manager_produces(self) -> None:
+        """A near-miss name after `!` would quietly pull that dependency into the group."""
+        matching = [rule for rule in self.rules if rule.get("groupName") == WEEKLY_GROUP]
+        self.assertEqual(len(matching), 1)
+        names = matching[0]["matchPackageNames"]
+        self.assertTrue(all(name.startswith("!") for name in names), names)
+        self.assertEqual({name[1:] for name in names}, {"openzfs/zfs", "quay.io/coreos/chunkah"})
+        for name in names:
+            with self.subTest(name=name):
+                self.assertIn(name[1:], self.managers)
+
+    def test_the_rule_resolver_refuses_a_match_key_it_does_not_model(self) -> None:
+        """A rule keyed on something new must be modelled, not read as matching."""
+        rule = {"matchJsonata": ["true"], "groupName": "x"}
+        with self.assertRaises(AssertionError):
+            resolve_package_rules([rule], DEVCONTAINER_DEPENDENCIES[0])
 
     def test_the_dockerfile_manager_is_disabled_outright(self) -> None:
         """`enabled` must be present and false -- an absent key is not a disabled manager."""
