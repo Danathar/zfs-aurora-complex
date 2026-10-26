@@ -439,6 +439,7 @@ class RechunkActionStepTests(unittest.TestCase):
             sequence,
             [
                 "podman inspect",
+                "podman pull",
                 "podman run",
                 "podman image prune",
                 "podman load",
@@ -446,6 +447,22 @@ class RechunkActionStepTests(unittest.TestCase):
             ],
         )
         self.assertEqual(result.only("podman image prune").argv, ["image", "prune", "-af"])
+
+    def test_chunkah_is_pulled_explicitly_with_a_long_retry_window(self) -> None:
+        """
+        The Chunkah pull is its own `podman pull`, retried 30 seconds apart.
+
+        `podman run` pulls implicitly with 3 attempts one second apart, which a quay.io CDN
+        connection reset outlasts (the sister Kinoite project's run 39910817917). The explicit
+        pull must name the same pinned reference the later `podman run` uses, so that run finds
+        it locally.
+        """
+
+        result = self._run()
+        self.assertEqual(
+            result.only("podman pull").argv,
+            ["pull", "--retry", "5", "--retry-delay", "30s", _default_chunkah_image()],
+        )
 
     def test_the_load_reads_the_archive_chunkah_wrote_and_unpacks_on_the_large_disk(
         self,
