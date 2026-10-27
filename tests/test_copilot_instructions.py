@@ -59,7 +59,12 @@ NEXT_ITEM_RE = re.compile(r"^\s*(?:\d+\.|[-*])\s+\*\*")
 SHIPPED_TREES = ("ci_tools", "shared", "files/scripts", "containerfiles/zfs-akmods")
 
 # Imports that are neither stdlib nor a module of this repository.
-LOCAL_ROOTS = {"ci_tools", "shared", "tests", "check_coverage", "run_tests"}
+LOCAL_ROOTS = {"ci_tools", "shared", "tests", "check_coverage", "mutation_check", "run_tests"}
+
+# tests/mutation_check.py imports cosmic-ray inside the one function that only a
+# mutation run calls, and a mutation run installs it. Nothing the suite collects
+# reaches that import: tests/test_mutation_check.py stubs it.
+MUTATION_JOB_ONLY = ("tests/mutation_check.py", "cosmic_ray")
 
 
 def collapse(text: str) -> str:
@@ -232,6 +237,8 @@ class CopilotClaimTests(unittest.TestCase):
         unguarded = []
         for path in sorted((REPO_ROOT / "tests").rglob("*.py")):
             for module, line, guarded in third_party(path):
+                if (str(path.relative_to(REPO_ROOT)), module) == MUTATION_JOB_ONLY:
+                    continue
                 if not guarded:
                     unguarded.append(f"{path.relative_to(REPO_ROOT)}:{line} imports {module}")
         self.assertEqual([], unguarded, f"unguarded third-party imports under tests/: {unguarded}")

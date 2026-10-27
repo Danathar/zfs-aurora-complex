@@ -115,8 +115,8 @@ same pull request, and that file is Tier 3.
 
 ### Tier 1 — can only break CI or mislead a reader
 
-`tests/`, `.coverage-thresholds.json`, docs, and agent instructions. Labelled
-`area/tests`, `area/docs`, `area/agent-config`.
+`tests/`, `.coverage-thresholds.json`, `.mutation-survivors.json`, docs, and
+agent instructions. Labelled `area/tests`, `area/docs`, `area/agent-config`.
 
 **What it requires:** rubric sections 5 and 7. Two specific things still bite at
 this tier:
