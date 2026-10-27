@@ -209,6 +209,26 @@ to handle a *real* failure — a registry timeout, a rate limit, a malformed
 manifest — prefer a test that produces the real failure shape over one that
 patches the call to raise.
 
+### Mutation check: would a test notice the change breaking?
+
+Coverage says a line ran, not that a test checks what it does. On every pull
+request, the advisory `Mutation check (advisory)` job in `test.yml` runs
+[`tests/mutation_check.py`](./tests/mutation_check.py): it makes small
+deliberate breaks (a *mutant*: a flipped comparison, a changed number) on only
+the lines you changed in the measured modules, runs the test files that import
+each module, and lists every mutant no test failed on in the job's step
+summary. It never blocks a merge.
+
+For each mutant it lists, either add a test that fails against it, or add it to
+[`.mutation-survivors.json`](./.mutation-survivors.json) with the reason it
+cannot matter: no input can tell it apart from the original, or it only makes a
+check stricter. To run it locally, in a checkout you are not editing:
+
+```bash
+pip install pytest pyyaml "cosmic-ray==8.7.0"
+python3 tests/mutation_check.py --base origin/main
+```
+
 ## Documentation
 
 [`docs/documentation-guide.md`](./docs/documentation-guide.md) is the map, and

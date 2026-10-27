@@ -53,7 +53,8 @@
     "test.yml": {
       "workflow": null,
       "jobs": {
-        "test": {"contents": "read"}
+        "test": {"contents": "read"},
+        "mutation": {"contents": "read"}
       }
     }
   }
