@@ -6,7 +6,7 @@ Why: Renovate reads this file; nothing in this repository did. A regex that stop
 Goal: Make a renamed key, a reindented value, a moved file, a deleted manager, a dropped group or a second uncoordinated copy of a pin fail here instead of quietly freezing an update.
 
 `renovate.json` is configuration for a third-party service, so its failure mode
-is not an exception anywhere: it is silence. Every one of the four custom
+is not an exception anywhere: it is silence. Every one of the five custom
 managers below is a hand-written regex aimed at a hand-written literal in
 another file. If `ci/defaults.json` gains two spaces of indentation, or
 `DEFAULT_BUILD_CONTAINER_IMAGE` is renamed, or the Chunkah default moves out of
@@ -85,6 +85,10 @@ EXPECTED_MANAGERS = {
     "openzfs/zfs": {"ci/defaults.json"},
     "ghcr.io/ublue-os/devcontainer": {"ci/defaults.json"},
     "ruff": RUFF_PIN_FILES,
+    "sigstore/cosign": {
+        ".github/actions/install-signing-tools/action.yml",
+        "docs/architecture-overview.md",
+    },
 }
 
 
@@ -320,7 +324,7 @@ def sole_capture(manager: dict, name: str) -> dict[str, str | None]:
 
 
 class CustomManagerTests(unittest.TestCase):
-    """The four regex managers must select real files and match them exactly once."""
+    """The five regex managers must select real files and match them exactly once."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -513,7 +517,7 @@ class PackageRuleTests(unittest.TestCase):
             for rule in self.rules
             if "matchPackageNames" in rule and rule.get("groupName") != WEEKLY_GROUP
         ]
-        expected = {"openzfs/zfs", "ghcr.io/ublue-os/devcontainer"}
+        expected = {"openzfs/zfs", "sigstore/cosign", "ghcr.io/ublue-os/devcontainer"}
         seen = {tuple(rule["matchPackageNames"]) for rule in matching}
         self.assertEqual(seen, {(name,) for name in expected})
         for rule in matching:
@@ -523,6 +527,15 @@ class PackageRuleTests(unittest.TestCase):
     def test_an_openzfs_minor_line_bump_is_never_automerged(self) -> None:
         """A new line can activate pool features the previous image cannot import."""
         matching = [rule for rule in self.rules if rule.get("matchPackageNames") == ["openzfs/zfs"]]
+        self.assertEqual(len(matching), 1)
+        self.assertIn("automerge", matching[0])
+        self.assertIs(matching[0]["automerge"], False)
+
+    def test_a_cosign_bump_is_never_automerged(self) -> None:
+        """The doc's compatibility claims were checked against the pinned version."""
+        matching = [
+            rule for rule in self.rules if rule.get("matchPackageNames") == ["sigstore/cosign"]
+        ]
         self.assertEqual(len(matching), 1)
         self.assertIn("automerge", matching[0])
         self.assertIs(matching[0]["automerge"], False)
@@ -700,6 +713,93 @@ class DocumentationJoinTests(unittest.TestCase):
         self.assertEqual(len(uses), 1)
         self.assertRegex(uses[0].strip(), r"^uses: ublue-os/remove-unwanted-software@[0-9a-f]{40}$")
         self.assertIn("remove-unwanted-software", self.doc)
+
+
+# Lines outside the cosign manager's captures that may name the pinned cosign
+# version, keyed by file. Each one records the version a claim was checked
+# against, not the version the repo pins today, so a Renovate bump correctly
+# leaves it alone. A line that restates the live pin belongs in a matchString
+# instead; anything else naming the version fails the scan below.
+COSIGN_VERIFICATION_RECORDS = {
+    ".claude/hooks/gate-git-diff.sh": ("# (observed with cosign v3.1.3).",),
+    "tests/test_git_diff_gate.py": ("# cosign v3.1.3). Unlike the ruff rows",),
+}
+COSIGN_ACTION = ".github/actions/install-signing-tools/action.yml"
+SELF = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
+
+
+class CosignPinTests(unittest.TestCase):
+    """The cosign-release pin, the doc sentence Renovate moves with it, and every other copy."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.config = load_config()
+        cls.tracked = tracked_files()
+        cls.manager = managers_by_dep(cls.config)["sigstore/cosign"]
+        cls.pinned = sole_capture(cls.manager, COSIGN_ACTION)["currentValue"]
+
+    def captured_offsets(self, name: str) -> set[int]:
+        text = read(name)
+        return {
+            match.start("currentValue")
+            for match_string in self.manager["matchStrings"]
+            for match in js_regex(match_string).finditer(text)
+        }
+
+    def test_the_action_and_the_doc_name_one_cosign_version(self) -> None:
+        """Renovate rewrites both in one PR, so a hand edit to either one is drift."""
+        stated = sole_capture(self.manager, "docs/architecture-overview.md")["currentValue"]
+        self.assertEqual(stated, self.pinned)
+
+    def test_the_captured_version_is_the_one_the_action_installs(self) -> None:
+        installs = re.findall(r"^\s*cosign-release:\s*(\S+)\s*$", read(COSIGN_ACTION), re.MULTILINE)
+        self.assertEqual(installs, [self.pinned])
+
+    def test_every_other_copy_of_the_pinned_version_is_a_verification_record(self) -> None:
+        """A copy no matchString captures keeps the old version after the next bump."""
+        version = re.compile(r"(?<![\w.])" + re.escape(self.pinned) + r"(?!\d)")
+        stray = []
+        for name in self.tracked:
+            if name == SELF:  # the ledger above quotes every record
+                continue
+            try:
+                text = read(name)
+            except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+                continue
+            captured = self.captured_offsets(name)
+            records = COSIGN_VERIFICATION_RECORDS.get(name, ())
+            for match in version.finditer(text):
+                if match.start() in captured:
+                    continue
+                start = text.rfind("\n", 0, match.start()) + 1
+                end = text.find("\n", match.end())
+                line = text[start : end if end != -1 else len(text)]
+                if not any(record in line for record in records):
+                    stray.append(f"{name}: {line.strip()}")
+        self.assertEqual(stray, [], "restates the cosign pin outside renovate.json's reach")
+
+    def test_every_verification_record_is_still_in_its_file(self) -> None:
+        """A stale ledger entry would let a later copy on that line pass unexamined."""
+        for name, records in COSIGN_VERIFICATION_RECORDS.items():
+            text = read(name)
+            for record in records:
+                with self.subTest(file=name, record=record):
+                    self.assertEqual(text.count(record), 1)
+
+    def test_the_action_comment_says_renovate_owns_the_input(self) -> None:
+        """The comment above the installer must not send a reader to bump it by hand."""
+        lines = read(COSIGN_ACTION).splitlines()
+        uses = [i for i, line in enumerate(lines) if "uses: sigstore/cosign-installer@" in line]
+        self.assertEqual(len(uses), 1)
+        comment = []
+        for line in reversed(lines[: uses[0]]):
+            if not line.strip().startswith("#"):
+                break
+            comment.append(line.strip().lstrip("#").strip())
+        text = " ".join(reversed(comment))
+        self.assertIn("renovate.json", text)
+        self.assertIn("`cosign-release`", text)
+        self.assertNotRegex(text.lower(), r"manual|by hand")
 
 
 if __name__ == "__main__":

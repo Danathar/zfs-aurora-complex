@@ -33,7 +33,7 @@ to the sister repository too, open a port issue there and mark the row
   that issue links the sister's port issue.
 - `only here: <reason>` -- the sister repository has no copy.
 
-Last sister commit reviewed: `a4a4d705f059a7799bbb7a1ff3b3e84759e0bbfc`
+Last sister commit reviewed: `7b8ad5003c5bc8ffe053a81b5b8c86747e186fc4`
 
 ## Modules
 
@@ -82,10 +82,10 @@ under the same names.
 | Build step | Status | Note |
 |---|---|---|
 | `build-native-image` | differs on purpose: the sister builds its Homebrew payload in (a `brew_image` input, the `BREW_IMAGE` build argument and its label), and the image labels and description name each repository | |
-| `install-signing-tools` | port pending: #234 | Only the comment differs. The sister tracks the `cosign-release` pin with a Renovate manager; here the comment says it is updated by hand, because `renovate.json` has no such manager. |
+| `install-signing-tools` | same | Both repositories' `renovate.json` track the `cosign-release` pin with a `sigstore/cosign` manager and never automerge it (sister a32987f). |
 | `load-ci-defaults` | same | |
-| `prepare-main-akmods` | port pending: #234 | The sister has no pinned `just` (#151); #234 links its port issue. The sister's Homebrew outputs are on purpose, and the comments on the credential passing and failure kinds differ in wording only. |
+| `prepare-main-akmods` | differs on purpose: the sister has Homebrew payload outputs (`brew_image_ref`, `brew_image_pinned`, `brew_image_digest`) this repository does not build with; the comments on the `allow_rebuild` input, the credential passing, the failure kinds and the ZFS version label differ in wording or repository name only | Both install the pinned `just` (#151; sister 2f04bdc, its #513). |
 | `prepare-rechunk-host` | same | |
 | `prepare-registry-context` | same | |
 | `publish-native-image` | differs on purpose: comments only (each names its own issue for the signing split), and the push step lists `id` before `name` here | |
-| `rechunk-native-image` | port pending: #234 | Behind both ways: the sister passes the whole `podman inspect` output rather than `.Config` (#72), and this copy has no explicit retried Chunkah pull (sister 69caea7). The Chunkah version (v0.7.0 here, v0.7.1 there) is Renovate's to move. |
+| `rechunk-native-image` | differs on purpose: comments only; they name which project's base hit E2BIG and which project's nightly the Chunkah pull failed in | Both pass only `.Config` to Chunkah (#72; sister 2f04bdc, its #513) and pull Chunkah explicitly with `--retry 5 --retry-delay 30s` before `podman run` (sister 69caea7, its #487). |
