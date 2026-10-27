@@ -1,9 +1,9 @@
 """
 Script: tests/test_sibling_delta_doc.py
-What: Joins docs/sibling-delta.md's tables to the `ci_tools/*.py` modules and the `.github/actions/*/action.yml` build steps in the tree.
+What: Joins docs/sibling-delta.md's tables to the `ci_tools/*.py` modules, the `.github/actions/*/action.yml` build steps and the `tests/*.py` test tools in the tree.
 Doing: Reads each table's rows, set-compares their names to the files on disk, and checks each status is one of the forms the page defines.
-Why: Most of `ci_tools/` and every build step in `.github/actions/` is shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
-Goal: Make a new module or build step with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
+Why: Most of `ci_tools/`, every build step in `.github/actions/` and the test tools in `tests/` are shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
+Goal: Make a new module, build step or test tool with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
 
 Whether a row is *true* -- whether the two copies really match, or a
 difference really is deliberate -- is a review question; this file does not
@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER = REPO_ROOT / "docs" / "sibling-delta.md"
 CI_TOOLS = REPO_ROOT / "ci_tools"
 ACTIONS = REPO_ROOT / ".github" / "actions"
+TESTS = REPO_ROOT / "tests"
 
 ROW_RE = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|")
 # The issue a `port pending` row names, in this repository (`#N`). A port the
@@ -58,6 +59,12 @@ def build_step_rows() -> dict[str, str]:
     """{action directory: status} for each row of the table under `## Shared build steps`."""
 
     return section_rows("Shared build steps")
+
+
+def tool_rows() -> dict[str, str]:
+    """{file name: status} for each row of the table under `## Test tools`."""
+
+    return section_rows("Test tools")
 
 
 def status_problem(status: str) -> str | None:
@@ -123,6 +130,27 @@ class SiblingDeltaTests(unittest.TestCase):
             with self.subTest(step=step):
                 problem = status_problem(status)
                 self.assertIsNone(problem, f"{step}: status {status!r} {problem}")
+
+    def test_every_test_tool_has_a_row_and_every_row_a_test_tool(self) -> None:
+        tools = {path.name for path in TESTS.glob("*.py") if not path.name.startswith("test_")}
+        rows = tool_rows()
+        self.assertIn("run_tests.py", tools)
+        self.assertEqual(
+            sorted(tools - set(rows)),
+            [],
+            "tests/ test tools docs/sibling-delta.md has no row for",
+        )
+        self.assertEqual(
+            sorted(set(rows) - tools),
+            [],
+            "docs/sibling-delta.md rows for test tools tests/ no longer has",
+        )
+
+    def test_every_test_tool_status_is_an_allowed_form(self) -> None:
+        for tool, status in sorted(tool_rows().items()):
+            with self.subTest(tool=tool):
+                problem = status_problem(status)
+                self.assertIsNone(problem, f"{tool}: status {status!r} {problem}")
 
     def test_the_last_sister_commit_reviewed_is_recorded(self) -> None:
         self.assertRegex(LEDGER.read_text(encoding="utf-8"), SISTER_COMMIT_RE)
