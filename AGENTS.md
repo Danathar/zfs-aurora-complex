@@ -145,7 +145,7 @@ After each step, run the verification before moving on. If verification fails, s
 
 ## 6. Tooling discipline (this repo)
 
-- Python CI logic lives in [ci_tools/](ci_tools/) and is invoked through [ci_tools/cli.py](ci_tools/cli.py). Add new commands by registering them there and writing a paired test under [tests/](tests/).
+- Python CI logic lives in [ci_tools/](ci_tools/) and is invoked through [ci_tools/cli.py](ci_tools/cli.py). Add new commands by registering them there and writing a paired test under [tests/](tests/). The exception is tooling that checks the tests themselves, such as `tests/check_coverage.py` and `tests/mutation_check.py`: it lives in [tests/](tests/) and is run directly, because `ci_tools/` is standard library only and that tooling is not part of the build.
 - Workflow YAML lives in [.github/workflows/](.github/workflows/); reusable pieces go in [.github/actions/](.github/actions/) as composite actions.
 - Do not edit `cosign.key` (gitignored anyway) or alter signing logic without explicit instruction.
 - Run `python3 tests/run_tests.py` from repo root. Tests must pass before you declare success. It is the test command `.claude/settings.json` allows unattended, and it confines collection to [tests/](tests/) — a runner imports every module it collects, so an unrestricted one is unbounded code execution. (`python3 -m pytest tests/ -v` is what CI runs and is still fine for a human.)
