@@ -699,6 +699,11 @@ class MeasuredTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
         self.assertEqual(MEASURED, tuple(re.findall(r"--cov=(\S+)", workflow)))
 
+    def test_the_test_yml_job_runs_this_script_against_the_base_branch(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        self.assertIn("python3 tests/mutation_check.py --base \"origin/$BASE_REF\"", workflow)
+        self.assertIn("BASE_REF: ${{ github.base_ref }}", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

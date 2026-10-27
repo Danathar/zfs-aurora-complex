@@ -73,3 +73,40 @@ jobs:
       - name: Check per-module coverage floors
         shell: bash
         run: python3 tests/check_coverage.py
+
+  # Advisory: reports, never blocks. Coverage says a line ran; this says
+  # whether a test would notice the line breaking. tests/mutation_check.py
+  # mutates only the lines this pull request changes in the modules the job
+  # above measures, runs the test files that import each one, and writes the
+  # surviving mutants to the step summary. CONTRIBUTING.md says how to answer it.
+  mutation:
+    name: Mutation check (advisory)
+    if: github.event_name == 'pull_request'
+    # Scales with the lines changed; a one-module change runs in seconds.
+    timeout-minutes: 60
+    runs-on: ubuntu-26.04
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The diff against the base branch needs its history.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # PyYAML for the same reason as above: a test that skips without it
+      # cannot kill a mutant, so it would be reported as a survivor.
+      - name: Install test runner and cosmic-ray
+        shell: bash
+        run: pip install --quiet pytest pyyaml "cosmic-ray==8.7.0"
+
+      - name: Mutation-test the changed lines
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          status=0
+          python3 tests/mutation_check.py --base "origin/$BASE_REF" > mutation-report.md || status=$?
+          cat mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
