@@ -12,14 +12,15 @@ own, and that has already let safety fixes land in one and not the other.
 
 This page is the record of where the two copies differ, and whether each
 difference is meant. It has one row per `ci_tools/*.py` module in this
-repository, and one row per shared build step (`.github/actions/<name>/action.yml`).
-`tests/test_sibling_delta_doc.py` fails when a module or build step has no
-row, when a row names one that no longer exists, or when a status is not one
-of the forms below.
+repository, one row per shared build step (`.github/actions/<name>/action.yml`),
+and one row per test tool (a `tests/*.py` file that is not a test module).
+`tests/test_sibling_delta_doc.py` fails when a module, build step or test tool
+has no row, when a row names one that no longer exists, or when a status is not
+one of the forms below.
 
 **When to update it:** in the same pull request that changes a `ci_tools/`
-module or a `.github/actions/` build step, and whenever you compare the two
-repositories. If the change applies
+module, a `.github/actions/` build step or a test tool, and whenever you
+compare the two repositories. If the change applies
 to the sister repository too, open a port issue there and mark the row
 `port pending`. If it does not, say why in the row.
 
@@ -33,7 +34,7 @@ to the sister repository too, open a port issue there and mark the row
   that issue links the sister's port issue.
 - `only here: <reason>` -- the sister repository has no copy.
 
-Last sister commit reviewed: `7b8ad5003c5bc8ffe053a81b5b8c86747e186fc4`
+Last sister commit reviewed: `f91c488220f90c3d7383f056330341a4832ea8d8`
 
 ## Modules
 
@@ -66,14 +67,6 @@ versions from the registry. This repository has no copy. The table lists only
 the modules this repository has, so whether to adopt it is a separate
 decision, not a row.
 
-`tests/run_tests.py` is not a `ci_tools/` module, so it has no row, but it is
-shared with the sister too and kept in step by hand. Both copies refuse the
-same pytest options and list every other option they forward in `FORWARDED`,
-which `tests/test_run_tests.py` holds against the installed pytest. This copy
-forwards the four options typeguard 4.4.4, the version on the CI runner,
-offers, and no other typeguard option; compare the two sets when either side
-changes one.
-
 ## Shared build steps
 
 The composite actions the workflows run. Both repositories have all eight,
@@ -89,3 +82,15 @@ under the same names.
 | `prepare-registry-context` | same | |
 | `publish-native-image` | differs on purpose: comments only (each names its own issue for the signing split), and the push step lists `id` before `name` here | |
 | `rechunk-native-image` | differs on purpose: comments only; they name which project's base hit E2BIG and which project's nightly the Chunkah pull failed in | Both pass only `.Config` to Chunkah (#72; sister 2f04bdc, its #513) and pull Chunkah explicitly with `--retry 5 --retry-delay 30s` before `podman run` (sister 69caea7, its #487). |
+
+## Test tools
+
+The scripts under `tests/` that check the tests themselves, or confine how they
+run, rather than being tests. Both repositories have all three, under the same
+names, and keep them in step by hand.
+
+| Test tool | Status | Note |
+|---|---|---|
+| `check_coverage.py` | differs on purpose: comments and docstrings only; the sister's name the projects its per-module floors came from and say its `.claude/settings.json` allows the command, where this copy says an agent's permission config may allow it | Both run git with `core.fsmonitor` switched off. |
+| `mutation_check.py` | differs on purpose: the module docstring only; each names its own issue for why the check exists, and this copy says it is a copy of the sister's | Added here in #244. |
+| `run_tests.py` | differs on purpose: each forwards the typeguard options of the typeguard on its own CI runner (this copy the four typeguard 4.4.4 offers; the sister also forwards `--typeguard-packages-ignore`); otherwise comment wording and the layout of one line | Both refuse the same pytest options and run git with `core.fsmonitor` switched off. Each lists every other option it forwards in `FORWARDED`, which `tests/test_run_tests.py` holds against the installed pytest; compare the two sets when either side changes one. |
