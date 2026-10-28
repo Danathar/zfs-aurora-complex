@@ -7,7 +7,7 @@
     "ci_tools/boot_test.py": 153,
     "ci_tools/check_akmods_cache.py": 90,
     "ci_tools/check_stable_signal.py": 62,
-    "ci_tools/classify_akmods_failure.py": 69,
+    "ci_tools/classify_akmods_failure.py": 108,
     "ci_tools/cli.py": 30,
     "ci_tools/common.py": 168,
     "ci_tools/export_repo_defaults.py": 12,
