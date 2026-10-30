@@ -27,7 +27,13 @@ jobs:
     name: Manage sticky akmods failure issue
     runs-on: ubuntu-26.04
     timeout-minutes: 10
-    if: github.event.workflow_run.event != 'pull_request'
+    # A fork's pull request can start a run with this workflow's name through the
+    # review events (`pull_request_review`, `pull_request_review_comment`), which run
+    # the fork's own copy of the workflow. Its event is not `pull_request`, so the
+    # repository check is what keeps a fork's artifact out of this job.
+    if: >-
+      github.event.workflow_run.event != 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     permissions:
       contents: write
       issues: write
