@@ -1386,6 +1386,31 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
                     f"{command!r} was not refused; stderr={result.stderr!r}",
                 )
 
+    def test_skopeo_cannot_read_a_registries_file_it_names(self) -> None:
+        # skopeo parses the file --registries-conf names as TOML before it
+        # contacts a registry, and its error quotes the key it last read and
+        # the bare value it could not, so `--registries-conf ./.env` prints a
+        # .env line back under the `skopeo inspect` allow row
+        # (Danathar/atomic-image-builder#830). It is a global option, so every
+        # subcommand takes it, after the subcommand or before it.
+        for command in (
+            "skopeo inspect --registries-conf ./.env docker://x",
+            "skopeo inspect --registries-conf=./.env docker://x",
+            "skopeo inspect docker://x --registries-conf /tmp/r.conf",
+            "skopeo --registries-conf ./.env inspect docker://x",
+            "timeout 5 skopeo inspect --registries-conf ./.env docker://x",
+            "skopeo copy --registries-conf=./.env docker://x docker://y",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, "--registries-conf")
+        for command in (
+            "skopeo inspect --no-tags docker://ghcr.io/x:latest",
+            "skopeo inspect --raw docker://ghcr.io/x:latest",
+            "git log --grep=registries-conf -1",
+        ):
+            with self.subTest(command=command):
+                self.assertAllowed(command)
+
     def test_a_gh_filter_that_reads_the_environment_is_refused(self) -> None:
         # gh evaluates --jq with gojq, whose `env` builtin and `$ENV` are the
         # process environment, so `gh pr view 1 --json number --jq env`
