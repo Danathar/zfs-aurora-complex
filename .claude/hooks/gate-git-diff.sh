@@ -997,6 +997,9 @@ COSIGN_OUT_MSG='blocked: cosign --output-file FILE (and the = form) sends cosign
 # shellcheck disable=SC2016 # the literal ${VAR} and $(...) are what the reader has to see
 COSIGN_EXPAND_MSG='blocked: a brace bash could expand, a $ or a backtick in a word of a cosign invocation is refused rather than expanded, for the reason BRACE_MSG and EXPAND_MSG give for git: bash rewrites the words before cosign sees them, so `--output-fil{e,e}=FILE` matches no flag spelling here and reaches cosign as --output-file=FILE, and $(...), ${VAR} and a backtick supply a word this gate never saw. Four characters rebuilt the git refusals twice this way. Write the command out in full.'
 
+# shellcheck disable=SC2016 # the backticks quote a command spelling for the reader
+SKOPEO_CONF_MSG='blocked: skopeo --registries-conf FILE (and the = form) hands skopeo a registries file of the caller'"'"'s choosing, and skopeo parses it as TOML before it contacts a registry and quotes what it could not read back on error -- `skopeo inspect --registries-conf ./.env docker://x` prints a .env key and its value, past the Read(...) deny rules in .claude/settings.json, which gate the Read tool and not the shell. It also re-points where image names resolve. It is a global option, so every skopeo subcommand takes it, and Bash(skopeo inspect:*) approves the whole command line with no prompt. Nothing in this repository passes it. Run the command without the option.'
+
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal text
 GATED_ENV_MSG='blocked: an assignment before a command (`NAME=value cmd ...`) is an environment the command runs under rather than a word of it, and for the commands this gate covers that environment changes what runs or where it goes. A git invocation carries both primitives refused elsewhere here: `GIT_EXTERNAL_DIFF=prog git diff HEAD~1 HEAD` runs prog once per changed path, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.external GIT_CONFIG_VALUE_0=prog` reaches that same driver under another name, `PATH=dir git diff HEAD` runs a different git, and `GIT_DIR` and `GIT_INDEX_FILE` re-point the repository the operand scan was reasoning about -- each of them from a string the allow rows match on their `git diff` prefix. The other allow-listed families are the same: `GH_HOST=other gh pr list` and `GH_CONFIG_DIR=dir gh run view 1` send the token somewhere else. A deny list of variable names is the wrong shape for this, since it would have to track git'"'"'s own environment as git grows it. Run the command without the assignment.'
 
@@ -1113,6 +1116,7 @@ reset_command() {
   cmd_prefix=''
   cmd_writes=0
   cmd_cosign=0
+  cmd_skopeo=0
   cmd_assign=0
   cmd_named=0
   cmd_gated=0
@@ -1130,6 +1134,7 @@ reset_command() {
 cmd_prefix='' # the words so far, space-joined, while a prefix is still possible
 cmd_writes=0  # a redirection in this command opens a path for writing
 cmd_cosign=0  # its name is cosign, so the flag and expansion rules apply
+cmd_skopeo=0  # its name is skopeo, so the registries-file rule applies
 cmd_assign=0  # an assignment stands before this command's name
 cmd_named=0   # the name has been seen; every later word belongs to it
 cmd_gated=0   # its leading words matched one of GATED_PREFIXES
@@ -1162,13 +1167,13 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     # write.
     # shellcheck disable=SC2016 # the literal `$(` is the separator's name
     if [[ "${words[idx]}" == '$(' ]]; then
-      cmd_stack+=("${cmd_writes} ${cmd_cosign} ${cmd_assign} ${cmd_named} ${cmd_gated} ${cmd_git} ${cmd_export} ${cmd_xargs} ${cmd_prefix}")
+      cmd_stack+=("${cmd_writes} ${cmd_cosign} ${cmd_skopeo} ${cmd_assign} ${cmd_named} ${cmd_gated} ${cmd_git} ${cmd_export} ${cmd_xargs} ${cmd_prefix}")
       reset_command
       continue
     fi
     if [[ "${words[idx]}" == '$)' ]] && ((${#cmd_stack[@]})); then
       check_gated_command
-      read -r cmd_writes cmd_cosign cmd_assign cmd_named cmd_gated cmd_git cmd_export cmd_xargs cmd_prefix <<<"${cmd_stack[-1]}"
+      read -r cmd_writes cmd_cosign cmd_skopeo cmd_assign cmd_named cmd_gated cmd_git cmd_export cmd_xargs cmd_prefix <<<"${cmd_stack[-1]}"
       unset 'cmd_stack[-1]'
       continue
     fi
@@ -1219,6 +1224,7 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     # and `HEAD` would each take their turn as the name.
     [[ -z "${cmd_prefix}" && "${words[idx]}" == "git" ]] && cmd_git=1
     [[ -z "${cmd_prefix}" && "${words[idx]}" == "cosign" ]] && cmd_cosign=1
+    [[ -z "${cmd_prefix}" && "${words[idx]}" == "skopeo" ]] && cmd_skopeo=1
     # The export family. Its assignments stand *after* the name rather than
     # before it, so the scan that records a leading `NAME=value` never sees
     # them, and bash applies them to every later command of the string.
@@ -1280,6 +1286,21 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
       *) ;;
       esac
     fi
+  fi
+  # skopeo reads the file `--registries-conf` names as TOML before it
+  # contacts a registry, and its error quotes the key it last read and the
+  # bare value it could not, `(last key "API_TOKEN"): expected value but
+  # found "sekretvalue" instead`, so `skopeo inspect --registries-conf
+  # ./.env docker://x` prints a .env line back under the `skopeo inspect`
+  # allow row. It is a global option, valid after every subcommand, so it is
+  # refused in any skopeo invocation, in both the detached and the attached
+  # (`--registries-conf=FILE`) spellings; skopeo's flag parser takes no
+  # abbreviation of a long option.
+  if ((cmd_skopeo)); then
+    case "${words[idx]}" in
+    --registries-conf | --registries-conf=*) refuse "${SKOPEO_CONF_MSG}" ;;
+    *) ;;
+    esac
   fi
   ((cmd_cosign)) || continue
   case "${words[idx]}" in
