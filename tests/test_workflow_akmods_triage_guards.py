@@ -173,6 +173,20 @@ class TriageGuardTests(unittest.TestCase):
             ],
         )
 
+    def test_the_job_never_runs_for_a_forks_build(self) -> None:
+        # A fork's pull request can start a same-named run through the review events, whose
+        # event is not `pull_request`; the repository check is what skips it.
+        repo = "Danathar/zfs-aurora-complex"
+        self.check(
+            self.job["if"],
+            [
+                ({"event": "pull_request_review", "head_repo": "fork/x", "repository": repo}, False),
+                ({"event": "pull_request_review_comment", "head_repo": "fork/x", "repository": repo}, False),
+                ({"event": "pull_request_review_comment", "head_repo": repo, "repository": repo}, True),
+                ({"event": "push", "head_repo": repo, "repository": repo}, True),
+            ],
+        )
+
     def test_the_payload_is_unzipped_only_when_one_was_downloaded(self) -> None:
         # Without the guard, `unzip` fails on a missing archive and the job goes red on every
         # run that had nothing to triage.
