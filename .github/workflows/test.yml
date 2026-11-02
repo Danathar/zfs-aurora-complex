@@ -34,7 +34,7 @@ jobs:
       # day the image changed.
       - name: Install test runner and linter
         shell: bash
-        run: pip install --quiet pytest pytest-cov "ruff==0.17.2" pyyaml
+        run: pip install --quiet pytest pytest-cov "ruff==0.17.3" pyyaml
 
       - name: Lint with ruff
         shell: bash
