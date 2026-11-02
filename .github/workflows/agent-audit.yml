@@ -110,12 +110,17 @@ jobs:
 
           # A signature counts only as the body's last non-blank line, in the
           # documented shape: `— hive: ` and then `key=value` fields. A body
-          # that quotes the line in its text is not signed by it. The first
-          # field is not pinned to `agent=`: the omp-backed runs sign
-          # `— hive: backend=omp model=...` with no role. Both jq programs
-          # below read the signature through this one definition.
+          # that quotes the line in its text is not signed by it. Lines that
+          # are wholly an HTML comment are skipped first: a reader never sees
+          # them, and the Hive appends markers such as
+          # `<!-- hive:issue-link-fixed -->` below the signature after the pull
+          # request opens. The first field is not pinned to `agent=`: the
+          # omp-backed runs sign `— hive: backend=omp model=...` with no role.
+          # Both jq programs below read the signature through this one
+          # definition.
           signature_def='def signature:
-            (.body // "") | split("\n") | map(sub("\\s+$"; "")) | map(select(length > 0)) | (last // "")
+            (.body // "") | split("\n") | map(sub("\\s+$"; "")) | map(select(length > 0))
+            | map(select(test("^\\s*<!--.*-->\\s*$") | not)) | (last // "")
             | if test("^— hive: [a-z_]+=") then . else null end;'
 
           # The Hive app's login as `gh` spells it. The signature clause is
