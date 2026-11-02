@@ -148,7 +148,7 @@ jobs:
       # started before any step in the job runs, so a guard would execute inside
       # the very container it was meant to gate. Changing the build container is
       # a reviewable edit to ci/defaults.json plus this literal, via a PR.
-      image: ghcr.io/ublue-os/devcontainer@sha256:40e0c0c09e678909300e42eb3abeb4044fdccac35981c5aa534f9e855f8bdde6
+      image: ghcr.io/ublue-os/devcontainer@sha256:1c42755a3ab617139cc68e65248609eb2033de0e9ab5219746082ea192a182d8
       options: "--privileged --volume /:/host-sys --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -238,7 +238,7 @@ jobs:
       # `cosign sign` pushes the signature back to GHCR, so this job needs a
       # registry login of its own. ci_tools/sign_image.py threads no
       # credentials through and relies on this login.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -394,7 +394,7 @@ jobs:
 
       # skopeo reads this login through containers/image's fallback to the
       # Docker config file, and `cosign sign` pushes the signature with it.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -536,7 +536,7 @@ jobs:
       # tag. The skopeo calls in that helper pass explicit credentials, but
       # `cosign verify` reads the Docker config file instead, so authenticate
       # here rather than depending on the package staying publicly readable.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
