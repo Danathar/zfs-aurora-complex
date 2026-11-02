@@ -1,0 +1,671 @@
+# Docs section map: every section of every tracked documentation page, and
+# whether a test reads it.
+#
+# A page lists here as [path]. Under it, every `##` and `###` heading of that
+# page, written exactly as the page writes it, followed by one indented line:
+#
+#   joined: tests/<file>   that test reads what this section states
+#   prose: <reason>        no test reads it, and this says why that is fine,
+#                          or names what is left unchecked
+#
+# tests/test_docs_section_map.py fails when a tracked page has a heading with
+# no row here, when a row names a heading the page no longer has, or when a
+# `joined:` test does not exist or never opens the page. It does not prove any
+# sentence true. What it changes is that a section of claims about the
+# automation that nothing checks is a visible `prose: unchecked` line in the
+# diff that adds it, instead of the silent default.
+#
+# `prose: unchecked:` marks a section that states facts about the machine (a
+# workflow, the settings file, the command gate, the ruleset) that no test
+# reads. Each is a candidate for a join test; turning it into `joined:` is the
+# fix. `prose: narrative:` marks a section that states no such fact.
+#
+# Tracked pages: every tracked Markdown file at the repository root and in
+# docs/ (not its subdirectories), plus .github/copilot-instructions.md. A new
+# page in one of those places has to be added here in the change that adds it.
+
+[.github/copilot-instructions.md]
+## What this repository is
+  joined: tests/test_copilot_instructions.py
+## The one thing to internalise
+  prose: unchecked: states that a merge to main builds, signs and promotes with no staging tier
+## Never weaken a fail-closed check
+  joined: tests/test_copilot_instructions.py
+## When writing code here
+  joined: tests/test_copilot_instructions.py
+## When writing tests
+  prose: unchecked: states where tests run and what CI installs
+## When writing comments
+  prose: narrative: conduct rule for what a comment explains
+## What cannot be tested from the host
+  prose: unchecked: says which files only an image build reaches
+
+[AGENTS.md]
+## 0. This repository is in production — read this before anything else
+  joined: tests/test_contributor_instructions.py
+## 1. Before you start (general task confirmation)
+  prose: narrative: conduct rule for how an agent works
+## 2. Think before coding
+  prose: narrative: conduct rule for how an agent works
+## 3. Simplicity first
+  prose: narrative: conduct rule for how an agent works
+## 4. Surgical changes
+  prose: narrative: conduct rule for how an agent works
+## 5. Goal-driven execution
+  prose: narrative: conduct rule for how an agent works
+## 6. Tooling discipline (this repo)
+  joined: tests/test_agent_permission_boundary.py
+## 7. Reporting back
+  prose: narrative: conduct rule for how an agent works
+## 8. Findings about the Bash guard hook: what is in scope
+  joined: tests/test_agent_permission_boundary.py
+
+[CLAUDE.md]
+## 0. This Repository Is In Production — Read This First
+  prose: unchecked: states there is no staging tier between a merge and :latest
+### Rules that override the general guidance below
+  joined: tests/test_documentation_guide_doc.py
+## Where the rest lives
+  prose: narrative: points at other files; links are checked by tests/test_docs_consistency.py
+## 1. Think Before Coding
+  prose: narrative: conduct rule for how an agent works
+## 2. Simplicity First
+  prose: narrative: conduct rule for how an agent works
+## 3. Surgical Changes
+  prose: narrative: conduct rule for how an agent works
+## 4. Goal-Driven Execution
+  prose: narrative: conduct rule for how an agent works
+
+[CONTRIBUTING.md]
+## Submitting a change
+  joined: tests/test_contributor_instructions.py
+## Tests
+  joined: tests/test_contributor_instructions.py
+## Coverage
+  joined: tests/test_contributor_instructions.py
+### What *is* gated: per-module floors
+  prose: unchecked: states what tests/check_coverage.py enforces in test.yml
+### Three tiers, and they answer different questions
+  prose: unchecked: states which test tiers run where and which are measured
+### Establishing whether a path runs in production
+  prose: unchecked: states that no production workflow is instrumented
+### Priority order for a real gap
+  joined: tests/test_issue_templates.py
+### What not to file
+  joined: tests/test_issue_templates.py
+### A note on mocked error paths
+  prose: narrative: testing advice; states no fact about the automation
+### Mutation check: would a test notice the change breaking?
+  prose: unchecked: states what the test.yml mutation job runs and reports
+## Documentation
+  prose: narrative: points to the documentation guide
+
+[GEMINI.md]
+## 0. This repository is in production
+  joined: tests/test_labeler_config.py
+## Where the rest lives
+  prose: unchecked: names the unattended test command and the prompts directory
+## Preferred Task Shape
+  prose: narrative: conduct rule for how an agent works
+## 1. Clarify Before Coding
+  prose: narrative: conduct rule for how an agent works
+## 2. Prefer the Smallest Correct Change
+  prose: narrative: conduct rule for how an agent works
+## 3. Edit Surgically
+  prose: narrative: conduct rule for how an agent works
+## 4. Make Success Verifiable
+  prose: narrative: conduct rule for how an agent works
+## 5. Report Outcomes Explicitly
+  prose: narrative: conduct rule for how an agent works
+
+[README.md]
+## Why This Repo Exists
+  joined: tests/test_reflections_docs.py
+## Install
+  joined: tests/test_quality_doc.py
+## Documentation
+  joined: tests/test_documentation_guide_doc.py
+## About this project
+  prose: narrative: disclaimer about how the project was made and its status
+## Maintained with Hive (ACMM L6)
+  joined: tests/test_strategy_doc.py
+## References
+  prose: narrative: links to outside references
+
+[docs/SECURITY-AI.md]
+## The blast radius that makes this different
+  prose: unchecked: states what build.yml publishes and signs
+## Signing keys and secrets
+  joined: tests/test_security_ai_doc.py
+### Secret inventory
+  joined: tests/test_security_ai_doc.py
+## One autonomous path, and it is Hive
+  joined: tests/test_acmm_waivers.py
+## Labels carry authority — automation must not apply them
+  joined: tests/test_agent_permission_boundary.py
+## Inputs to treat as untrusted
+  prose: unchecked: names which workflow inputs carry untrusted text
+## What an agent may do unattended
+  joined: tests/test_git_diff_gate.py
+## The agent permission boundary
+  joined: tests/test_agent_permission_boundary.py
+## What a branch or pull request can actually cause here
+  joined: tests/test_security_ai_doc.py
+## If you find a vulnerability
+  prose: narrative: how to report a vulnerability
+
+[docs/agent-boundaries.md]
+## Purpose
+  prose: narrative: what the page covers
+## The gates
+  joined: tests/test_agent_boundaries_doc.py
+## What is asked, not enforced
+  joined: tests/test_agent_boundaries_doc.py
+## Why CODEOWNERS lists only Tier 3
+  joined: tests/test_agent_boundaries_doc.py
+
+[docs/ai-ops-runbook.md]
+## How this page relates to the others
+  prose: narrative: how this page relates to the others
+## Three rules before any row below
+  prose: narrative: conduct rules for reading a signal
+## Look at the live state first
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+## Workflow runs
+  joined: tests/test_ai_ops_runbook_doc.py
+### `build.yml` — "Build And Promote Main Image"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `build-pr.yml` — "Validate Pull Request Image Build"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `test.yml` — "Run Python Tests"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `labeler.yml` — "Labeler"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `nightly-compliance.yml` — "Nightly compliance"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `boot-test.yml` — "Boot test"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `akmods-failure-triage.yml` — "Akmods Failure Triage"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `auto-issues.yml` — "Auto issues"
+  joined: tests/test_ai_ops_runbook_doc.py
+### `agent-audit.yml` — "Agent audit trail"
+  prose: unchecked: states what agent-audit.yml reads back and when
+## Sticky akmods failure issues
+  joined: tests/test_ai_ops_runbook_doc.py
+## The gate hook refuses a command
+  joined: tests/test_ai_ops_runbook_doc.py
+## A Renovate pull request fails or looks wrong
+  joined: tests/test_ai_ops_runbook_doc.py
+## An agent pull request that looks wrong
+  joined: tests/test_ai_ops_runbook_doc.py
+## An agent issue for work that is already done
+  prose: unchecked: names the labels Hive applies; they are set outside this repository
+## What this page does not cover
+  prose: narrative: points elsewhere for what the page leaves out
+
+[docs/akmods-fork-maintenance.md]
+## Purpose
+  prose: narrative: what the page covers
+## How The Akmods Ref Is Chosen
+  prose: unchecked: restates the ref cascade in ci_tools/resolve_build_inputs.py and the akmods-ref label
+## Why A Pin Still Exists At All
+  prose: unchecked: says a replay pins the akmods commit by setting AKMODS_UPSTREAM_REF; build.yml has no input or env for it
+## When You Should (And Should Not) Bump The Pin
+  prose: unchecked: states what the daily build.yml run re-resolves
+## Update Process
+  prose: unchecked: names the fork files a sync must preserve
+## Syncing The Fork With Upstream
+  prose: unchecked: describes the Danathar/akmods fork, which is another repository
+### Known Conflict: `Justfile`
+  prose: unchecked: describes the Justfile in the Danathar/akmods fork, which is another repository
+### Validate The Sync
+  joined: tests/test_akmods_fork_maintenance_doc.py
+## What Usually Forces A Temporary Pin
+  prose: narrative: judgement guidance for choosing or reverting a pin
+## What To Validate After Changing A Pin
+  prose: unchecked: names the akmods job to re-run after a pin change
+## Plain-Language Model
+  prose: narrative: explains the cache model in plain words
+## Failure Discipline
+  prose: narrative: judgement guidance for choosing or reverting a pin
+## Important Current Assumption
+  prose: unchecked: states which kernel the shared cache is built for
+
+[docs/architecture-overview.md]
+## Purpose
+  joined: tests/test_architecture_overview_doc.py
+## Real Simplification Goals
+  prose: narrative: design rationale
+## Outputs
+  prose: narrative: heading only; its subsections are classified below
+### OS Image Repository
+  joined: tests/test_architecture_overview_doc.py
+### Shared Akmods Cache Repository
+  prose: unchecked: names the shared cache repository and its tags
+## How It Works
+  prose: narrative: heading only; its subsections are classified below
+### 0. Scheduled-Build Gate
+  joined: tests/test_architecture_overview_doc.py
+### 1. Input Resolution
+  prose: unchecked: restates what the resolve step pins for a run
+### 2. Shared Akmods Cache Reuse Or Rebuild
+  joined: tests/test_renovate_config.py
+### 3. Native Final Image Build
+  joined: tests/test_architecture_overview_doc.py
+### 4. Primary-Kernel ZFS Install Logic
+  joined: tests/test_architecture_overview_doc.py
+### Retired Design Note: The Older Multi-Kernel Fallback System
+  prose: narrative: history of a design no longer in the tree
+### 5. Promotion And Signing
+  joined: tests/test_architecture_overview_doc.py
+## Operational Model
+  prose: unchecked: states what each workflow does
+## Design Principles
+  joined: tests/test_architecture_overview_doc.py
+
+[docs/branch-protection.md]
+## Status
+  joined: tests/test_branch_protection.py
+## Why it matters here
+  prose: narrative: argument for the ruleset; the rules themselves are in the joined sections
+## The ruleset
+  joined: tests/test_branch_protection.py
+## Merge queue
+  prose: unchecked: states whether the ruleset uses a merge queue
+## A pull request that never gets the check
+  prose: unchecked: states what happens when the required check never reports
+## Applying and changing it
+  prose: unchecked: gives the command that applies the ruleset
+## When there is a second reviewer
+  prose: narrative: advice for a setting not in use
+
+[docs/building-locally.md]
+## Purpose
+  prose: narrative: what the page covers
+## Native Build Flow
+  prose: unchecked: restates the build steps the workflows run
+## Local Build
+  prose: unchecked: gives local build commands
+## Running The Workflows In A Fork
+  prose: unchecked: states which secrets and settings a fork needs
+### Why Pull Requests Against This Repository Are Unaffected
+  prose: unchecked: states that pull request runs never sign or push
+## Changing The Base Image
+  prose: unchecked: names the defaults key that sets the base image
+
+[docs/code-reading-guide.md]
+## Repository Layout
+  prose: unchecked: lists directories and what lives in them
+## Core Workflows
+  prose: unchecked: lists the workflows and what each does
+## Read This Repo In This Order
+  prose: narrative: heading only; its subsections are classified below
+### 1. Main workflow
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### 2. Command map and command-line interface (CLI)
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### 3. Input resolution and cache checks
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### 4. Akmods build control
+  prose: unchecked: names the files that decide an akmods rebuild
+### 5. Native image composition
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### 6. Tagging and signing
+  prose: unchecked: names the files that tag and sign
+### 7. Failure triage
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### 8. Tests
+  prose: unchecked: states how the tests are run
+
+[docs/design-deep-dive.md]
+## Purpose
+  prose: narrative: design rationale
+## Constraints And Context
+  prose: narrative: design rationale
+## Artifact Strategy
+  prose: unchecked: restates the build flow the workflows run
+### Main Artifacts
+  prose: unchecked: restates the build flow the workflows run
+## End-To-End Build Flow
+  prose: unchecked: restates the build flow the workflows run
+### 1. Detect Base Kernel Stream
+  prose: unchecked: restates the build flow the workflows run
+### 2. Validate Existing Shared Akmods Cache
+  prose: unchecked: restates the build flow the workflows run
+### 3. Build Shared Akmods Cache When Required
+  prose: unchecked: restates the build flow the workflows run
+### 4. Build Candidate Image
+  prose: unchecked: restates the build flow the workflows run
+### 5. Sign Published Tags
+  prose: unchecked: restates the build flow the workflows run
+### 6. Promote Candidate To Stable
+  prose: unchecked: restates the build flow the workflows run
+## Why This Repo Is Easier To Reason About
+  prose: narrative: design rationale
+## What Is Still Intrinsically Hard
+  prose: narrative: design rationale
+
+[docs/documentation-guide.md]
+## Purpose
+  prose: narrative: what the page covers
+## Documentation Tree
+  joined: tests/test_documentation_guide_doc.py
+## What To Read First (By Goal)
+  joined: tests/test_documentation_guide_doc.py
+### Goal: I am new and want the big picture
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### Goal: I just want to run this image
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### Goal: I want to build it or fork it myself
+  prose: narrative: reading route to other pages
+### Goal: I want to understand the code end-to-end
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### Goal: A workflow run failed and I need recovery steps
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### Goal: I need to update the akmods source pin
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+### Goal: I want to submit a change
+  joined: tests/test_documentation_guide_doc.py
+### Goal: I want to know what the badges, gates and numbers mean
+  prose: narrative: reading route to other pages
+### Goal: I am an AI agent, or I am working with one
+  joined: tests/test_documentation_guide_doc.py
+### Goal: a bot or an agent did something and I am not sure it is right
+  prose: narrative: reading route to other pages
+### Goal: I want to know why things are the way they are
+  prose: narrative: reading route to other pages
+### Goal: I want to know what might silently go stale over time
+  prose: narrative: reading order of linked files; tests/test_docs_consistency.py resolves the links
+## Where To Put New Documentation
+  joined: tests/test_documentation_guide_doc.py
+
+[docs/glossary.md]
+## Core Terms
+  prose: unchecked: defines terms that name jobs, tags and caches
+## Command Glossary
+  prose: unchecked: lists commands and what they do
+## Configuration And Environment Variables
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+### Akmods Inputs
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+### Image Build Inputs
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+### Resolved Run Inputs
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+### Signing And Registry
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+### Workflow Control And Audit
+  prose: unchecked: lists defaults keys and environment variables the workflows read
+
+[docs/install-and-verify.md]
+## Purpose
+  prose: narrative: what the page covers
+## Install And Rebase
+  prose: unchecked: gives the image reference and rebase commands
+## Quick Validation After Boot
+  prose: unchecked: gives commands to check a booted image
+## Signature Verification
+  joined: tests/test_workflow_nightly_compliance.py
+## Testing A Change Before It Reaches Latest
+  joined: tests/test_quality_doc.py
+
+[docs/licensing.md]
+## Purpose
+  prose: narrative: what the page covers
+
+[docs/maintenance-watchlist.md]
+## How an item ends up here
+  prose: narrative: how the watchlist is kept
+## Open items
+  joined: tests/test_strategy_doc.py
+### The rechunk host's container toolchain is pinned to Ubuntu's `resolute` suite
+  joined: tests/test_strategy_doc.py
+### `ublue-os/remove-unwanted-software` is pinned to a commit with no version tag
+  prose: unchecked: states an action pin in the workflows
+### The ZFS-line rollback carve-out is a deliberate one-way decision, not a setting
+  prose: narrative: records a decision
+## Related, not duplicated here
+  prose: narrative: links to other pages
+
+[docs/metrics.md]
+## Pull request acceptance
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+### How long a pull request waits
+  prose: unchecked: gives the command that measures pull request wait time
+## Which changes get pushed back on
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+## Scheduled build health
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+### Read the causes, not the ratio
+  joined: tests/test_metrics_doc.py
+## Unit CI health
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+## CI job durations
+  joined: tests/test_metrics_doc.py
+## Coverage
+  joined: tests/test_metrics_doc.py
+## What is deliberately not measured
+  joined: tests/test_metrics_doc.py
+
+[docs/multi-agent.md]
+## Purpose
+  prose: narrative: what the page covers
+## This repository is in production
+  joined: tests/test_multi_agent_doc.py
+## There is no orchestrator in this repository
+  joined: tests/test_multi_agent_doc.py
+## Which agents appear
+  prose: unchecked: roles read from the repository's history and Hive's branch prefixes, not from a file here
+## How work reaches an agent
+  joined: tests/test_multi_agent_doc.py
+### Labels
+  joined: tests/test_multi_agent_doc.py
+## Keeping agents from colliding
+  joined: tests/test_multi_agent_doc.py
+### A pull request must be up to date before it merges
+  joined: tests/test_multi_agent_doc.py
+## Who merges
+  joined: tests/test_multi_agent_doc.py
+
+[docs/production-boundary-proposal.md]
+### Deliberately not done
+  prose: narrative: part of a dated proposal or decision record
+## The problem, in two parts that must be fixed together
+  prose: narrative: part of a dated proposal or decision record
+### Precision on the threat model
+  prose: narrative: part of a dated proposal or decision record
+### A note on cache signing (PR #44, now merged)
+  prose: narrative: part of a dated proposal or decision record
+## Proposed changes
+  prose: narrative: part of a dated proposal or decision record
+### 1. A GitHub Environment scoped to `main`, holding the signing key
+  joined: tests/test_prompt_catalog.py
+### 2. Jobs that only ever run from `main` adopt the environment
+  joined: tests/test_prompt_catalog.py
+### 3. Branch refs lose signing access -- by design
+  joined: tests/test_prompt_catalog.py
+### `build-pr.yml`
+  joined: tests/test_docs_consistency.py
+## 4. Branch protection on `main`
+  joined: tests/test_docs_consistency.py
+## 5. The privileged build-container path (closed in PR #48, recorded here)
+  joined: tests/test_prompt_catalog.py
+## 6. Repository security settings (separate from the above, all owner-applied)
+  prose: narrative: part of a dated proposal or decision record
+## Rollback
+  prose: narrative: part of a dated proposal or decision record
+## Suggested order of operations, to avoid a self-inflicted lockout
+  joined: tests/test_prompt_catalog.py
+## Lockout safety
+  prose: narrative: part of a dated proposal or decision record
+### The escape hatch
+  prose: narrative: part of a dated proposal or decision record
+### The three real failure modes
+  prose: narrative: part of a dated proposal or decision record
+### On "include administrators"
+  prose: narrative: part of a dated proposal or decision record
+### Rollout order that keeps every step reversible
+  prose: narrative: part of a dated proposal or decision record
+## Why this is a proposal, not a PR that changes settings
+  prose: narrative: part of a dated proposal or decision record
+
+[docs/quality.md]
+## The badges
+  joined: tests/test_quality_doc.py
+## The gates
+  joined: tests/test_quality_doc.py
+### The first three block a merge, not a publish
+  joined: tests/test_quality_doc.py
+### What each one does not cover
+  joined: tests/test_quality_doc.py
+### The nightly job answers a question the others cannot
+  joined: tests/test_quality_doc.py
+## The checks that actually protect a booted machine
+  joined: tests/test_quality_doc.py
+## Reading a red build
+  joined: tests/test_quality_doc.py
+
+[docs/review-rubric.md]
+## How to read the verdicts
+  joined: tests/test_review_rubric_doc.py
+## 1. Was a fail-closed check weakened? — *Blocking*
+  joined: tests/test_review_rubric_doc.py
+## 2. Does the safety-critical statement exist and say something? — *Blocking if missing*
+  prose: narrative: review question for a human reviewer
+## 3. Rollback and pool safety — *Blocking if unaddressed*
+  prose: narrative: review question for a human reviewer
+## 4. Are the claims verified or inferred? — *Answer required*
+  prose: narrative: review question for a human reviewer
+## 5. Do the tests test anything? — *Blocking for the first item*
+  prose: narrative: review question for a human reviewer
+## 6. Scope — *Comment, unless it hides something*
+  prose: narrative: review question for a human reviewer
+## 7. Documentation that will drift — *Comment*
+  joined: tests/test_review_rubric_doc.py
+## 8. Automated review findings — *Answer required*
+  prose: narrative: review question for a human reviewer
+## A minimal review, for a small change
+  prose: narrative: review question for a human reviewer
+
+[docs/risk-tiers.md]
+## The tiers
+  prose: narrative: heading only; its subsections are classified below
+### Tier 3 — can reach a booted machine
+  joined: tests/test_risk_tiers_doc.py
+### Tier 2 — can break the build or a published artifact indirectly
+  joined: tests/test_risk_tiers_doc.py
+### Tier 1 — can only break CI or mislead a reader
+  joined: tests/test_risk_tiers_doc.py
+### Tier 0 — cannot affect anything that runs
+  joined: tests/test_review_rubric_doc.py
+## Assigning a tier when the labels disagree
+  joined: tests/test_risk_tiers_doc.py
+
+[docs/runtime-validation-proposal.md]
+## Decision (2026-07-28)
+  prose: narrative: part of a dated proposal or decision record
+## Original framing (superseded by the decision above)
+  prose: narrative: part of a dated proposal or decision record
+## The gap, stated precisely
+  prose: narrative: part of a dated proposal or decision record
+## Three tiers, cheapest first
+  prose: narrative: part of a dated proposal or decision record
+### Tier 1 — make promotion attended (recommended first, cheapest by far)
+  joined: tests/test_strategy_doc.py
+### Tier 2 — runtime smoke test in CI, no pools
+  prose: narrative: part of a dated proposal or decision record
+### Tier 3 — pool-attached validation
+  prose: narrative: part of a dated proposal or decision record
+## Recommendation
+  prose: narrative: part of a dated proposal or decision record
+## What this does not claim
+  prose: narrative: part of a dated proposal or decision record
+
+[docs/safety-model.md]
+## Purpose
+  prose: narrative: what the page covers
+## The ZFS Line Is Set By The Base Image, Not By This Repo
+  prose: unchecked: states where the ZFS line comes from
+## Live Pool State: Do Not Run `zpool upgrade`
+  prose: narrative: operator guidance for live pools
+### Upgrades are applied by a human, not a timer
+  prose: unchecked: states no timer in the image upgrades pools
+## Safety Model
+  joined: tests/test_strategy_doc.py
+## Assumptions And Recovery Policy
+  prose: unchecked: states rollback behaviour of the published tags
+## What Gets Published
+  prose: unchecked: lists the tags the build publishes
+
+[docs/sibling-delta.md]
+## Modules
+  joined: tests/test_sibling_delta_doc.py
+## Shared build steps
+  joined: tests/test_sibling_delta_doc.py
+## Test tools
+  joined: tests/test_sibling_delta_doc.py
+
+[docs/signing-and-bootc.md]
+## Short Version
+  prose: unchecked: states what is signed, in what order, and with which flags
+## What Gets Signed
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Publication Order
+  prose: unchecked: states what is signed, in what order, and with which flags
+## In-Image Trust Policy
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Cosign V3 Compatibility
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Incident Note: What Went Wrong In April 2026
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Operational Checks
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Why `UpdateVersion` And `UpdateDigest` Appear
+  prose: narrative: explains bootc status output, which bootc writes rather than this repository
+## Key Rotation
+  prose: unchecked: states what is signed, in what order, and with which flags
+## Common Gotchas
+  prose: unchecked: states what is signed, in what order, and with which flags
+## References
+  prose: unchecked: states what is signed, in what order, and with which flags
+
+[docs/strategy.md]
+## The goal, where the repository states it
+  joined: tests/test_strategy_doc.py
+## Reading progress
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+### Is the nightly image still being refreshed
+  prose: unchecked: gives a command to check the nightly run
+### What is still open on the watchlist
+  prose: unchecked: gives a command that slices the watchlist
+### Whether runtime validation has started
+  joined: tests/test_strategy_doc.py
+### What merged recently, by branch prefix
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+### What is waiting on a person
+  joined: tests/test_strategy_doc.py
+### Whether the pipeline itself is healthy
+  prose: narrative: read-only gh commands for the live state; the numbers live on GitHub, not in the tree
+## Why there is no scheduled report
+  joined: tests/test_strategy_doc.py
+
+[docs/upstream-change-response.md]
+## Purpose
+  prose: narrative: what the page covers
+## When Manual Intervention Is And Is Not Required
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## First Triage Pass
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## Failure: Shared Akmods Cache Check Or Rebuild
+  prose: unchecked: triage steps that name workflow steps and failure messages
+### Case Study: OpenZFS Release API Response Was Not A Release List
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## Failure: Candidate Image Build
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## Assumptions Behind This Repo
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## Failure: Promotion Or Signing
+  prose: unchecked: triage steps that name workflow steps and failure messages
+## Pull Request Validation Failures
+  prose: unchecked: triage steps that name workflow steps and failure messages
