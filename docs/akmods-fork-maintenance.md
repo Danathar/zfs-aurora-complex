@@ -127,9 +127,14 @@ Before pushing the fork:
 3. with the zfs target configured (as this repo does), `akmods_name` resolves to
    the cache repo name, not `null`
 4. `bash -n build_files/zfs/build-kmod-zfs.sh` passes
-5. after pushing, run a manual `build.yml` on `main`
-   with `rebuild_akmods=true` and `promote_to_stable=false` so a real akmods build validates the synced fork
-   before `main` floats onto it
+5. after pushing, start a manual `build.yml` run with `rebuild_akmods=true`. Only a
+   `build.yml` run that rebuilds the shared cache compiles the synced fork. This repo's pull request build
+   (`build-pr.yml`) does not: it only checks that the fork commit clones and that the existing shared
+   cache still matches, so it compiles nothing and a green run says nothing about
+   the synced `Justfile` or `build-kmod-zfs.sh`. The rebuild runs on `main`, so it
+   republishes the shared cache and promotes `:latest` unless you also set
+   `promote_to_stable=false`. With the floating track, `main` already resolves the
+   pushed fork commit, so this validates the sync after it lands, not before
 
 ## What Usually Forces A Temporary Pin
 
