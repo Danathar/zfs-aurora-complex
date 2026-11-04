@@ -151,8 +151,11 @@ is environment-scoped to `main`.
 
 Promotion only copies the tested candidate digest to:
 
-1. `latest`
-2. `stable-<run>-<sha>`
+1. `stable-<run>-<sha>`
+2. `latest`
+
+The audit tag goes first so that a run cancelled between the two copies leaves
+an audit record with no `latest` move, never the reverse.
 
 The candidate signature carries over because both promoted tags resolve to the
 same digest. The signer uses legacy cosign attachment storage so bootc's current
