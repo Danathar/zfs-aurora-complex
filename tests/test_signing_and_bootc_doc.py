@@ -480,7 +480,7 @@ class GotchaCitationTests(unittest.TestCase):
 
 
 class ShortVersionTests(unittest.TestCase):
-    """The five-step summary at the top, recomputed from the tree it summarizes."""
+    """The six-step summary at the top, recomputed from the tree it summarizes."""
 
     def test_the_committed_public_key_is_tracked_and_the_private_key_is_not(self) -> None:
         """Step 1 and gotcha 7 are the same claim, checked against git rather than the disk."""
@@ -516,6 +516,20 @@ class ShortVersionTests(unittest.TestCase):
 
         self.assertIn("files/scripts/configure_signing_policy.py", BUILD_IMAGE_SH.read_text(encoding="utf-8"))
         self.assertIn("`files/scripts/configure_signing_policy.py`", DOC_TEXT)
+
+    def test_the_first_switch_step_points_at_a_host_setup_step_that_exists(self) -> None:
+        """
+        Step 6 sends the operator to `docs/install-and-verify.md`, step 1, twice.
+
+        Resolved against that page's headings rather than trusted, because the whole point of
+        the sentence is that in-image files do not govern the first switch.
+        """
+
+        self.assertIn("docs/install-and-verify.md`](./install-and-verify.md), step 1", DOC_TEXT)
+        headings = _sections(INSTALL_DOC.read_text(encoding="utf-8"))
+        step_one = [h for h in headings if h.startswith("Step 1:")]
+        self.assertEqual(len(step_one), 1)
+        self.assertIn("Signing Key", step_one[0])
 
     def test_the_first_switch_command_enforces_the_container_signature_policy(self) -> None:
         """The switch command is the one place the operator opts into enforcement."""

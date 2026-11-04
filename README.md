@@ -58,14 +58,53 @@ is the version it attempts to build and install.
 > [`docs/safety-model.md`](./docs/safety-model.md). Switching a machine you
 > depend on onto this image means trusting that bar, not a guarantee.
 
+First, teach the host to trust this repository's signing key. This is a one-time
+setup per host, and it has to happen **before** the switch: the image ships its
+own copy of all three files below, but a copy that arrives inside the image
+cannot verify the image that carried it.
+
+```bash
+# From a clone of this repository, so `cosign.pub` is the committed one.
+sudo install -Dm0644 cosign.pub /etc/pki/containers/zfs-aurora-complex.pub
+
+sudo install -d -m 0755 /etc/containers/registries.d
+sudo tee /etc/containers/registries.d/ghcr.io-danathar-zfs-aurora-complex.yaml >/dev/null <<'YAML'
+docker:
+  ghcr.io/danathar/zfs-aurora-complex:
+    use-sigstore-attachments: true
+YAML
+```
+
+Then add this entry to the `transports.docker` map in
+`/etc/containers/policy.json`. Edit the existing file rather than replacing it,
+and create the `transports` or `docker` level if the stock file lacks it:
+
+```json
+"ghcr.io/danathar/zfs-aurora-complex": [
+  {
+    "type": "sigstoreSigned",
+    "keyPath": "/etc/pki/containers/zfs-aurora-complex.pub",
+    "signedIdentity": { "type": "matchRepository" }
+  }
+]
+```
+
+Now switch:
+
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
 sudo systemctl reboot
 ```
 
 `--enforce-container-sigpolicy` is required on the first switch, not optional --
-it records the deployment as policy-verified instead of as an unverified
-registry image. Afterwards, `sudo bootc upgrade` is the normal path.
+it makes bootc evaluate the pull against the container signature policy, and it
+records the deployment as policy-verified instead of as an unverified registry
+image. That policy is the host's until the image is booted, which is why the
+setup above comes first: without it, the stock policy's
+`insecureAcceptAnything` default accepts this repository's image unchecked, and
+enforcement would begin only on the next upgrade -- against whatever the first
+switch happened to install. Afterwards, `sudo bootc upgrade` is the normal path
+and uses the identical rule from inside the image.
 
 Full steps, post-boot validation commands, and manual signature verification:
 [`docs/install-and-verify.md`](./docs/install-and-verify.md).
