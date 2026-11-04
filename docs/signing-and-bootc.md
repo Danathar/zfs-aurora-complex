@@ -16,8 +16,14 @@ This repository uses a self-managed cosign keypair:
 5. The image writes `/etc/containers/policy.json` and a
    `/etc/containers/registries.d/` file so future `bootc upgrade` operations
    require a matching signature for `ghcr.io/danathar/zfs-aurora-complex`.
+6. Those three in-image files govern upgrades, not the first switch. A stock
+   Aurora DX host has none of them, and its default policy is
+   `insecureAcceptAnything`, so the operator installs the same key, policy
+   entry, and `registries.d` file on the host before switching. See
+   [`docs/install-and-verify.md`](./install-and-verify.md), step 1.
 
-Use this command for the first switch from stock Aurora DX into this image:
+Set up host-side trust first (`docs/install-and-verify.md`, step 1), then use
+this command for the first switch from stock Aurora DX into this image:
 
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/danathar/zfs-aurora-complex:latest
