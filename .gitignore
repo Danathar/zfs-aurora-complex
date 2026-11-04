@@ -4,6 +4,7 @@ __pycache__/
 artifacts/
 docs/private/
 cosign.key
+cosign.key.*
 .DS_Store
 .codex
 # Everything under .claude/ is per-machine state, except the shared files and
