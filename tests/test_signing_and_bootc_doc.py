@@ -504,6 +504,7 @@ class ShortVersionTests(unittest.TestCase):
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            check=False,
             timeout=30,
         ).stdout.split()
         self.assertEqual(ignored, ["cosign.key.old-backup", "cosign.key.bak"])
