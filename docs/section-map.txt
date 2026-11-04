@@ -340,7 +340,7 @@
 ### 5. Sign Published Tags
   prose: unchecked: restates the build flow the workflows run
 ### 6. Promote Candidate To Stable
-  prose: unchecked: restates the build flow the workflows run
+  joined: tests/test_signing_and_bootc_doc.py
 ## Why This Repo Is Easier To Reason About
   prose: narrative: design rationale
 ## What Is Still Intrinsically Hard
@@ -608,27 +608,27 @@
 
 [docs/signing-and-bootc.md]
 ## Short Version
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## What Gets Signed
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Publication Order
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## In-Image Trust Policy
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Cosign V3 Compatibility
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Incident Note: What Went Wrong In April 2026
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Operational Checks
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Why `UpdateVersion` And `UpdateDigest` Appear
   prose: narrative: explains bootc status output, which bootc writes rather than this repository
 ## Key Rotation
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## Common Gotchas
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 ## References
-  prose: unchecked: states what is signed, in what order, and with which flags
+  joined: tests/test_signing_and_bootc_doc.py
 
 [docs/strategy.md]
 ## The goal, where the repository states it
