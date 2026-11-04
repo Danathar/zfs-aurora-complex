@@ -496,6 +496,19 @@ class ShortVersionTests(unittest.TestCase):
         self.assertNotIn("cosign.key", tracked)
         self.assertIn("cosign.key", (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").split())
 
+    def test_a_renamed_copy_of_the_private_key_stays_out_of_git(self) -> None:
+        """A backup copy of the key is as secret as the key, so git must ignore it too."""
+
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--no-index", "cosign.key.old-backup", "cosign.key.bak"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        ).stdout.split()
+        self.assertEqual(ignored, ["cosign.key.old-backup", "cosign.key.bak"])
+
     def test_the_secret_the_page_names_is_the_secret_the_workflow_reads(self) -> None:
         """Step 2 names `SIGNING_SECRET`; the publishing workflow must read that same name."""
 
