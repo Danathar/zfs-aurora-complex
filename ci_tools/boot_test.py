@@ -87,6 +87,19 @@ ExecStart=/usr/bin/mkdir -p -m 0700 /var/roothome
 WantedBy=default.target
 """
 
+# Units that fail in this VM for reasons that are the VM's, not the image's,
+# with why. They make the state `degraded` on every boot, so the summary marks
+# them as expected and calls out any other failed unit, which would otherwise
+# hide behind the same word. None of them is judged.
+EXPECTED_FAILED_UNITS: dict[str, str] = {
+    # bcvk boots the image's root over virtiofs, with no disk, so bootupd finds
+    # no block device behind /boot or /sysroot to update.
+    "bootloader-update.service": "no disk under /boot in an ephemeral VM",
+    # mcelog refuses AMD processors (edac_mce_amd covers them), and some hosted
+    # runners are AMD EPYC. On an Intel runner it starts and does not fail.
+    "mcelog.service": "mcelog does not support the runner's AMD CPU",
+}
+
 VM_MEMORY = "4G"
 VM_VCPUS = "2"
 # Seconds the guest waits for boot to settle before it checks anyway. A unit
@@ -195,6 +208,11 @@ def judge(report: GuestReport) -> tuple[bool, str]:
     return True, "Booted, logged in over SSH, ZFS is installed and its module loaded at boot."
 
 
+def unexpected_units(failed_units: list[str]) -> list[str]:
+    """The failed units EXPECTED_FAILED_UNITS does not explain."""
+    return [unit for unit in failed_units if unit not in EXPECTED_FAILED_UNITS]
+
+
 def pinned_reference(image: str, digest: str) -> str:
     """`image` with its tag (or digest) replaced by `digest`."""
     repository = image.split("@", 1)[0]
@@ -286,6 +304,10 @@ def boot(image: str, work: Path, attempt: int) -> tuple[GuestReport, str]:
 def render_summary(result: dict, output: str) -> str:
     """The step summary for one run: `result` is what result.json holds."""
     report = result["report"]
+    unexpected = unexpected_units(report["failed_units"])
+    state = f"`{report['state'] or 'unknown'}`"
+    if report["state"] == "degraded" and report["failed_units"]:
+        state += " (expected units only)" if not unexpected else " (unexpected units failed)"
     lines = [
         "## Boot test",
         "",
@@ -297,7 +319,7 @@ def render_summary(result: dict, output: str) -> str:
         f"| Booted | `{result['booted']}` |",
         f"| Boots | {result['attempts']} |",
         f"| Kernel | `{report['kernel'] or 'unknown'}` |",
-        f"| systemd state | `{report['state'] or 'unknown'}` |",
+        f"| systemd state | {state} |",
     ]
     if report["zfs_version"]:
         versions = " / ".join(f"`{v}`" for v in report["zfs_version"])
@@ -305,11 +327,14 @@ def render_summary(result: dict, output: str) -> str:
     if report["checks"]:
         lines += ["", "| Check | Result | Detail |", "|---|---|---|"]
         lines += [f"| `{c['name']}` | {c['status']} | `{c['detail']}` |" for c in report["checks"]]
-    if report["failed_units"]:
-        # Reported, not judged: several units fail on every ephemeral boot for
-        # reasons that are the VM's, such as bootupd finding no /boot.
-        units = ", ".join(f"`{u}`" for u in report["failed_units"])
-        lines += ["", f"Failed units (not judged): {units}"]
+    # Reported, not judged: see EXPECTED_FAILED_UNITS.
+    if unexpected:
+        units = ", ".join(f"`{u}`" for u in unexpected)
+        lines += ["", f"**Unexpected failed units (not judged):** {units}"]
+    expected = [u for u in report["failed_units"] if u not in unexpected]
+    if expected:
+        units = ", ".join(f"`{u}` ({EXPECTED_FAILED_UNITS[u]})" for u in expected)
+        lines += ["", f"Failed units expected in this VM: {units}"]
     if not result["passed"]:
         tail = "\n".join(output.splitlines()[-LOG_TAIL_LINES:])
         lines += ["", "<details><summary>bcvk output (tail)</summary>", "", "```", tail, "```"]
@@ -351,6 +376,13 @@ def main() -> None:
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as handle:
             handle.write(text)
+
+    unexpected = unexpected_units(report.failed_units)
+    if unexpected:
+        # A warning on the run, not a failure: a base-image update can add a
+        # harmless failed unit, and that must not turn the boot test red.
+        units = ", ".join(unexpected)
+        print(f"::warning title=Boot test::Unexpected failed units: {units}", flush=True)
 
     if not passed:
         raise CiToolError(f"Boot test failed for {pinned}: {summary}")

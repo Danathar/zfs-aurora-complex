@@ -15,6 +15,7 @@ Goal: Keep "green" meaning the image booted, was logged into, and had ZFS instal
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import re
@@ -402,7 +403,7 @@ class MainTests(unittest.TestCase):
                 patch.object(script, "run_cmd_with_retries", side_effect=record_pull)
             )
             stack.enter_context(patch.object(script, "boot", side_effect=fake_boot))
-            stack.enter_context(contextlib.redirect_stdout(open(os.devnull, "w")))  # noqa: SIM115
+            self.stdout = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             error = None
             try:
                 script.main()
@@ -432,8 +433,42 @@ class MainTests(unittest.TestCase):
         _, _, summary, _ = self.run_main([session])
         self.assertTrue(summary.startswith("earlier step\n## Boot test\n"))
         self.assertIn("| `zfs version` | `zfs-2.4.4-1` |", summary)
-        self.assertIn("Failed units (not judged): `bootloader-update.service`", summary)
+        self.assertIn("Failed units expected in this VM: `bootloader-update.service` (", summary)
         self.assertNotIn("bcvk output (tail)", summary)
+
+    def test_only_expected_units_failing_says_so_and_warns_nothing(self) -> None:
+        session = passing_session().replace(
+            f"{MARKER}DONE", f"{MARKER}FAILED-UNIT mcelog.service\n{MARKER}DONE"
+        )
+        _, _, summary, error = self.run_main([session])
+        self.assertIsNone(error)
+        self.assertIn("| systemd state | `degraded` (expected units only) |", summary)
+        self.assertIn("`mcelog.service` (", summary)
+        self.assertNotIn("Unexpected", summary)
+        self.assertNotIn("::warning", self.stdout.getvalue())
+
+    def test_an_unexpected_failed_unit_is_called_out_and_warned_but_passes(self) -> None:
+        session = passing_session().replace(
+            f"{MARKER}DONE", f"{MARKER}FAILED-UNIT zfs-import-cache.service\n{MARKER}DONE"
+        )
+        _, result, summary, error = self.run_main([session])
+        self.assertIsNone(error)
+        self.assertTrue(result["passed"])
+        self.assertIn("| systemd state | `degraded` (unexpected units failed) |", summary)
+        self.assertIn("**Unexpected failed units (not judged):** `zfs-import-cache.service`", summary)
+        self.assertIn("Failed units expected in this VM: `bootloader-update.service`", summary)
+        self.assertIn(
+            "::warning title=Boot test::Unexpected failed units: zfs-import-cache.service",
+            self.stdout.getvalue(),
+        )
+
+    def test_a_running_system_gets_no_label(self) -> None:
+        session = passing_session().replace("STATE degraded", "STATE running").replace(
+            f"{MARKER}FAILED-UNIT bootloader-update.service\n", ""
+        )
+        _, _, summary, _ = self.run_main([session])
+        self.assertIn("| systemd state | `running` |", summary)
+        self.assertNotIn("Failed units", summary)
 
     def test_a_boot_that_never_ran_the_checks_is_retried_once(self) -> None:
         booted, result, _, error = self.run_main(["Timeout waiting for readiness", passing_session()])
