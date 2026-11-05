@@ -244,10 +244,29 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Hand git the credential in a file, never in argv. /proc/<pid>/cmdline
+          # is mode 0444, so a token on a command line is readable by every uid on
+          # the runner for as long as that child lives -- including a process this
+          # repository did not start. Same rule, and the same reason, as the
+          # registry credentials in docs/signing-and-bootc.md gotcha 6.
+          umask 077
           work_dir="$(mktemp -d)"
+          # The credential file must live OUTSIDE work_dir: this step runs
+          # `git add -A` in there, and anything inside would be published to the
+          # status branch.
+          cred_file="$(mktemp)"
+          trap 'rm -f "${cred_file}"' EXIT
+          # printf is a bash builtin, so the token never becomes argv of anything
+          # -- not of printf, and not of git, which is handed only the path.
+          printf 'https://x-access-token:%s@github.com\n' "${GH_TOKEN}" > "${cred_file}"
           cd "$work_dir"
           git init -q
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          # The empty value resets any helper inherited from the runner's global
+          # config; the --add after it leaves this store file as the only
+          # credential source git will consult.
+          git config --local credential.helper ""
+          git config --local --add credential.helper "store --file=${cred_file}"
+          git remote add origin "https://github.com/${REPO}.git"
           if git fetch --depth 1 origin status 2>/dev/null; then
             git checkout -q FETCH_HEAD -b status
           else
