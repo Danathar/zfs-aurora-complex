@@ -154,8 +154,13 @@ Every file in `.github/workflows/` has an entry here.
   image. Do not re-tag or re-sign anything to fix it
   ([`AGENTS.md`](../AGENTS.md) section 0 rule 6).
 - **Detail:** the header of `ci_tools/boot_test.py`. Failed systemd units are
-  listed but not judged: several fail on every ephemeral boot, such as
-  `bootloader-update.service`, which finds no `/boot` to update.
+  listed but not judged. Two fail in this VM for reasons that are the VM's:
+  `bootloader-update.service` finds no `/boot` to update, and `mcelog.service`
+  refuses an AMD runner. The summary marks those as expected. Any other failed
+  unit is called out as unexpected and puts a warning on the run, without
+  failing it; read its lines in the artifact's `journal.json` before deciding
+  whether it is the image. `EXPECTED_FAILED_UNITS` in `boot_test.py` holds the
+  list and the reasons.
 
 ### `akmods-failure-triage.yml` — "Akmods Failure Triage"
 
