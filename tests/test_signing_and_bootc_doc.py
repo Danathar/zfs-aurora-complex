@@ -3,13 +3,13 @@ Script: tests/test_signing_and_bootc_doc.py
 What: Joins docs/signing-and-bootc.md to the tree it describes -- ci_tools/sign_image.py,
 ci_tools/promote_stable.py, ci_tools/common.py, files/scripts/configure_signing_policy.py,
 build_files/build-image.sh, .github/actions/publish-native-image/action.yml,
-.github/workflows/build.yml and the pages that cite this one, including the three files that
+.github/workflows/build.yml and the pages that cite this one, including the four files that
 cite it by gotcha number.
 Doing: Recomputes each claim instead of restating it. The cosign flags come out of
 sign_image.py's real argv by AST; the trust-policy JSON and the registries.d YAML come out of
 configure_signing_policy.py by running it; the key path is derived from ci/defaults.json's
 IMAGE_NAME through the workflow input that builds it; the publication order is read off the
-action's step names and promote_stable.main()'s call order; the two credential mechanisms
+action's step names and promote_stable.main()'s call order; the three credential mechanisms
 gotcha 6 names are each checked where they live; and `gotcha 6` is parsed out of every file
 that cites it and resolved against this page's numbered list.
 Why: No test at any tier opened this file. Repo-wide, `grep -rn signing-and-bootc tests/`
@@ -19,7 +19,7 @@ returned four hits, all comments or docstrings, and the end-to-end tier (tests/e
 and files/scripts, so no coverage number at any tier could have shown the hole. At 344 lines
 this is the third-largest page in docs/, it is the page README.md, docs/install-and-verify.md,
 docs/architecture-overview.md and docs/documentation-guide.md send a reader to for the trust
-model, and three files cite one of its numbered gotchas *by number* -- renumbering that list
+model, and four files cite one of its numbered gotchas *by number* -- renumbering that list
 silently falsifies all three. The page had already drifted twice: its promotion list gave `latest`
 before the audit tag, while promote_stable.main() publishes the audit tag first and carries a
 comment explaining why that order is the safe one under run cancellation (as did
@@ -66,6 +66,7 @@ BUILD_IMAGE_SH = REPO_ROOT / "build_files" / "build-image.sh"
 PUBLISH_ACTION = REPO_ROOT / ".github" / "actions" / "publish-native-image" / "action.yml"
 BUILD_ACTION = REPO_ROOT / ".github" / "actions" / "build-native-image" / "action.yml"
 BUILD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build.yml"
+TRIAGE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "akmods-failure-triage.yml"
 
 # The pages that send a reader here. The page is only reachable because these link it, so a
 # rename or a reframing that left one behind would strand the document these tests keep honest.
@@ -77,6 +78,7 @@ GOTCHA_CITERS = (
     REPO_ROOT / "tests" / "test_common.py",
     REPO_ROOT / "tests" / "test_action_publish_native_image.py",
     REPO_ROOT / "tests" / "test_workflow_build_container.py",
+    TRIAGE_WORKFLOW,
 )
 
 HEADING = re.compile(r"^(#{1,6}) (.+)$")
@@ -423,7 +425,7 @@ class GotchaCitationTests(unittest.TestCase):
 
     def test_every_citation_resolves_to_the_credential_in_argv_rule(self) -> None:
         """
-        All three citers are talking about the same rule.
+        All four citers are talking about the same rule.
 
         Each of them exists to keep a secret out of a command line, so the item their number
         resolves to must be the argv rule and not, say, the key-rotation note.
@@ -438,13 +440,20 @@ class GotchaCitationTests(unittest.TestCase):
                     self.assertIn("argv", item)
                     self.assertIn("/proc/<pid>/cmdline", item)
 
-    def test_the_argv_rule_still_names_the_two_flags_it_forbids(self) -> None:
+    def test_the_argv_rule_still_names_the_three_flags_it_forbids(self) -> None:
         """The rule is only enforceable because it names the shapes a token arrives in."""
 
         item = self._item_body(self._argv_gotcha_number())
-        for flag in ("--creds", "--registry-password"):
+        for flag in ("--creds", "--registry-password", "https://user:token@host/..."):
             with self.subTest(flag=flag):
                 self.assertIn(flag, item)
+
+    def test_the_rule_counts_the_mechanisms_it_lists(self) -> None:
+        """The sentence announcing the list and the list itself have to agree."""
+
+        item = self._item_body(self._argv_gotcha_number())
+        self.assertIn("three ways a job here satisfies the rule", re.sub(r"\s+", " ", item))
+        self.assertEqual(len(re.findall(r"^\s*- ", item, flags=re.MULTILINE)), 3)
 
     def test_the_rule_states_the_hole_it_does_not_close(self) -> None:
         """
@@ -886,7 +895,7 @@ class PublicationOrderTests(unittest.TestCase):
 
 
 class CredentialMechanismTests(unittest.TestCase):
-    """Gotcha 6 names two ways a job satisfies it. Each is checked where it lives."""
+    """Gotcha 6 names three ways a job satisfies it. Each is checked where it lives."""
 
     def setUp(self) -> None:
         self.jobs = _yaml_blocks(
@@ -961,6 +970,60 @@ class CredentialMechanismTests(unittest.TestCase):
         self.assertNotIn("--creds", body)
         self.assertNotIn("${REGISTRY_PASSWORD}\"\n", body.split("podman push", 1)[1])
         self.assertIn('encoded_credential="$(printf \'%s\' "${REGISTRY_USER}:${REGISTRY_PASSWORD}" | base64 -w0)"', body)
+
+    def _status_branch_step_lines(self) -> list[str]:
+        """
+        The publisher's shell lines, stripped, so a claim can be matched as a whole line.
+
+        A substring match is not enough here: `/usr/bin/printf '...'` contains the builtin's
+        line and puts the token straight back into argv.
+        """
+
+        text = TRIAGE_WORKFLOW.read_text(encoding="utf-8")
+        step = text.split("- name: Publish badges to status branch\n", 1)[1]
+        return [line.strip() for line in step.split("\n      - name:", 1)[0].splitlines()]
+
+    def test_the_status_branch_publisher_hands_git_a_credential_file(self) -> None:
+        """
+        The third mechanism, and the only one about git.
+
+        All four moving parts are asserted: the printf builtin, the helper reset, the store
+        file, and a remote URL with no credential in it. The reset has to come first, because
+        an empty `credential.helper` clears every helper configured before it.
+        """
+
+        lines = self._status_branch_step_lines()
+        reset = 'git config --local credential.helper ""'
+        store = 'git config --local --add credential.helper "store --file=${cred_file}"'
+        self.assertIn("printf 'https://x-access-token:%s@github.com\\n' \"${GH_TOKEN}\" > \"${cred_file}\"", lines)
+        self.assertIn(reset, lines)
+        self.assertIn(store, lines)
+        self.assertLess(lines.index(reset), lines.index(store))
+        self.assertIn('git remote add origin "https://github.com/${REPO}.git"', lines)
+
+    def test_the_status_branch_credential_file_is_never_published(self) -> None:
+        """
+        The step runs `git add -A` in its work directory, so a credential file created in
+        there would be pushed to the public status branch. It is made outside it and removed
+        when the step exits.
+        """
+
+        lines = self._status_branch_step_lines()
+        self.assertIn("git add -A", lines)
+        self.assertIn('cred_file="$(mktemp)"', lines)
+        self.assertIn("trap 'rm -f \"${cred_file}\"' EXIT", lines)
+
+    def test_the_status_branch_remote_url_carries_no_token(self) -> None:
+        """
+        A credential-free remote is the claim; asserted as the absence of the other form.
+
+        `git remote add` with an embedded token is exactly what #271 converted, and the page
+        says so, so the converted form must not come back.
+        """
+
+        text = TRIAGE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"git remote add [^\n]*x-access-token:")
+        self.assertNotRegex(text, r"git remote add [^\n]*\$\{GH_TOKEN\}")
 
     def test_the_backstop_the_page_refuses_to_count_as_enforcement_exists(self) -> None:
         """

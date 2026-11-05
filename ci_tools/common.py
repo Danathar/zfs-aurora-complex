@@ -409,7 +409,7 @@ def registry_auth_dir(creds: str | None, *image_refs: str) -> Iterator[str]:
     uid on the runner for as long as the child lives. A `0600` file in a
     per-call temporary directory narrows that to the uid that created it, for
     the duration of one command. That is what gotcha 6 in
-    `docs/signing-and-bootc.md` ("do not pass registry secrets in command
+    `docs/signing-and-bootc.md` ("do not pass any credential in command
     argv") asks for.
 
     What this deliberately does not claim is protection from a hostile process
