@@ -382,7 +382,7 @@ def main() -> None:
         # A warning on the run, not a failure: a base-image update can add a
         # harmless failed unit, and that must not turn the boot test red.
         units = ", ".join(unexpected)
-        print(f"::warning title=Boot test::Unexpected failed units: {units}", flush=True)
+        print(f"::warning title=Boot test::Unexpected failed units: {units}")
 
     if not passed:
         raise CiToolError(f"Boot test failed for {pinned}: {summary}")

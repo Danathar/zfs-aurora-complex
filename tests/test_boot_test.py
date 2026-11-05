@@ -462,6 +462,14 @@ class MainTests(unittest.TestCase):
             self.stdout.getvalue(),
         )
 
+    def test_a_state_other_than_degraded_gets_no_label_even_with_failed_units(self) -> None:
+        # A boot that never settled reports `timeout`, and its failed units say
+        # nothing about whether it would have been degraded.
+        session = passing_session().replace("STATE degraded", "STATE timeout")
+        _, _, summary, _ = self.run_main([session])
+        self.assertIn("| systemd state | `timeout` |", summary)
+        self.assertIn("Failed units expected in this VM: `bootloader-update.service`", summary)
+
     def test_a_running_system_gets_no_label(self) -> None:
         session = passing_session().replace("STATE degraded", "STATE running").replace(
             f"{MARKER}FAILED-UNIT bootloader-update.service\n", ""
