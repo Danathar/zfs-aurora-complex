@@ -81,12 +81,12 @@ runs:
         ZFS_VERSION: ${{ inputs.zfs_version }}
       run: |
         set -euo pipefail
-        # --format docker (rather than buildah's oci default) uses Docker v2s2
-        # manifest format instead of OCI image manifests, because host update
-        # tooling (`bootc upgrade` on booted machines) works more reliably with
-        # the Docker format. The "OCI" terminology elsewhere in this project
-        # refers to OCI standards for registry interaction and layer handling,
-        # not the specific container image manifest format produced by buildah.
+        # --format docker (rather than buildah's oci default) writes this local
+        # image with a Docker v2s2 manifest. The reason recorded for it is that
+        # host update tooling (`bootc upgrade` on booted machines) works more
+        # reliably with the Docker format, but it does not decide what those
+        # machines receive: rechunk-native-image replaces this image with one
+        # loaded from an OCI archive, so published images have an OCI manifest.
         buildah build \
           --tls-verify=true \
           --format docker \

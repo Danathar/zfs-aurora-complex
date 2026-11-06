@@ -315,11 +315,14 @@ It does four important things:
 4. runs `bootc container lint`
 
 The buildah invocation uses Docker v2s2 manifest format (`--format docker`)
-rather than OCI image manifests because host update tooling (`bootc upgrade` on booted
-machines) works more reliably with the Docker format. The "OCI" terminology
-elsewhere in this project refers to OCI standards for registry interaction and
-layer handling, not the specific container image manifest format produced by
-buildah.
+rather than OCI image manifests. The reason recorded for that flag is that host
+update tooling (`bootc upgrade` on booted machines) works more reliably with the
+Docker format, but the flag only shapes the local image. The rechunk step below
+replaces that image with one loaded from an OCI archive, and nothing later
+converts it back, so every published image has an OCI manifest. The images
+sampled from the registry on 2026-11-06 all did except one old tag
+(`stable-10-6e80d9b`), which predates rechunking and still has a Docker v2
+manifest.
 
 `build-image.sh` then:
 
@@ -382,15 +385,19 @@ signed:
    two things a default GitHub-hosted runner does not provide:
    - a version-matched `crun`/`buildah`/`podman`/`skopeo` set, installed
      unconditionally from Ubuntu's `resolute` apt suite; podman before 5
-     silently drops Chunkah's layer annotations on push, which would defeat the
-     whole point of rechunking. The install is unconditional on purpose. It
+     silently drops Chunkah's layer annotations on push. The install is
+     unconditional on purpose. It
      previously self-skipped when the runner's own podman was already `>= 5`,
      and that skip is what broke the build on 2026-07-30: runner image
      `ubuntu24/20260726.254` bumped podman 4.9.3 -> 5.8.4 without bumping crun,
      so the skip fired and `podman run` failed with `crun: unknown version
      specified`. The step now asserts podman `>= 5` after installing, so a
-     regression in the suite fails the build instead of quietly producing an
-     unannotated image.
+     regression in the suite fails the build. That floor does not keep every
+     annotation: a check of the registry on 2026-11-06 found annotations on
+     the zstd layers of the published images sampled (between 66 and 90 of
+     128) and none on the gzip layers (between 38 and 62), for a reason not
+     yet known. Updates reuse chunks by layer digest, and consecutive images
+     still shared most of their layers.
    - container storage relocated onto the runner's larger `/mnt` disk, because
      rechunking briefly needs two unpacked copies of the image in storage at once
 2. [`.github/actions/rechunk-native-image`](../.github/actions/rechunk-native-image/action.yml)
@@ -404,7 +411,7 @@ signed:
 3. The `sign-candidate-image` job's "Point the candidate tag at the signed
    digest" step copies the signed digest to the requested tag with
    `skopeo copy --preserve-digests`, so that copy cannot silently re-encode the
-   manifest and drop Chunkah's layer annotations.
+   manifest and move off the digest the signature covers.
    `ci_tools/promote_stable.py`'s later `latest`/audit-tag copies already used
    `--preserve-digests` for the same reason.
 
