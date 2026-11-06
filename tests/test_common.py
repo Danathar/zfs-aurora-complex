@@ -285,6 +285,22 @@ class CommonTests(unittest.TestCase):
 
         self.assertIn("timed out", str(context.exception))
 
+    def test_run_cmd_redacts_secret_args_when_command_prints_nothing(self) -> None:
+        # With no stderr and no stdout (or capture_output=False), the message
+        # used to fall back to str(exc), which repeats every argument unredacted.
+        args = ["skopeo", "copy", "--creds", "actor:silent-secret"]
+        error = subprocess.CalledProcessError(3, args, output="", stderr="")
+        with (
+            patch("ci_tools.common.subprocess.run", side_effect=error),
+            self.assertRaises(CiToolError) as context,
+        ):
+            run_cmd(args, capture_output=False)
+
+        message = str(context.exception)
+        self.assertNotIn("silent-secret", message)
+        self.assertIn("--creds ***REDACTED***", message)
+        self.assertIn("exit 3", message)
+
     def test_run_cmd_redacts_secret_args_in_timeout_message(self) -> None:
         args = ["skopeo", "copy", "--src-creds", "actor:timeout-secret"]
         with (
