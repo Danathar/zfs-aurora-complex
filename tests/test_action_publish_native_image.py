@@ -486,8 +486,8 @@ class PublishActionStepTests(unittest.TestCase):
         """
         `--preserve-digests` and `--multi-arch=all` are both load-bearing.
 
-        Without the first, skopeo may re-encode the manifest and drop the layer annotations
-        Chunkah writes -- the entire point of the rechunk step that runs before this one.
+        Without the first, skopeo may re-encode the manifest, and the copy would no longer be
+        the digest that was signed.
         Without the second, a multi-architecture image is silently narrowed to one.
         """
 

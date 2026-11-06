@@ -19,9 +19,10 @@ runs:
     - name: Maximize build space
       uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
 
-    # Chunkah relies on OCI layer annotations to describe its content-based
-    # chunks. Podman versions before 5 silently drop those annotations on
-    # push, which would defeat the whole point of rechunking. Install
+    # Chunkah writes OCI layer annotations describing its content-based chunks,
+    # and podman versions before 5 silently drop those annotations on push.
+    # Podman 5 alone does not keep them: docs/architecture-overview.md records
+    # what the published images really carry. Install
     # crun/buildah/podman/skopeo from Ubuntu's `resolute` suite as one
     # version-matched set.
     #
@@ -58,8 +59,7 @@ runs:
 
         # Fail closed. Installing podman unconditionally means a regression in
         # the `resolute` suite could hand us podman < 5, which would drop
-        # Chunkah's layer annotations silently rather than loudly -- the exact
-        # failure this step exists to prevent.
+        # Chunkah's layer annotations silently rather than loudly.
         have_major=$(podman --version | grep -oE '[0-9]+' | head -n 1)
         if [ "${have_major}" -lt 5 ]; then
           echo "Installed podman is ${have_major}.x; Chunkah needs >= 5 or it loses OCI layer annotations." >&2

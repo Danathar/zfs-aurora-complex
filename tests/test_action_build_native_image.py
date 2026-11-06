@@ -12,7 +12,7 @@ signing policy and the six provenance labels are turned into build flags, and no
 it. tests/test_workflow_build_container.py text-matches workflow
 YAML, tests/e2e/ dispatches `ci_tools.cli` commands rather than workflow steps, and
 tests/check_coverage.py excludes composite actions from its manifest by design. A build that
-lost `--tls-verify=true`, dropped `--format docker` (which host `bootc upgrade` depends on),
+lost `--tls-verify=true`, dropped `--format docker` without anyone deciding to,
 built a different Containerfile, or silently stopped labelling the akmods cache digest it
 consumed would ship a wrong or unprovenanced image with every existing test green.
 Goal: Make a changed build contract fail here rather than on a booted machine, where the
@@ -234,7 +234,7 @@ class BuildActionStepTests(unittest.TestCase):
         Each element is load-bearing and none is checked anywhere else in the suite:
         `--tls-verify=true` is what stops the digest-pinned base and akmods refs from being
         fetched over an unverified connection; `--format docker` is the Docker v2s2 manifest
-        that the action's own comment records as required for `bootc upgrade` on booted hosts;
+        of the local image, which the rechunk step replaces before anything is published;
         `-f ./Containerfile` with a `.` context is what makes the build use this repository's
         recipe and tree. Asserting the list rather than a handful of substrings means a flag
         that is dropped, reordered onto the wrong value, or quietly added shows up here.

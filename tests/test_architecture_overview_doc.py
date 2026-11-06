@@ -334,6 +334,25 @@ class ContainerfileSectionTests(unittest.TestCase):
         self.assertIn(stated.group(1), action)
         self.assertIn("          --format docker \\\n", action)
 
+    def test_the_documented_published_format_follows_from_the_build_order(self) -> None:
+        """
+        `--format docker` used to be described as what booted machines receive.
+        The overview's correction holds only while the rechunk step runs after
+        the build and the push does not pick a format of its own.
+        """
+        self.assertIn("so every published image has an OCI manifest", doc())
+        workflow = read(".github/workflows/build.yml")
+        steps = [
+            workflow.index(f"uses: ./.github/actions/{name}\n")
+            for name in ("build-native-image", "rechunk-native-image", "publish-native-image")
+        ]
+        self.assertEqual(steps, sorted(steps), "the build, rechunk and push order changed")
+        self.assertIn(
+            'podman load -i "${archive}"',
+            read(".github/actions/rechunk-native-image/action.yml"),
+        )
+        self.assertNotIn("--format", read(".github/actions/publish-native-image/action.yml"))
+
 
 if __name__ == "__main__":
     unittest.main()

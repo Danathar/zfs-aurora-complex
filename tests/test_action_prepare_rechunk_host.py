@@ -310,8 +310,8 @@ class PrepareRechunkHostStepTests(unittest.TestCase):
         """
         The fail-closed check, on the version that caused the incident.
 
-        Podman before 5 drops Chunkah's OCI layer annotations on push, silently -- the build
-        would go green and ship an image that gains nothing from having been rechunked. The step
+        Podman before 5 drops Chunkah's OCI layer annotations on push, silently, so the build
+        would go green on a toolchain older than the one this step sets up. The step
         installs unconditionally precisely so that it cannot be fooled by a preinstalled
         version, which means a regression in the `resolute` suite handing back podman 4.x is a
         real possibility rather than a hypothetical one. This branch has never been taken in

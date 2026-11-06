@@ -26,8 +26,8 @@ Not every pin qualifies. An item belongs here only if both are true:
 
 **What:** `crun`, `buildah`, `podman`, and `skopeo` are installed unconditionally from
 Ubuntu's `resolute` apt suite on every job that rechunks with Chunkah, because Chunkah
-needs all four to be a matched, sufficiently new set (podman `>= 5` for OCI layer
-annotations) and GitHub's hosted runner image cannot be relied on to provide that
+needs all four to be a matched, sufficiently new set (podman `>= 5`, below which Chunkah's OCI
+layer annotations are silently dropped on push) and GitHub's hosted runner image cannot be relied on to provide that
 combination -- see the incident this fixed: a runner image bumped podman without
 bumping crun, an earlier version of this step's own skip-if-new-enough logic missed
 that split, and the mismatch broke every rechunk with `crun: unknown version
@@ -100,8 +100,8 @@ regression is fixed. If so:
 - *Do not* just delete the whole `Update Podman` step outright without restoring some
   form of the skip logic -- GitHub's default `noble` podman is still 4.9.3 as of this
   writing (confirmed in this repo's own run logs), below the `>= 5` floor Chunkah
-  needs. Removing the step entirely reintroduces the silently-dropped-annotations
-  failure mode this step was originally written to prevent, not just the crun mismatch.
+  needs. Removing the step entirely reintroduces the silent annotation loss on podman 4,
+  the failure mode this step was originally written to prevent, not just the crun mismatch.
 - *Verification if you do revert:* validate on the pull request, before merging, not
   after. `build-pr.yml`'s `Build PR Image (No Push)` check runs this same
   `prepare-rechunk-host` path without publishing anything, so it is the safe place to
