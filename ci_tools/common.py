@@ -190,7 +190,9 @@ def run_cmd(
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
-        details = stderr or stdout or str(exc)
+        # Never fall back to str(exc): for a CalledProcessError it repeats the
+        # whole argument list, credentials included, past the redaction below.
+        details = stderr or stdout or f"exit {exc.returncode}"
         command = " ".join(redact_command_args(args))
         raise CiToolError(f"Command failed: {command}\n{details}") from exc
 
