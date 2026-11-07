@@ -114,11 +114,12 @@ def _parser_accepted_commands() -> set[str]:
 
     Deliberately obtained by provoking an invalid choice rather than by running
     each command. Running them is not safe: the CLI dispatches as soon as the
-    parser accepts a name, and `akmods-build-and-publish` with no environment
-    set falls through to `just build`, `just login`, `just push` and
-    `just manifest` whenever /tmp/akmods happens to exist -- an absolute path,
-    so no choice of working directory isolates it. A test must not be able to
-    publish anything (AGENTS.md section 0 rule 6).
+    parser accepts a name, so whether a handler stops before it reaches a
+    registry rests on that handler's own checks. `akmods-build-and-publish`
+    once ran `just build`, `just login`, `just push` and `just manifest` with
+    no environment at all whenever /tmp/akmods existed (#279 removed that
+    path), and any handler could grow such a default again. A test must not
+    be able to publish anything (AGENTS.md section 0 rule 6).
 
     An unknown name is rejected during parsing, before any handler is reached,
     and argparse names every accepted choice when it does.

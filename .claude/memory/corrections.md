@@ -177,6 +177,11 @@ during parsing, before any handler runs, and argparse names every accepted
 choice when it does. More generally: in this repository, "it will fail fast
 anyway" is a claim about a code path, and it has to be read rather than assumed.
 
+**Since #279:** that fallback is gone. `main()` now stops at
+`require_env("KERNEL_RELEASE")` before any `just` command, so this particular
+command no longer publishes from an empty environment. The *Avoid by* still
+stands: any other handler can grow a default like it.
+
 ---
 
 ## The build-inputs artifact is not named `build-inputs`

@@ -197,24 +197,24 @@ class AkmodsBuildAndPublishTests(unittest.TestCase):
             ],
         )
 
-    def test_main_without_kernel_release_keeps_upstream_default_behavior(self) -> None:
+    def test_main_without_kernel_release_stops_before_any_command(self) -> None:
+        # The build step is the only caller and always sets KERNEL_RELEASE.
+        # Without it there is no built image ID for the pin step to check, so
+        # nothing may run: not even `just login`, and above all not `just push`,
+        # which would move the shared cache tag.
         with (
             tempfile.TemporaryDirectory() as tempdir,
             patch.object(script, "AKMODS_WORKTREE", Path(tempdir)),
             patch.object(script, "run_cmd") as run_cmd,
             patch.dict(script.os.environ, {}, clear=True),
+            self.assertRaisesRegex(
+                script.CiToolError,
+                "^Missing required environment variable: KERNEL_RELEASE$",
+            ),
         ):
             script.main()
 
-        self.assertEqual(
-            run_cmd.call_args_list,
-            [
-                call(["just", "build"], cwd=str(Path(tempdir)), capture_output=False),
-                call(["just", "login"], cwd=str(Path(tempdir)), capture_output=False),
-                call(["just", "push"], cwd=str(Path(tempdir)), capture_output=False),
-                call(["just", "manifest"], cwd=str(Path(tempdir)), capture_output=False),
-            ],
-        )
+        run_cmd.assert_not_called()
 
 
 if __name__ == "__main__":
