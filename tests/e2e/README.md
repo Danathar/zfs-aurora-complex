@@ -35,11 +35,12 @@ dispatched here are the ones whose work is env-in, file-out:
 
 That constraint is stricter than it looks, and the command-wiring test is where
 it bites. Checking "does the CLI accept this name?" by running the name would
-dispatch it, and `akmods-build-and-publish` with no environment set falls
-through to `just build`, `just login`, `just push` and `just manifest` whenever
-`/tmp/akmods` exists — an absolute path, so no choice of working directory
-isolates it. A test must not be able to publish anything (AGENTS.md section 0
-rule 6). So that test provokes an *invalid* choice instead and reads the
+dispatch it, and whether a handler then stops before it reaches a registry
+rests on that handler's own checks. `akmods-build-and-publish` once ran
+`just build`, `just login`, `just push` and `just manifest` with no environment
+at all whenever `/tmp/akmods` existed (#279 removed that path), and any handler
+could grow such a default again. A test must not be able to publish anything
+(AGENTS.md section 0 rule 6). So that test provokes an *invalid* choice instead and reads the
 accepted names out of argparse's error, which is produced during parsing,
 before any handler is reached.
 

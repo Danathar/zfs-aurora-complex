@@ -174,14 +174,10 @@ def main() -> None:
     if not AKMODS_WORKTREE.exists():
         raise CiToolError(f"Expected akmods checkout at {AKMODS_WORKTREE}")
 
-    kernel_release = optional_env("KERNEL_RELEASE")
-    if not kernel_release:
-        # If no explicit kernel is provided, keep default upstream behavior.
-        run_cmd(["just", "build"], cwd=str(AKMODS_WORKTREE), capture_output=False)
-        run_cmd(["just", "login"], cwd=str(AKMODS_WORKTREE), capture_output=False)
-        run_cmd(["just", "push"], cwd=str(AKMODS_WORKTREE), capture_output=False)
-        run_cmd(["just", "manifest"], cwd=str(AKMODS_WORKTREE), capture_output=False)
-        return
+    # Required before anything runs. Without a kernel there is nothing for
+    # `record_built_image_id` to name, so `pin_akmods_cache` would refuse the
+    # result, and by then `just push` would already have moved the shared tag.
+    kernel_release = require_env("KERNEL_RELEASE")
 
     print(
         "Building akmods only for the supported primary kernel. "

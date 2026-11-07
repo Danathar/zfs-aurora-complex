@@ -41,7 +41,7 @@ Last sister commit reviewed: `5187650c0c3f857ce80b07ec0443699ae085c5f6`
 | Module | Status | Note |
 |---|---|---|
 | `__init__.py` | same | |
-| `akmods_build_and_publish.py` | same | |
+| `akmods_build_and_publish.py` | port pending: #279 | `main()` requires `KERNEL_RELEASE` here; the sister copy still has the fallback that publishes without one (Danathar/zfs-kinoite-complex#541). |
 | `akmods_clone_pinned.py` | differs on purpose: the comment on the fetch timeout says the job's own timeout is what else bounds it (the jobs that run it here set `timeout-minutes`), where the sister's comment names GitHub's 360-minute default | The `git fetch` timeout itself (sister 0a05e37) is the same. |
 | `akmods_configure_zfs_target.py` | same | |
 | `boot_test.py` | differs on purpose: the `ZAC` names and the Aurora wording; this copy also records that stock aurora-dx passes the same checks, and says sshd is started whether or not the image enables it | The image pull is the sister's `run_cmd_with_retries` with a pull timeout (sister 0a05e37, cfdb192). |
