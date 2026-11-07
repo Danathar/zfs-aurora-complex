@@ -7,7 +7,7 @@
 [![OpenZFS/kernel status](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FDanathar%2Fzfs-aurora-complex%2Fstatus%2Fakmods-badge.json)](https://github.com/Danathar/zfs-aurora-complex/issues?q=is%3Aissue+is%3Aopen+label%3Aakmods-failure)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-1f6feb)](https://deepwiki.com/Danathar/zfs-aurora-complex)
 [![Maintenance assisted by Hivecommons Hive](https://img.shields.io/badge/maintenance%20assisted%20by-Hivecommons%20Hive-1f6feb)](https://github.com/hivecommons/hive)
-[![ACMM L6 Fully Autonomous](https://img.shields.io/badge/ACMM-L6%20Fully%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
+[![ACMM L6 Autonomous](https://img.shields.io/badge/ACMM-L6%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
 [![AI assisted](https://img.shields.io/badge/AI-assisted-d29922)](#about-this-project)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -157,7 +157,7 @@ before redistributing this image or basing a downstream image on it.
 ## Maintained with Hive (ACMM L6)
 
 Maintenance is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive) at ACMM level 6
-(Fully Autonomous). The repository is maintained by [@Danathar](https://github.com/Danathar).
+(Autonomous). The repository is maintained by [@Danathar](https://github.com/Danathar).
 
 What L6 permits here:
 
