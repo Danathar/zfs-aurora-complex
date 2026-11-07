@@ -404,9 +404,9 @@
 ## Install And Rebase
   prose: unchecked: gives the image reference and rebase commands
 ### Step 1: Trust The Signing Key On The Host
-  prose: unchecked: gives the commands that write the host key, registries.d file and policy.json entry
+  joined: tests/test_install_and_verify_doc.py
 ### Step 2: Switch
-  prose: unchecked: gives the first switch command and what enforcement it records
+  joined: tests/test_install_and_verify_doc.py
 ## Quick Validation After Boot
   prose: unchecked: gives commands to check a booted image
 ## Signature Verification
