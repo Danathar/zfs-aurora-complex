@@ -13,14 +13,15 @@ own, and that has already let safety fixes land in one and not the other.
 This page is the record of where the two copies differ, and whether each
 difference is meant. It has one row per `ci_tools/*.py` module in this
 repository, one row per shared build step (`.github/actions/<name>/action.yml`),
-and one row per test tool (a `tests/*.py` file that is not a test module).
-`tests/test_sibling_delta_doc.py` fails when a module, build step or test tool
-has no row, when a row names one that no longer exists, or when a status is not
-one of the forms below.
+one row per test tool (a `tests/*.py` file that is not a test module), and one
+row per image build file (the code that runs inside the image build, listed
+below). `tests/test_sibling_delta_doc.py` fails when a module, build step, test
+tool or image build file has no row, when a row names one that no longer
+exists, or when a status is not one of the forms below.
 
 **When to update it:** in the same pull request that changes a `ci_tools/`
-module, a `.github/actions/` build step or a test tool, and whenever you
-compare the two repositories. If the change applies
+module, a `.github/actions/` build step, a test tool or an image build file,
+and whenever you compare the two repositories. If the change applies
 to the sister repository too, open a port issue there and mark the row
 `port pending`. If it does not, say why in the row.
 
@@ -34,7 +35,7 @@ to the sister repository too, open a port issue there and mark the row
   that issue links the sister's port issue.
 - `only here: <reason>` -- the sister repository has no copy.
 
-Last sister commit reviewed: `5187650c0c3f857ce80b07ec0443699ae085c5f6`
+Last sister commit reviewed: `0ef54590cd9feb038259ea79a82b24bbc282f473`
 
 ## Modules
 
@@ -94,3 +95,22 @@ names, and keep them in step by hand.
 | `check_coverage.py` | differs on purpose: comments and docstrings only; the sister's name the projects its per-module floors came from and say its `.claude/settings.json` allows the command, where this copy says an agent's permission config may allow it | Both run git with `core.fsmonitor` switched off. |
 | `mutation_check.py` | differs on purpose: the module docstring only; each names its own issue for why the check exists, and this copy says it is a copy of the sister's | Added here in #244. |
 | `run_tests.py` | differs on purpose: each forwards the typeguard options of the typeguard on its own CI runner (this copy the four typeguard 4.4.4 offers; the sister also forwards `--typeguard-packages-ignore`); otherwise comment wording and the layout of one line | Both refuse the same pytest options and run git with `core.fsmonitor` switched off. Each lists every other option it forwards in `FORWARDED`, which `tests/test_run_tests.py` holds against the installed pytest; compare the two sets when either side changes one. |
+
+## Image build files
+
+The code that runs inside the image build and decides what the published image
+contains: the `Containerfile`, `build_files/`, `containerfiles/*/*.py`,
+`files/scripts/*.py` and `shared/*.py`. Rows name the path from the repository
+root. Data files under `files/usr/` are not listed: they hold no logic, and the
+tmpfiles file is named after each repository.
+
+| File | Status | Note |
+|---|---|---|
+| `Containerfile` | differs on purpose: the sister builds on Fedora Kinoite and adds the Homebrew payload as its own stage, checking that payload's file list before copying it in; this image inherits Homebrew from Aurora, so that stage is left commented out here; the image names differ | |
+| `build_files/build-image.sh` | port pending: #284 | The sister removes the Homebrew login-shell fragments that run prefix code in root's login shells and gives `brew-setup.service` a private `/tmp` (sister 18cee5e, 09c8154); this copy still ships Aurora's. The other differences are meant: this copy installs `crun-krun`, and the sister clears `/run/selinux-policy` after `pcp-selinux-import`, which this build does not need (its `bootc container lint` passes with no warning). |
+| `containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py` | port pending: #285 | The sister bounds the akmods cache `skopeo copy` with a timeout (sister 0a05e37); this copy has none. The default akmods image template names each repository. |
+| `files/scripts/configure_signing_policy.py` | same | |
+| `shared/__init__.py` | same | |
+| `shared/command_args.py` | differs on purpose: comments only; the sister's explains why the credential-flag set stays now that no helper passes a credential in argv | |
+| `shared/kernel_release.py` | same | |
+| `shared/oci_layout.py` | same | |
