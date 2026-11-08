@@ -597,6 +597,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             check=False,
             capture_output=False,
             text=True,
+            timeout=None,
         )
 
     def test_run_cmd_refuses_non_zero_exit(self) -> None:
