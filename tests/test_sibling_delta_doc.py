@@ -1,9 +1,9 @@
 """
 Script: tests/test_sibling_delta_doc.py
-What: Joins docs/sibling-delta.md's tables to the `ci_tools/*.py` modules, the `.github/actions/*/action.yml` build steps and the `tests/*.py` test tools in the tree.
+What: Joins docs/sibling-delta.md's tables to the `ci_tools/*.py` modules, the `.github/actions/*/action.yml` build steps, the `tests/*.py` test tools and the image build files in the tree.
 Doing: Reads each table's rows, set-compares their names to the files on disk, and checks each status is one of the forms the page defines.
-Why: Most of `ci_tools/`, every build step in `.github/actions/` and the test tools in `tests/` are shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
-Goal: Make a new module, build step or test tool with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
+Why: Most of `ci_tools/`, every build step in `.github/actions/`, the test tools in `tests/` and the code that runs inside the image build are shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
+Goal: Make a new module, build step, test tool or image build file with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
 
 Whether a row is *true* -- whether the two copies really match, or a
 difference really is deliberate -- is a review question; this file does not
@@ -22,6 +22,15 @@ LEDGER = REPO_ROOT / "docs" / "sibling-delta.md"
 CI_TOOLS = REPO_ROOT / "ci_tools"
 ACTIONS = REPO_ROOT / ".github" / "actions"
 TESTS = REPO_ROOT / "tests"
+# The code that runs inside the image build. Data files under files/usr/ are
+# left out on purpose; docs/sibling-delta.md says why.
+IMAGE_BUILD_GLOBS = (
+    "Containerfile",
+    "build_files/*",
+    "containerfiles/*/*.py",
+    "files/scripts/*.py",
+    "shared/*.py",
+)
 
 ROW_RE = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|")
 # The issue a `port pending` row names, in this repository (`#N`). A port the
@@ -65,6 +74,23 @@ def tool_rows() -> dict[str, str]:
     """{file name: status} for each row of the table under `## Test tools`."""
 
     return section_rows("Test tools")
+
+
+def image_build_rows() -> dict[str, str]:
+    """{repository-relative path: status} for each row under `## Image build files`."""
+
+    return section_rows("Image build files")
+
+
+def image_build_files() -> set[str]:
+    """Repository-relative paths of the image build files in the tree."""
+
+    return {
+        path.relative_to(REPO_ROOT).as_posix()
+        for pattern in IMAGE_BUILD_GLOBS
+        for path in REPO_ROOT.glob(pattern)
+        if path.is_file()
+    }
 
 
 def status_problem(status: str) -> str | None:
@@ -151,6 +177,27 @@ class SiblingDeltaTests(unittest.TestCase):
             with self.subTest(tool=tool):
                 problem = status_problem(status)
                 self.assertIsNone(problem, f"{tool}: status {status!r} {problem}")
+
+    def test_every_image_build_file_has_a_row_and_every_row_a_file(self) -> None:
+        files = image_build_files()
+        rows = image_build_rows()
+        self.assertIn("build_files/build-image.sh", files)
+        self.assertEqual(
+            sorted(files - set(rows)),
+            [],
+            "image build files docs/sibling-delta.md has no row for",
+        )
+        self.assertEqual(
+            sorted(set(rows) - files),
+            [],
+            "docs/sibling-delta.md rows for image build files the tree no longer has",
+        )
+
+    def test_every_image_build_file_status_is_an_allowed_form(self) -> None:
+        for path, status in sorted(image_build_rows().items()):
+            with self.subTest(path=path):
+                problem = status_problem(status)
+                self.assertIsNone(problem, f"{path}: status {status!r} {problem}")
 
     def test_the_last_sister_commit_reviewed_is_recorded(self) -> None:
         self.assertRegex(LEDGER.read_text(encoding="utf-8"), SISTER_COMMIT_RE)

@@ -609,6 +609,8 @@
   joined: tests/test_sibling_delta_doc.py
 ## Test tools
   joined: tests/test_sibling_delta_doc.py
+## Image build files
+  joined: tests/test_sibling_delta_doc.py
 
 [docs/signing-and-bootc.md]
 ## Short Version
