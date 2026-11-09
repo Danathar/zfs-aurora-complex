@@ -168,11 +168,11 @@ class GateTests(unittest.TestCase):
 
     def test_the_unmeasured_entries_are_counted_as_the_manifest_has_them(self) -> None:
         unmeasured = json.loads(THRESHOLDS.read_text("utf-8"))["unmeasured"]
-        self.assertEqual(len(unmeasured), 3)
+        self.assertEqual(len(unmeasured), 4)
         for path in unmeasured:
             with self.subTest(path=path):
                 self.assertIn(path.rsplit("/", 1)[-1], doc_text())
-        self.assertIn("two of the three entries", flat(doc_text()))
+        self.assertIn("two of the four entries", flat(doc_text()))
 
 
 class RefusalTests(unittest.TestCase):
