@@ -533,6 +533,39 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             f"{PRIMARY_KERNEL}. Cached akmods do not cover the supported kernel; rebuild akmods.",
         )
 
+    def test_run_cmd_raises_runtime_error_on_timeout(self) -> None:
+        # A timeout must surface as the same RuntimeError a nonzero exit
+        # raises, not a bare subprocess.TimeoutExpired traceback.
+        args = ["skopeo", "copy", "--src-creds", "actor:build-secret", "docker://x", "dir:/tmp/x"]
+        with (
+            patch.object(
+                helper.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired(args, 1800.0),
+            ),
+            self.assertRaises(RuntimeError) as context,
+        ):
+            helper._run_cmd(args, timeout=1800.0)
+
+        message = str(context.exception)
+        self.assertIn("timed out", message)
+        self.assertNotIn("build-secret", message)
+        self.assertIn("--src-creds ***REDACTED***", message)
+
+    def test_run_cmd_passes_timeout_to_subprocess(self) -> None:
+        with patch.object(helper.subprocess, "run") as subprocess_run:
+            subprocess_run.return_value = subprocess.CompletedProcess([], 0, stdout="ok")
+            helper._run_cmd(["skopeo", "copy"], timeout=12.5)
+
+        self.assertEqual(subprocess_run.call_args.kwargs["timeout"], 12.5)
+
+    def test_registry_transfer_timeout_matches_ci_tools(self) -> None:
+        # This script cannot import ci_tools at build time, so the ceiling is
+        # duplicated; pin the two together so they cannot drift apart.
+        from ci_tools.common import REGISTRY_TRANSFER_TIMEOUT
+
+        self.assertEqual(helper.REGISTRY_TRANSFER_TIMEOUT, REGISTRY_TRANSFER_TIMEOUT)
+
     def test_run_cmd_returns_stdout_and_passes_subprocess_options(self) -> None:
         args = ["rpm", "-E", "%fedora"]
         result = subprocess.CompletedProcess(args, 0, stdout="43\n", stderr="")
@@ -547,6 +580,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             check=False,
             capture_output=True,
             text=True,
+            timeout=None,
         )
 
     def test_run_cmd_returns_empty_string_when_output_is_not_captured(self) -> None:
@@ -563,6 +597,7 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
             check=False,
             capture_output=False,
             text=True,
+            timeout=None,
         )
 
     def test_run_cmd_refuses_non_zero_exit(self) -> None:
@@ -628,7 +663,10 @@ class InstallZfsFromAkmodsCacheTests(unittest.TestCase):
                         f"docker://{IMAGE_REF}",
                         f"dir:{layout_dir}",
                     ],
-                    {"capture_output": False},
+                    {
+                        "capture_output": False,
+                        "timeout": helper.REGISTRY_TRANSFER_TIMEOUT,
+                    },
                     False,
                 )
             ],

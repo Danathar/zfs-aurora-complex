@@ -38,6 +38,15 @@ DEFAULT_AKMODS_IMAGE_TEMPLATE = "ghcr.io/danathar/zfs-aurora-complex-akmods:main
 # kernel packaging change upstream doesn't silently break this install path.
 ZFS_KO_PAYLOAD_RE = re.compile(r"^/lib/modules/([^/]+)/extra/zfs/zfs\.ko(?:\.[a-z]+)?$")
 ZFS_KO_DISK_GLOB = "zfs.ko*"
+# Wall-clock ceiling in seconds for the `skopeo copy` that pulls the akmods
+# cache image. This mirrors `ci_tools.common.REGISTRY_TRANSFER_TIMEOUT` and is
+# duplicated because this script runs inside the image build with only
+# `shared/` on `sys.path`, so it cannot import from `ci_tools`. Keep the two
+# values in step. The copy transfers the ZFS RPM layers and already retries
+# three times, so half an hour is well above a healthy pull -- it is here so a
+# stalled registry connection aborts the image build with a clear error rather
+# than waiting for the job's own timeout.
+REGISTRY_TRANSFER_TIMEOUT = 1800.0
 
 
 @dataclass(frozen=True)
@@ -62,21 +71,33 @@ def _run_cmd(
     *,
     cwd: Path | None = None,
     capture_output: bool = True,
+    timeout: float | None = None,
 ) -> str:
     """
     Run one external command and return stdout as text.
 
     These builds depend on host tools such as `rpm`, `skopeo`, and `depmod`.
     Wrapping subprocess calls here keeps error reporting consistent.
+
+    `timeout` is a wall-clock ceiling in seconds, defaulting to `None` (wait
+    forever). Only the registry pull passes one: the other callers here are
+    local `rpm`/`dnf5`/`depmod` invocations whose runtime depends on the build
+    host, where any ceiling would be a guess. Exceeding it raises `RuntimeError`,
+    the same type a nonzero exit raises.
     """
 
-    result = subprocess.run(
-        args,
-        cwd=str(cwd) if cwd is not None else None,
-        check=False,
-        capture_output=capture_output,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd is not None else None,
+            check=False,
+            capture_output=capture_output,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        command = " ".join(redact_command_args(args))
+        raise RuntimeError(f"Command timed out after {timeout}s: {command}") from exc
     if result.returncode != 0:
         stderr = result.stderr.strip() if result.stderr else ""
         stdout = result.stdout.strip() if result.stdout else ""
@@ -159,6 +180,7 @@ def copy_oci_layout_from_registry(image_ref: str, layout_dir: Path = LAYOUT_DIR)
             f"dir:{layout_dir}",
         ],
         capture_output=False,
+        timeout=REGISTRY_TRANSFER_TIMEOUT,
     )
 
 
