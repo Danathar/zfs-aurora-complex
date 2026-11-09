@@ -1,0 +1,35 @@
+# Shapes tests/test_no_credential_in_argv.py must pass: the token reaches the
+# program on stdin, in a file, through the environment or as an input of an
+# action that does not put it on a command line. The two printf lines that
+# write a credentialed URL to a pipe and to a file are reported as allowed
+# rather than missed. Not a workflow; nothing runs it.
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Push with the job's login
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+        with:
+          registry: ghcr.io/owner
+          image: image
+      - name: Use the token without putting it on a command line
+        env:
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Never: git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          printf '%s' "${REGISTRY_TOKEN}" | podman login ghcr.io -u "${REGISTRY_ACTOR}" --password-stdin
+          printf '%s\n\n' "url=https://x-access-token:${GH_TOKEN}@github.com" | git credential approve
+          printf '%s\n' "https://x-access-token:${GH_TOKEN}@github.com" > "${RUNNER_TEMP}/git-credentials"
+          printf 'https://x-access-token:%s@github.com\n' "${GH_TOKEN}" > "${cred_file}"
+          encoded="$(printf '%s' "${REGISTRY_USER}:${REGISTRY_PASSWORD}" | base64 -w0)"
+          podman push --authfile "${auth_file}" "${IMAGE}" "docker://${IMAGE}"
+          mkdir -p "${RUNNER_TEMP}/bin"
+          git log -p --output="${RUNNER_TEMP}/log"

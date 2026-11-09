@@ -312,14 +312,22 @@ the trust policy is supposed to enforce.
    updating the image policy and registries.d scope.
 6. Do not pass any credential in command argv -- registry or otherwise.
    `/proc/<pid>/cmdline` is world-readable for the lifetime of a process, so a
-   token passed as `--creds`, `--registry-password`, or inside a
-   `https://user:token@host/...` URL is readable by anything else running on
-   the runner at that moment, including a step this repository did not write.
-   The rule was written for registry secrets and its reason never depended on
-   that: the last exception, a `github.token` handed to `git remote add` by the
-   status-branch publisher, was converted in #271, and the wording now matches
-   the reason. There are three ways a job here satisfies the rule, and all
-   three are in use:
+   token passed as `-p`, `--password`, `--creds`, `--registry-password`, or
+   inside a `https://user:token@host/...` URL is readable by anything else
+   running on the runner at that moment, including a step this repository did
+   not write. So is the `password:` input of `redhat-actions/push-to-registry`,
+   which that action hands to `podman push --creds`. The rule was written for
+   registry secrets and its reason never depended on that. Exceptions were
+   found and converted one at a time: the `github.token` the status-branch
+   publisher handed to `git remote add` (#271), and the akmods `Justfile`'s
+   `login` recipe, which `ci_tools/akmods_build_and_publish.py` runs as
+   `just login` and which passed the registry token to `podman login -p`
+   until Danathar/akmods#249 changed it to read the token on stdin.
+   `tests/test_no_credential_in_argv.py` now fails the build on the next one:
+   it reads every workflow and composite-action `run:` script, every tracked
+   `*.sh`, every argv list in `ci_tools/`, and the akmods recipes `ci_tools/`
+   runs, at the akmods ref `ci/defaults.json` names. There are four ways a job
+   here satisfies the rule, and all four are in use:
    - Authenticate the whole job with `docker/login-action` first and let
      `skopeo`/`cosign` pick the credential up from the Docker config. This is
      what `sign-akmods-cache`, `sign-candidate-image` and `promote-stable` do.
@@ -344,15 +352,20 @@ the trust policy is supposed to enforce.
      addresses it by the name `origin`. This also keeps the token out of
      `<work_dir>/.git/config`, where the URL form left it for the rest of the
      step.
+   - Pipe it to a program that reads it on stdin. The akmods `login` recipe
+     runs `printf '%s' "$REGISTRY_TOKEN" | podman login ... --password-stdin`,
+     and `printf` is a shell builtin, so no process starts with the token in
+     its arguments. A `printf` whose output becomes another command's
+     argument, through `$(...)`, puts the token right back in argv.
 
-   All three close the *cross-uid* hole that argv opens: `cmdline` is mode
-   0444, a credential file is mode 0600. None is a defense against a hostile
-   process running as the same uid in the same job, and nothing available
-   inside a job would be — that process can read the token straight out of
-   `/proc/<pid>/environ` (mode 0400) of the step it was passed to. Between the
-   two registry patterns, the per-command auth file is the tighter one: the
-   job-level login leaves the credential in `~/.docker/config.json` until the
-   job ends.
+   All four close the *cross-uid* hole that argv opens: `cmdline` is mode
+   0444, a credential file is mode 0600, and a pipe reaches only the process
+   reading it. None is a defense against a hostile process running as the
+   same uid in the same job, and nothing available inside a job would be —
+   that process can read the token straight out of `/proc/<pid>/environ`
+   (mode 0400) of the step it was passed to. Between the job-level login and
+   the per-command auth file, the auth file is the tighter one: the job-level
+   login leaves the credential in `~/.docker/config.json` until the job ends.
 
    `redact_command_args` in `shared/command_args.py` is a backstop for *error
    text* only. It cannot satisfy this rule, because it does nothing about the

@@ -1,0 +1,25 @@
+# Danathar/aurora-zfs-simple#150: the two skopeo inspects in its
+# nightly-compliance.yml as they were before its fix, each handed the registry
+# token as --creds, one with the flag on a continuation line. Not a workflow;
+# read as text by tests/test_no_credential_in_argv.py, which must flag both.
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the published :latest
+        env:
+          REGISTRY_ACTOR: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! raw=$(skopeo inspect --creds "${REGISTRY_ACTOR}:${REGISTRY_TOKEN}" \
+                       "docker://${IMAGE_REF}:latest" 2>err.txt); then
+            exit 1
+          fi
+      - name: Verify the date tags still share that digest
+        run: |
+          for tag in "latest.${DATE_TAG}" "${DATE_TAG}"; do
+            actual=$(skopeo inspect --format '{{.Digest}}' \
+                       --creds "${REGISTRY_ACTOR}:${REGISTRY_TOKEN}" \
+                       "docker://${IMAGE_REF}:${tag}")
+          done

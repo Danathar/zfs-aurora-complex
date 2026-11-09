@@ -1,0 +1,13 @@
+# Argv lists tests/test_no_credential_in_argv.py must pass: the credential
+# reaches the program in a file, on stdin or in an HTTP header, never in argv.
+# Not imported; read as Python source.
+
+
+def allowed(auth_dir, build_root, actor, token, ref):
+    run_cmd(["skopeo", "inspect", "--authfile", registry_auth_file(auth_dir), ref])
+    run_cmd(["mkdir", "-p", str(build_root)])
+    subprocess.run(["podman", "login", "-u", actor, "--password-stdin", "ghcr.io"], input=token)
+    run_cmd(["just", "login"], cwd="/tmp/akmods", capture_output=False)
+    run_cmd(["git", "remote", "add", "origin", f"https://github.com/{ref}.git"])
+    headers = {"Authorization": f"Bearer {token}"}
+    return headers

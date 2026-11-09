@@ -1,0 +1,9 @@
+# Danathar/aurora-zfs-simple#150: its ci/write-badges.sh as it was before its
+# fix, building skopeo's credential argument as --creds "actor:token". Named
+# .txt so nothing runs or lints it; tests/test_no_credential_in_argv.py reads it
+# as a shell script and must flag the array.
+
+creds_args=()
+if [ -n "${REGISTRY_ACTOR:-}" ] && [ -n "${REGISTRY_TOKEN:-}" ]; then
+  creds_args=(--creds "${REGISTRY_ACTOR}:${REGISTRY_TOKEN}")
+fi

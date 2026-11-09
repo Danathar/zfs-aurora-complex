@@ -1,0 +1,21 @@
+# Danathar/aurora-zfs-simple#463: a redhat-actions/push-to-registry step given
+# the job token as its `password:` input. The action passes that input to
+# `podman push --creds`, so the token is on podman's command line although no
+# run: script here names it. Not a workflow; read as text by
+# tests/test_no_credential_in_argv.py, which must flag the input.
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push To GHCR
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+        id: push
+        with:
+          registry: ghcr.io/owner
+          image: image
+          tags: |
+            latest
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+          extra-args: |
+            --disable-content-trust

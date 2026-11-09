@@ -1,0 +1,20 @@
+# Issue #155: the push step of .github/actions/publish-native-image/action.yml
+# as it was before PR #159 (zfs-kinoite-complex#139 is the same step), handing
+# podman the registry pair as --creds. Not an action; read as text by
+# tests/test_no_credential_in_argv.py, which must flag the push.
+runs:
+  using: composite
+  steps:
+    - name: Push transient tag with podman
+      id: push
+      shell: bash
+      env:
+        REGISTRY_USER: ${{ inputs.registry_username }}
+        REGISTRY_PASSWORD: ${{ inputs.registry_password }}
+      run: |
+        set -euo pipefail
+        podman push \
+          --digestfile "${RUNNER_TEMP}/digest" \
+          --creds "${REGISTRY_USER}:${REGISTRY_PASSWORD}" \
+          "${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}" \
+          "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${TRANSIENT_IMAGE_TAG}"
