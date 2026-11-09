@@ -3,13 +3,13 @@ Script: tests/test_signing_and_bootc_doc.py
 What: Joins docs/signing-and-bootc.md to the tree it describes -- ci_tools/sign_image.py,
 ci_tools/promote_stable.py, ci_tools/common.py, files/scripts/configure_signing_policy.py,
 build_files/build-image.sh, .github/actions/publish-native-image/action.yml,
-.github/workflows/build.yml and the pages that cite this one, including the four files that
+.github/workflows/build.yml and the pages that cite this one, including the five files that
 cite it by gotcha number.
 Doing: Recomputes each claim instead of restating it. The cosign flags come out of
 sign_image.py's real argv by AST; the trust-policy JSON and the registries.d YAML come out of
 configure_signing_policy.py by running it; the key path is derived from ci/defaults.json's
 IMAGE_NAME through the workflow input that builds it; the publication order is read off the
-action's step names and promote_stable.main()'s call order; the three credential mechanisms
+action's step names and promote_stable.main()'s call order; the four credential mechanisms
 gotcha 6 names are each checked where they live; and `gotcha 6` is parsed out of every file
 that cites it and resolved against this page's numbered list.
 Why: No test at any tier opened this file. Repo-wide, `grep -rn signing-and-bootc tests/`
@@ -78,6 +78,7 @@ GOTCHA_CITERS = (
     REPO_ROOT / "tests" / "test_common.py",
     REPO_ROOT / "tests" / "test_action_publish_native_image.py",
     REPO_ROOT / "tests" / "test_workflow_build_container.py",
+    REPO_ROOT / "tests" / "test_no_credential_in_argv.py",
     TRIAGE_WORKFLOW,
 )
 
@@ -393,11 +394,11 @@ class DocumentShapeTests(unittest.TestCase):
 
 class GotchaCitationTests(unittest.TestCase):
     """
-    Three files cite one of this page's gotchas by number.
+    Five files cite one of this page's gotchas by number.
 
     The number is parsed out of each citing file and resolved here, so renumbering the list --
     inserting a gotcha above it, or dropping one -- fails instead of silently retargeting
-    three comments at a different rule.
+    those citations at a different rule.
     """
 
     def setUp(self) -> None:
@@ -452,8 +453,8 @@ class GotchaCitationTests(unittest.TestCase):
         """The sentence announcing the list and the list itself have to agree."""
 
         item = self._item_body(self._argv_gotcha_number())
-        self.assertIn("three ways a job here satisfies the rule", re.sub(r"\s+", " ", item))
-        self.assertEqual(len(re.findall(r"^\s*- ", item, flags=re.MULTILINE)), 3)
+        self.assertIn("four ways a job here satisfies the rule", re.sub(r"\s+", " ", item))
+        self.assertEqual(len(re.findall(r"^\s*- ", item, flags=re.MULTILINE)), 4)
 
     def test_the_rule_states_the_hole_it_does_not_close(self) -> None:
         """
@@ -895,7 +896,13 @@ class PublicationOrderTests(unittest.TestCase):
 
 
 class CredentialMechanismTests(unittest.TestCase):
-    """Gotcha 6 names three ways a job satisfies it. Each is checked where it lives."""
+    """
+    Gotcha 6 names four ways a job satisfies it. Each is checked where it lives.
+
+    The fourth, the akmods `login` recipe piping the token to `--password-stdin`, lives in
+    Danathar/akmods and is checked by tests/test_no_credential_in_argv.py at the akmods ref the
+    build checks out.
+    """
 
     def setUp(self) -> None:
         self.jobs = _yaml_blocks(

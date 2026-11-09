@@ -1,0 +1,18 @@
+# Issue #266: the status-branch publisher in akmods-failure-triage.yml as it
+# was before PR #271 (zfs-kinoite-complex#147 and aurora-zfs-simple#155 are the
+# same step), with the job's token spliced into the git remote URL. Not a
+# workflow; read as text by tests/test_no_credential_in_argv.py.
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish badges to status branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          work_dir="$(mktemp -d)"
+          cd "$work_dir"
+          git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"

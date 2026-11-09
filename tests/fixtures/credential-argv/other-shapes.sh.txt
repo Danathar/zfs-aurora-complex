@@ -1,0 +1,19 @@
+# Other spellings of the same mistake. Named .txt so nothing runs or lints it;
+# tests/test_no_credential_in_argv.py reads it as a shell script and must flag
+# every command below.
+
+# podman login -p, the shape of the akmods `login` recipe before akmods#249.
+podman login ghcr.io -u "$REGISTRY_ACTOR" -p "$REGISTRY_TOKEN"
+# -p glued to an Actions expression.
+docker login -u me -p${{ secrets.PAT }} ghcr.io
+# A long flag joined with =.
+podman login --password=$REGISTRY_SECRET quay.io
+# --registry-password, given a quoted expression with spaces inside it.
+cosign sign --registry-username "${GITHUB_ACTOR}" --registry-password "${{ github.token }}" "${IMAGE_REF}"
+# --dest-creds with an expression that has a subscript inside it.
+skopeo copy --dest-creds me:${{ secrets['GHCR_PAT'] }} docker://a docker://b
+# A token in a URL with any user name, unquoted.
+git push https://oauth2:$CI_JOB_TOKEN@gitlab.example.com/group/repo.git HEAD
+# printf counts only when it writes to a pipe or a file. Here its output
+# becomes git's argument, so the token is on git's command line.
+git clone "$(printf '%s' "https://x-access-token:${GH_TOKEN}@github.com/o/r.git")" repo

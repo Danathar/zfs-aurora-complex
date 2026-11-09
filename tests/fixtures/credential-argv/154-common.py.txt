@@ -1,0 +1,29 @@
+# Issue #154: the three registry helpers in ci_tools/common.py as they were
+# before PR #156 (zfs-kinoite-complex#135 is the same code), each handing the
+# `actor:token` pair to skopeo or cosign as an argument. Not imported; read as
+# Python source by tests/test_no_credential_in_argv.py, which must flag all four.
+
+
+def skopeo_inspect_json(image_ref, *, creds=None):
+    command = ["skopeo", "inspect"]
+    if creds:
+        command.extend(["--creds", creds])
+    command.append(image_ref)
+    return run_json_cmd(command)
+
+
+def skopeo_copy(source, destination, *, creds=None, retry_times=3):
+    command = ["skopeo", "copy", "--retry-times", str(retry_times)]
+    if creds:
+        command.extend(["--src-creds", creds, "--dest-creds", creds])
+    command.extend([source, destination])
+    run_cmd(command, capture_output=False)
+
+
+def cosign_verify(image_ref, key_path, *, creds=None):
+    command = ["cosign", "verify", "--key", key_path]
+    if creds:
+        username, _separator, password = creds.partition(":")
+        command.extend(["--registry-username", username, "--registry-password", password])
+    command.append(image_ref)
+    run_cmd(command)

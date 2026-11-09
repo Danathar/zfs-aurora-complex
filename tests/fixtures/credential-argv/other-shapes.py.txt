@@ -1,0 +1,10 @@
+# Other ways an argv list in ci_tools/ could carry a secret. Not imported; read
+# as Python source by tests/test_no_credential_in_argv.py, which must flag each
+# run_cmd call below.
+
+
+def login(actor, ref, token, secret_value):
+    run_cmd(["podman", "login", "-u", actor, "-p", os.environ["REGISTRY_TOKEN"], "ghcr.io"])
+    run_cmd(["podman", "push", f"--creds={actor}:{require_env('REGISTRY_TOKEN')}", ref])
+    run_cmd(["git", "push", f"https://x-access-token:{token}@github.com/o/r.git", "HEAD"])
+    run_cmd(("docker", "login", "--password", secret_value, "ghcr.io"))
