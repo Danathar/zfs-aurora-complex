@@ -66,6 +66,10 @@ NOT_ROOT_PATHS: dict[str, str | None] = {
     "build.yml": ".github/workflows/build.yml",  # "every workflow and not only `build.yml`"
     "usr/lib/modules-load.d/zfs.conf": "files/usr/lib/modules-load.d/zfs.conf",  # under `files/`
     "usr/lib/tmpfiles.d/zfs-aurora-complex.conf": "files/usr/lib/tmpfiles.d/zfs-aurora-complex.conf",
+    "etc/profile.d/brew-path.sh": "files/etc/profile.d/brew-path.sh",
+    "usr/lib/systemd/system/brew-setup.service.d/10-private-tmp.conf": (
+        "files/usr/lib/systemd/system/brew-setup.service.d/10-private-tmp.conf"
+    ),
     "defaults.json": "ci/defaults.json",  # "`ci/` (the parts of `defaults.json` ...)"
     "inputs.lock.json": "ci/inputs.lock.json",
     # The ci/defaults.json keys Tier 3 names; checked against the file below.

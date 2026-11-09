@@ -40,8 +40,11 @@ Labelled `area/safety-critical`.
 - `files/scripts/configure_signing_policy.py`
 - `files/`, because the image build copies what is under it onto every booted
   machine: today the ZFS module autoload (`usr/lib/modules-load.d/zfs.conf`),
-  a tmpfiles.d entry (`usr/lib/tmpfiles.d/zfs-aurora-complex.conf`) and the
-  signing-policy script above
+  a tmpfiles.d entry (`usr/lib/tmpfiles.d/zfs-aurora-complex.conf`), the
+  Homebrew PATH fragment every login shell reads
+  (`etc/profile.d/brew-path.sh`), the Homebrew first-boot unit's private-/tmp
+  drop-in (`usr/lib/systemd/system/brew-setup.service.d/10-private-tmp.conf`)
+  and the signing-policy script above
 - `cosign.pub`, `ci/defaults.json`'s ZFS and base-image values
   (`DEFAULT_ZFS_MINOR_VERSION`, `DEFAULT_BASE_IMAGE`, `STABLE_SIGNAL_IMAGE`,
   `DEFAULT_BUILD_CONTAINER_IMAGE`)

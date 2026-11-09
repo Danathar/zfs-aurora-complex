@@ -150,10 +150,12 @@ stops being unconditionally safe when the ZFS line changes: see
 `tests/e2e/` mocks every external call, and `tests/e2e/` runs the CLI as a
 subprocess but touches no registry, `cosign`, `podman`, or `git`. The
 `Containerfile` and `build_files/build-image.sh` execute only inside an image
-build, against a real RPM database and module tree. They are two of the three
-entries in `.coverage-thresholds.json`'s `unmeasured` section (the third is the
+build, against a real RPM database and module tree. They are two of the four
+entries in `.coverage-thresholds.json`'s `unmeasured` section (the others are the
 agent gate hook `.claude/hooks/gate-git-diff.sh`, which is bash and which
-`tests/test_git_diff_gate.py` does run), and a green suite is not evidence for a
+`tests/test_git_diff_gate.py` does run, and the login-shell fragment
+`files/etc/profile.d/brew-path.sh`, which `tests/test_build_image_brew_fragments.py`
+runs under bash against a fixture prefix), and a green suite is not evidence for a
 change to either of the two.
 
 The image-side *Python* is a different case and worth separating, because
