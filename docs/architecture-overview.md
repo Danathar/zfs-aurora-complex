@@ -328,16 +328,46 @@ manifest.
 
 1. installs the committed `cosign.pub` public key into the image trust-material path
 2. enables brew setup/update services via `systemctl preset`
-3. keeps Distrobox from the upstream Aurora DX image
-4. installs `crun-krun` with `dnf5`, pinned to the exact `crun` version-release the
+3. removes the brew login-shell fragments the base image ships, installs
+   [`files/etc/profile.d/brew-path.sh`](../files/etc/profile.d/brew-path.sh) in their place, and
+   fails the build if the base image ever ships another one
+4. installs a `PrivateTmp=yes` drop-in for `brew-setup.service`, and fails the build if
+   that unit ever stages somewhere the drop-in does not contain
+5. keeps Distrobox from the upstream Aurora DX image
+6. installs `crun-krun` with `dnf5`, pinned to the exact `crun` version-release the
    base image already ships, which adds the `krun` OCI runtime
    (`podman run --runtime krun ...`) next to the default `crun`. The pin keeps the
    base image's `crun` from being upgraded; if that build is unavailable the build
    fails instead
-5. runs the ZFS install helper against the resolved akmods cache image reference
-6. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
-7. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
-8. removes build-only runtime/container state
+7. runs the ZFS install helper against the resolved akmods cache image reference
+8. writes repository-specific signing policy for `ghcr.io/danathar/zfs-aurora-complex`
+9. installs the local `tmpfiles.d` declaration needed for `bootc container lint`
+10. removes build-only runtime/container state
+
+Step 3 is a trust boundary, not tidying. `brew-setup.service` ends with
+`chown -R 1000:1000 /home/linuxbrew`, so the Homebrew prefix is owned by the
+desktop user on every booted machine, and the fragments Aurora ships in
+`/etc/profile.d` and the fish vendor directory `eval` and source code out of
+that prefix in every login shell, root's included. The replacement puts the
+prefix on `PATH` for the account that owns it and executes nothing from it, so
+`brew` still works for that user and no login shell runs user-writable code as
+root. The cost is a departure from Aurora's defaults: the environment
+`brew shellenv` sets and brew's bash completions are no longer loaded at login.
+The sweep runs at build time because which files the aurora-dx base carries is
+decided upstream and changes whenever the base image moves.
+
+Step 4 closes the other half of that boundary: how the prefix gets there.
+`brew-setup.service` stages the Homebrew tarball through the fixed path
+`/tmp/homebrew` as root, with `mkdir -p`, then `tar -C`, then
+`cp -R -n /tmp/homebrew/… /home/linuxbrew`, then the `chown`. On a booted system
+`/tmp` is world-writable and `mkdir -p` exits 0 on an existing symlink rather
+than replacing it, so an account that creates that name first has root extract
+through its symlink and has its own extra files copied into the prefix UID 1000
+then owns. The drop-in gives the unit its own `/tmp` and `/var/tmp` instead of
+restating upstream's `ExecStart=` chain, which a base image update would silently
+outdate; `/home/linuxbrew` is outside both, so the payload still lands where it
+should. The accompanying check fails the build if a future base image stages
+outside those two directories, or stops shipping the unit at all.
 
 There is no explicit `ostree container commit` step: the `RUN bootc container
 lint` that follows already performs the equivalent validation/finalization, so

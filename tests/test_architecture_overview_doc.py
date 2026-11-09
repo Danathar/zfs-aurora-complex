@@ -12,7 +12,7 @@ build. That stays true. What this file adds is narrower:
   * The step list under "`build-image.sh` then:" is a hand copy of the
     script's order. Each documented step is joined to the line that performs
     it, never to a mention in a comment, so a reorder in either file fails.
-  * The `crun-krun` install (step 4 in the document) is the one decision the
+  * The `crun-krun` install (step 6 in the document) is a decision the
     script makes itself rather than delegating to a measured Python helper.
     `crun-krun` Requires the exact `crun` version-release, so an unversioned
     install would upgrade the base image's `crun` whenever Fedora updates runs
@@ -112,7 +112,7 @@ class NumberedListParserTests(unittest.TestCase):
 
 
 class BuildImageStepOrderTests(unittest.TestCase):
-    """The eight-step list for build_files/build-image.sh, in the script's order."""
+    """The ten-step list for build_files/build-image.sh, in the script's order."""
 
     # One anchor per documented step, in the documented order. The anchors are
     # what the step acts on, not its wording: the doc may rephrase a step, but
@@ -123,6 +123,8 @@ class BuildImageStepOrderTests(unittest.TestCase):
     ANCHORS = (
         ("installs the committed `cosign.pub`", 'install -m 0644 /ctx/cosign.pub "/etc/pki'),
         ("enables brew setup/update services", "\n/usr/bin/systemctl preset brew-setup.service\n"),
+        ("removes the brew login-shell fragments", "\ncheck_brew_login_fragments\n"),
+        ("installs a `PrivateTmp=yes` drop-in", "\ncheck_brew_setup_staging\n"),
         ("keeps Distrobox", "\n# Distrobox is already included by upstream Aurora."),
         ("installs `crun-krun` with `dnf5`", '\ndnf5 -y install "crun-krun-${crun_evr}"\n'),
         (
@@ -161,12 +163,12 @@ class BuildImageStepOrderTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions), "build-image.sh reordered its steps")
 
     def test_the_crun_krun_step_states_the_pin(self) -> None:
-        step = self.items[3]
+        step = self.items[5]
         self.assertIn("pinned to the exact `crun` version-release", step)
         self.assertIn("the build fails instead", step)
 
     def test_the_signing_policy_step_names_the_repository_the_containerfile_passes(self) -> None:
-        self.assertIn("for `ghcr.io/danathar/zfs-aurora-complex`", self.items[5])
+        self.assertIn("for `ghcr.io/danathar/zfs-aurora-complex`", self.items[7])
         self.assertIn(
             'ARG IMAGE_REPO="ghcr.io/danathar/zfs-aurora-complex"\n', read("Containerfile")
         )
