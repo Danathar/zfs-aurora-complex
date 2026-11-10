@@ -42,6 +42,7 @@
     ],
     "deny": [
       "Read(./cosign.key)",
+      "Read(./cosign.key.*)",
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./**/*.pem)",

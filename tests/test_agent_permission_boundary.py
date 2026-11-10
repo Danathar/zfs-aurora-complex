@@ -359,6 +359,7 @@ class SettingsFileTests(unittest.TestCase):
             if READ_RULE_RE.match(rule)
         ]
         self.assertIn("./cosign.key", read_denials)
+        self.assertIn("./cosign.key.*", read_denials)
         self.assertNotIn("./cosign.pub", read_denials)
         for pattern in read_denials:
             with self.subTest(pattern=pattern):
@@ -672,6 +673,7 @@ class SecurityDocBoundaryTests(unittest.TestCase):
     }
     DENIED_READS: ClassVar[dict[str, str]] = {
         "`cosign.key`": "Read(./cosign.key)",
+        "`cosign.key.*`": "Read(./cosign.key.*)",
         "`.env` files": "Read(./.env)",
         "`.pem`": "Read(./**/*.pem)",
         "`.p12`": "Read(./**/*.p12)",
