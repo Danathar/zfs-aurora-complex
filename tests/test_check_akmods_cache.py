@@ -29,6 +29,36 @@ from ci_tools.check_akmods_cache import (
 from ci_tools.common import CiToolError
 
 
+def _parse_github_outputs(path: Path) -> dict[str, str]:
+    """
+    Parse a GITHUB_OUTPUT file the way GitHub Actions does.
+
+    The format is `name<<DELIMITER`, then the value lines, then a line holding
+    only the delimiter. Parsing it rather than substring-matching the text is
+    the point: `assertIn("exists<<", text)` says nothing about the value the
+    prepare-main-akmods action compares against "true".
+    """
+
+    values: dict[str, str] = {}
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = 0
+    while index < len(lines):
+        header = lines[index]
+        if "<<" not in header:
+            raise AssertionError(f"line {index + 1} is not a heredoc header: {header!r}")
+        name, delimiter = header.split("<<", 1)
+        index += 1
+        body: list[str] = []
+        while index < len(lines) and lines[index] != delimiter:
+            body.append(lines[index])
+            index += 1
+        if index >= len(lines):
+            raise AssertionError(f"{name} is never terminated by its delimiter {delimiter!r}")
+        index += 1
+        values[name] = "\n".join(body)
+    return values
+
+
 class CheckAkmodsCacheTests(unittest.TestCase):
     def test_reports_missing_primary_kernel_rpm(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -541,6 +571,60 @@ class RequireMatchModeTests(unittest.TestCase):
                 main()
 
             self.assertIn("exists<<", output_path.read_text(encoding="utf-8"))
+
+    def test_default_mode_requests_a_rebuild_when_no_cache_image_exists(self) -> None:
+        # The first build after a Fedora major bump finds no main-<N> tag at
+        # all. That must be an ordinary "rebuild" answer, and it must not hand
+        # the later steps a cache image to pull.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            env = {**self._ENV, "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=False,
+                ),
+            ), contextlib.redirect_stdout(io.StringIO()) as out:
+                os.environ.pop("REQUIRE_MATCH", None)
+                main()
+
+            self.assertEqual(_parse_github_outputs(output_path), {"exists": "false"})
+            self.assertIn(
+                "No existing shared akmods cache image for Fedora 43; rebuild is required.",
+                out.getvalue(),
+            )
+
+    def test_default_mode_refuses_to_reuse_a_matching_cache_whose_signature_failed(self) -> None:
+        # Right kmod-zfs, but cosign could not verify it against this repo's
+        # key. Content alone is not enough to reuse a cache someone else could
+        # have pushed, so the answer is a rebuild and no image ref is exported.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            env = {**self._ENV, "GITHUB_OUTPUT": str(output_path)}
+            with patch.dict(os.environ, env, clear=False), patch(
+                "ci_tools.check_akmods_cache.inspect_akmods_cache",
+                return_value=AkmodsCacheStatus(
+                    source_image="ghcr.io/danathar/zfs-aurora-complex-akmods:main-43",
+                    image_exists=True,
+                    source_image_pinned=self._PINNED,
+                    missing_release="",
+                    required_zfs_version="2.4.4",
+                    signature_verified=False,
+                ),
+            ), contextlib.redirect_stdout(io.StringIO()) as out:
+                os.environ.pop("REQUIRE_MATCH", None)
+                main()
+
+            self.assertEqual(_parse_github_outputs(output_path), {"exists": "false"})
+            printed = out.getvalue()
+            self.assertIn(
+                "its cosign signature could not be verified against cosign.pub; "
+                "akmods rebuild is required.",
+                printed,
+            )
+            self.assertIn(self._PINNED, printed)
+            self.assertNotIn("is present but has no kmod-zfs", printed)
 
 
     def test_require_match_checks_the_pinned_digest_not_the_tag(self) -> None:
