@@ -85,6 +85,7 @@ class SettingsRowTests(unittest.TestCase):
         deny = set(_permissions()["deny"])
         claims = {
             "`cosign.key`": "Read(./cosign.key)",
+            "`cosign.key.*`": "Read(./cosign.key.*)",
             "`.env`": "Read(./.env)",
             "Signing": "Bash(cosign sign:*)",
             "registry pushes": "Bash(podman push:*)",
