@@ -88,6 +88,9 @@ applies as-is. What each rule does:
   and no `if:`. `Build PR Image (No Push)` in `build-pr.yml` is not required,
   because `build-pr.yml` ignores Markdown and `docs/**`, so a docs-only pull
   request never gets it and would wait forever.
+  `Check the agent signature line` in `agent-signature.yml` runs only on Hive
+  pull requests and is advisory for now; it can be added here once it has run
+  clean for a month.
   `integration_id` 15368 is GitHub Actions, so a status with the same name
   posted by anything else does not count.
   `strict_required_status_checks_policy` is on, so a pull request must be up

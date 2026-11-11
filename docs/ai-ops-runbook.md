@@ -222,6 +222,23 @@ Every file in `.github/workflows/` has an entry here.
 - **Detail:** the header of `.github/workflows/agent-audit.yml`. What each part of
   the record means: [`agent-tasks/README.md`](./agent-tasks/README.md).
 
+### `agent-signature.yml` — "Agent PR signature"
+
+- **Means:** the signature half of `agent-audit.yml`, asked of an open pull
+  request instead of a merged one. Its job "Check the agent signature line" runs
+  on a pull request that `danathar-atomic-hive[bot]` opened and is skipped on
+  every other one. It fails when the description's last line is not a `— hive:`
+  signature line, judged by the same definition the audit uses. Its token has no
+  permissions.
+- **Advisory:** it is not a required check, so a red run does not stop a merge.
+  It can be made required once it has run clean for a month.
+- **First, if it is red:** add the signature line as the last line of the
+  description and save it. Saving the description runs the check again; no new
+  commit is needed.
+- **Detail:** the header of `.github/workflows/agent-signature.yml`.
+  `tests/test_workflow_agent_signature.py` fails if its signature definition and
+  the audit's differ.
+
 ## Sticky akmods failure issues
 
 - **What they look like:** author `app/github-actions`, label `akmods-failure`, and

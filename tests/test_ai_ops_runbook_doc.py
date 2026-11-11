@@ -29,6 +29,7 @@ QUOTED_JOBS = {
     "akmods-failure-triage.yml": ["Manage sticky akmods failure issue"],
     "auto-issues.yml": ["Open, update or close the tracking issue"],
     "agent-audit.yml": ["Read back merged agent pull requests"],
+    "agent-signature.yml": ["Check the agent signature line"],
 }
 
 
@@ -190,6 +191,28 @@ class RenovateEntryTests(unittest.TestCase):
     def test_renovate_rebases_only_a_conflicting_branch(self) -> None:
         self.assertIn("`rebaseWhen` to `conflicted`", doc_text())
         self.assertIn('"rebaseWhen": "conflicted"', (REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+
+
+class AgentSignatureEntryTests(unittest.TestCase):
+    def test_it_runs_only_on_the_hive_apps_pull_requests(self) -> None:
+        text = workflow_text("agent-signature.yml")
+        self.assertIn("if: github.event.pull_request.user.login == 'danathar-atomic-hive[bot]'\n", text)
+        self.assertIn("pull request that `danathar-atomic-hive[bot]` opened", flat(entries()["agent-signature.yml"]))
+
+    def test_its_token_has_no_permissions(self) -> None:
+        text = workflow_text("agent-signature.yml")
+        self.assertIn("    permissions: {}\n", text)
+        self.assertNotIn("uses:", text)
+        self.assertIn("Its token has no permissions.", flat(entries()["agent-signature.yml"]))
+
+    def test_saving_the_description_runs_it_again(self) -> None:
+        self.assertIn("      - edited\n", workflow_text("agent-signature.yml"))
+        self.assertIn("Saving the description runs the check again", entries()["agent-signature.yml"])
+
+    def test_it_is_not_a_required_check(self) -> None:
+        ruleset = (REPO_ROOT / ".github" / "rulesets" / "main.json").read_text(encoding="utf-8")
+        self.assertNotIn("Check the agent signature line", ruleset)
+        self.assertIn("it is not a required check", entries()["agent-signature.yml"])
 
 
 class QuotedHeadingTests(unittest.TestCase):

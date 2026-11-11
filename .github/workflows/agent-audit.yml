@@ -117,7 +117,9 @@ jobs:
           # request opens. The first field is not pinned to `agent=`: the
           # omp-backed runs sign `— hive: backend=omp model=...` with no role.
           # Both jq programs below read the signature through this one
-          # definition.
+          # definition. agent-signature.yml asks the same question of an open
+          # pull request with an exact copy of it, and
+          # tests/test_workflow_agent_signature.py fails when the two differ.
           signature_def='def signature:
             (.body // "") | split("\n") | map(sub("\\s+$"; "")) | map(select(length > 0))
             | map(select(test("^\\s*<!--.*-->\\s*$") | not)) | (last // "")
