@@ -98,6 +98,8 @@ The signature is **a hint, not proof**. Anyone can type that line into a comment
 Check the author, not the text. `.github/workflows/agent-audit.yml` checks the
 second of these on merged pull requests: that a Hive pull request has the line and
 that commits on agent pull requests carry a `Signed-off-by:` trailer.
+`.github/workflows/agent-signature.yml` looks for the line while a Hive pull
+request is still open, so a missing one can be added before the merge.
 
 ### The branch prefix
 

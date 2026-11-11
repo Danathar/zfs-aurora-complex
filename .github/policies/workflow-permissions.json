@@ -7,6 +7,12 @@
         "audit": {"contents": "read", "pull-requests": "read"}
       }
     },
+    "agent-signature.yml": {
+      "workflow": null,
+      "jobs": {
+        "signature": "{}"
+      }
+    },
     "akmods-failure-triage.yml": {
       "workflow": null,
       "jobs": {
