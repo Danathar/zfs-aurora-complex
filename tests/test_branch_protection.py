@@ -1,7 +1,8 @@
 """
 Script: tests/test_branch_protection.py
-What: Joins docs/branch-protection.md to .github/rulesets/main.json, the ruleset that keeps `main`
-behind a pull request, and joins the ruleset's required check to the workflow job that reports it.
+What: Joins docs/branch-protection.md to .github/rulesets/main.json and main-checks.json, the two
+rulesets that keep `main` behind a pull request, and joins the required check to the workflow job
+that reports it.
 Doing: Compares the page's rule bullets and commands to the JSON (rule types, target, bypass list,
 approval count, required check names and `integration_id`). Reads test.yml as text, with no YAML
 parser, and checks the required check is a job named exactly that, that the workflow triggers on
@@ -29,12 +30,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PAGE = REPO_ROOT / "docs" / "branch-protection.md"
 RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
+CHECKS_RULESET = REPO_ROOT / ".github" / "rulesets" / "main-checks.json"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 TEST_WORKFLOW = WORKFLOWS / "test.yml"
 RISK_TIERS = REPO_ROOT / "docs" / "risk-tiers.md"
 SECURITY = REPO_ROOT / "docs" / "SECURITY-AI.md"
 
 GITHUB_ACTIONS_APP_ID = 15368
+# The Renovate GitHub App (`gh api /apps/renovate`), the one actor allowed to bypass `protect main`,
+# and only by merging a pull request.
+RENOVATE_BYPASS = {"actor_id": 2740, "actor_type": "Integration", "bypass_mode": "pull_request"}
 REPO_SLUG = "Danathar/zfs-aurora-complex"
 RULE_TYPES = {"deletion", "non_fast_forward", "pull_request", "required_status_checks"}
 NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4}
@@ -84,7 +89,19 @@ def bullets(body: str) -> list[str]:
 
 
 def load_ruleset() -> dict:
+    """`protect main` alone: everything but the required check."""
     return json.loads(RULESET.read_text(encoding="utf-8"))
+
+
+def load_checks_ruleset() -> dict:
+    """`required checks` alone."""
+    return json.loads(CHECKS_RULESET.read_text(encoding="utf-8"))
+
+
+def load_committed() -> dict:
+    """Both files' rules together, which is what GitHub enforces on the branch."""
+    main = load_ruleset()
+    return {**main, "rules": [*main["rules"], *load_checks_ruleset()["rules"]]}
 
 
 def rules_by_type(ruleset: dict) -> dict[str, dict]:
@@ -113,19 +130,36 @@ def job_blocks(workflow_text: str) -> dict[str, str]:
 class RulesetKeepsMainBehindAPullRequest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.ruleset = load_ruleset()
+        cls.main = load_ruleset()
+        cls.checks = load_checks_ruleset()
+        cls.ruleset = load_committed()
         cls.rules = rules_by_type(cls.ruleset)
 
-    def test_it_is_enforced_on_the_default_branch(self) -> None:
-        self.assertEqual(self.ruleset["target"], "branch")
-        self.assertEqual(self.ruleset["enforcement"], "active")
-        self.assertEqual(self.ruleset["conditions"]["ref_name"]["include"], ["~DEFAULT_BRANCH"])
-        self.assertEqual(self.ruleset["conditions"]["ref_name"].get("exclude", []), [])
+    def test_both_are_enforced_on_the_default_branch(self) -> None:
+        for ruleset in (self.main, self.checks):
+            with self.subTest(ruleset=ruleset["name"]):
+                self.assertEqual(ruleset["target"], "branch")
+                self.assertEqual(ruleset["enforcement"], "active")
+                self.assertEqual(ruleset["conditions"]["ref_name"]["include"], ["~DEFAULT_BRANCH"])
+                self.assertEqual(ruleset["conditions"]["ref_name"].get("exclude", []), [])
+        self.assertEqual(self.main["name"], "protect main")
+        self.assertEqual(self.checks["name"], "required checks")
 
-    def test_nothing_may_bypass_it(self) -> None:
-        # A bypass for Actions or for an App hands back the direct push, and it is the fix
-        # someone reaches for the first time a workflow's push to main is refused.
-        self.assertEqual(self.ruleset.get("bypass_actors"), [])
+    def test_only_renovate_may_bypass_and_only_through_a_pull_request(self) -> None:
+        # A bypass for Actions or for an App in `always` mode hands back the direct push, and it
+        # is the fix someone reaches for the first time a workflow's push to main is refused.
+        self.assertEqual(self.main.get("bypass_actors"), [RENOVATE_BYPASS])
+
+    def test_nothing_may_bypass_the_required_check(self) -> None:
+        # A bypass skips only the rules of the ruleset that lists it. The check is in a ruleset
+        # of its own so that the Renovate bypass cannot skip it.
+        self.assertEqual(self.checks.get("bypass_actors"), [])
+        self.assertEqual([rule["type"] for rule in self.checks["rules"]], ["required_status_checks"])
+        self.assertNotIn("required_status_checks", {rule["type"] for rule in self.main["rules"]})
+
+    def test_strict_mode_is_off(self) -> None:
+        # Bump pull requests no longer have to be brought up to date with main; see the page.
+        self.assertIs(self.rules["required_status_checks"]["strict_required_status_checks_policy"], False)
 
     def test_it_carries_the_four_rules_and_no_others(self) -> None:
         self.assertEqual(set(self.rules), RULE_TYPES)
@@ -150,7 +184,7 @@ class EveryPullRequestGetsTheRequiredCheck(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.text = TEST_WORKFLOW.read_text(encoding="utf-8")
-        cls.contexts = [check["context"] for check in required_checks(load_ruleset())]
+        cls.contexts = [check["context"] for check in required_checks(load_committed())]
 
     def test_each_required_check_is_a_job_in_test_yml(self) -> None:
         self.assertTrue(self.contexts)
@@ -178,13 +212,15 @@ class EveryPullRequestGetsTheRequiredCheck(unittest.TestCase):
 
 
 class ThePageMatchesTheRuleset(unittest.TestCase):
-    """docs/branch-protection.md, joined to .github/rulesets/main.json both ways."""
+    """docs/branch-protection.md, joined to .github/rulesets/main.json and main-checks.json."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.page = PAGE.read_text(encoding="utf-8")
         cls.prose = outside_fences(cls.page)
-        cls.ruleset = load_ruleset()
+        cls.main = load_ruleset()
+        cls.checks = load_checks_ruleset()
+        cls.ruleset = load_committed()
         cls.rules = rules_by_type(cls.ruleset)
         cls.contexts = [check["context"] for check in required_checks(cls.ruleset)]
         cls.leads: dict[str, str] = {}
@@ -209,11 +245,25 @@ class ThePageMatchesTheRuleset(unittest.TestCase):
 
     def test_the_target_the_page_names_is_the_files(self) -> None:
         key, _ = self.lead(r"^Targets ")
-        self.assertEqual(BACKTICKED_RE.findall(key), self.ruleset["conditions"]["ref_name"]["include"])
+        for ruleset in (self.main, self.checks):
+            self.assertEqual(BACKTICKED_RE.findall(key), ruleset["conditions"]["ref_name"]["include"])
 
     def test_the_bypass_list_the_page_states_is_the_files(self) -> None:
-        key, _ = self.lead(r"bypass")
-        self.assertEqual(key.startswith("No bypass actors"), self.ruleset.get("bypass_actors") == [])
+        key, body = self.lead(r"bypass")
+        self.assertTrue(key.startswith("One bypass actor, the Renovate app"), key)
+        self.assertIn("only through a pull request", key)
+        self.assertEqual(self.main["bypass_actors"], [RENOVATE_BYPASS])
+        self.assertIn(
+            '`{"actor_id": 2740, "actor_type": "Integration", "bypass_mode": "pull_request"}`', body
+        )
+        self.assertIn("`required checks` lists no bypass actors", body)
+        self.assertEqual(self.checks["bypass_actors"], [])
+
+    def test_the_strict_mode_the_page_states_is_the_files(self) -> None:
+        _, body = self.lead(r"required checks?")
+        strict = self.rules["required_status_checks"]["strict_required_status_checks_policy"]
+        self.assertIs(strict, False)
+        self.assertIn("Strict mode is off (`strict_required_status_checks_policy` is `false`)", body)
 
     def test_the_approval_count_the_page_states_is_the_files(self) -> None:
         key, _ = self.lead(r"`pull_request`")
@@ -234,24 +284,98 @@ class ThePageMatchesTheRuleset(unittest.TestCase):
 
     def test_the_status_section_records_the_live_ruleset(self) -> None:
         status = squash(section(self.prose, "Status"))
-        self.assertIn(f"lists `{self.ruleset['name']}`", status)
+        self.assertIn(f"lists `{self.main['name']}` and `{self.checks['name']}`", status)
         ids = re.findall(r"as ruleset `(\d+)`", status)
         self.assertEqual(len(ids), 1, f"the Status section should record one numeric ruleset id: {status}")
         puts = re.findall(r"--method PUT repos/([\w.-]+/[\w.-]+)/rulesets/(\S+)", self.page)
-        self.assertEqual(puts, [(REPO_SLUG, ids[0])])
+        # `protect main` by its recorded id; `required checks` by the id looked up by name.
+        self.assertEqual(puts, [(REPO_SLUG, ids[0]), (REPO_SLUG, "$id")])
+        self.assertIn(
+            f"gh api repos/{REPO_SLUG}/rulesets --jq '.[] | select(.name == "
+            f"\"{self.checks['name']}\") | .id'",
+            self.page,
+        )
 
     def test_every_command_on_the_page_names_this_repository_and_the_committed_file(self) -> None:
         slugs = set(re.findall(r"gh api (?:--method \w+ )?repos/([\w.-]+/[\w.-]+)/", self.page))
         self.assertEqual(slugs, {REPO_SLUG})
         for verb in ("POST", "PUT"):
             inputs = re.findall(rf"--method {verb} .*?\\\n\s*--input (\S+)", self.page)
-            self.assertEqual(inputs, [".github/rulesets/main.json"], verb)
+            self.assertEqual(
+                inputs, [".github/rulesets/main.json", ".github/rulesets/main-checks.json"], verb
+            )
 
     def test_the_status_branch_it_leaves_uncovered_is_the_one_a_workflow_pushes(self) -> None:
         match = re.search(r"`status` branch that `([\w-]+\.yml)` pushes", squash(self.prose))
         self.assertIsNotNone(match, "the page no longer names the workflow that pushes `status`")
         source = (WORKFLOWS / match.group(1)).read_text(encoding="utf-8")
         self.assertRegex(source, r"git push \S+ HEAD:status\b")
+
+
+class TheBumpSectionsMatchTheFiles(unittest.TestCase):
+    """The two sections on bump pull requests, joined to the rulesets, renovate.json and AGENTS.md."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        prose = outside_fences(PAGE.read_text(encoding="utf-8"))
+        cls.up_to_date = squash(section(prose, "Pull requests do not have to be up to date"))
+        cls.renovate = squash(section(prose, "Renovate merges its own non-major updates"))
+        cls.config = json.loads((REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+        cls.rules = rules_by_type(load_committed())
+
+    def test_strict_mode_is_off_as_the_page_says(self) -> None:
+        self.assertIn("It is off now.", self.up_to_date)
+        self.assertIs(self.rules["required_status_checks"]["strict_required_status_checks_policy"], False)
+
+    def test_the_rebase_setting_the_page_names_is_renovates(self) -> None:
+        self.assertIn("`renovate.json` sets `rebaseWhen` to `conflicted`", self.up_to_date)
+        self.assertEqual(self.config["rebaseWhen"], "conflicted")
+
+    def test_the_standing_decision_the_page_cites_exists(self) -> None:
+        self.assertIn(
+            "[AGENTS.md section 9, \"Owner's standing decisions\"](../AGENTS.md#9-owners-standing-decisions)",
+            self.up_to_date,
+        )
+        agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("## 9. Owner's standing decisions", agents)
+        self.assertIn("**Routine updates.** Patch and minor updates", agents)
+
+    def test_the_check_reruns_on_the_push_to_main_as_the_page_says(self) -> None:
+        self.assertIn("`test.yml` also runs `Python Unit Tests` on every push to `main`", self.up_to_date)
+        header = TEST_WORKFLOW.read_text(encoding="utf-8").split("\njobs:\n", 1)[0]
+        self.assertRegex(header, r"(?m)^  push:\n    branches:\n      - main$")
+
+    def test_renovate_merges_itself_the_way_the_page_says(self) -> None:
+        self.assertIn('`"automergeType": "pr"` and `"platformAutomerge": false`', self.renovate)
+        self.assertEqual(self.config["automergeType"], "pr")
+        self.assertIs(self.config["platformAutomerge"], False)
+        (rule,) = [rule for rule in self.config["packageRules"] if rule.get("automerge") is True]
+        self.assertEqual(set(rule["matchUpdateTypes"]), {"minor", "patch", "digest", "pin", "pinDigest"})
+        self.assertIn("patch, minor, digest and pin updates", self.renovate)
+
+    def test_what_still_waits_for_the_owner_is_what_renovate_json_holds_back(self) -> None:
+        self.assertIn("What still waits for the owner: major updates, an OpenZFS minor-line bump", self.renovate)
+        held = {
+            name
+            for rule in self.config["packageRules"]
+            if rule.get("automerge") is False
+            for name in rule.get("matchPackageNames", [])
+        }
+        self.assertEqual(held, {"openzfs/zfs", "sigstore/cosign"})
+
+    def test_the_bypass_and_the_separate_check_ruleset_are_as_the_page_says(self) -> None:
+        self.assertIn("`protect main` lists the Renovate app as a bypass actor in `pull_request` mode", self.renovate)
+        self.assertEqual(load_ruleset()["bypass_actors"], [RENOVATE_BYPASS])
+        self.assertIn("The required check lives in `required checks`, a ruleset with no bypass actors.", self.renovate)
+        self.assertEqual(load_checks_ruleset()["bypass_actors"], [])
+        self.assertEqual(load_checks_ruleset()["name"], "required checks")
+
+    def test_the_ignored_authors_the_page_names_are_the_hive_apps(self) -> None:
+        self.assertIn("lists the Hive app's commit addresses in `gitIgnoredAuthors`", self.renovate)
+        authors = self.config["gitIgnoredAuthors"]
+        self.assertTrue(authors)
+        for author in authors:
+            self.assertRegex(author, r"^(\d+\+)?danathar-atomic-hive\[bot\]@users\.noreply\.github\.com$")
 
 
 class TheDocsThatRouteAChangeNameIt(unittest.TestCase):

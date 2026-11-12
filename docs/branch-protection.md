@@ -7,17 +7,25 @@ there, and how to check that GitHub is really enforcing it.
 
 ## Status
 
-The ruleset below is active on `main` as ruleset `24901134`, created
+The ruleset `protect main` is active on `main` as ruleset `24901134`, created
 2026-10-11 by applying [`.github/rulesets/main.json`](../.github/rulesets/main.json).
-Check it yourself; neither call needs admin rights:
+A second ruleset, `required checks`, holds the required check on its own,
+applied from [`.github/rulesets/main-checks.json`](../.github/rulesets/main-checks.json).
+It was split out of `protect main` so that Renovate's bypass cannot skip the
+check; see
+[Renovate merges its own non-major updates](#renovate-merges-its-own-non-major-updates).
+Check them yourself; neither call needs admin rights:
 
 ```bash
 gh api repos/Danathar/zfs-aurora-complex/branches/main --jq .protected
 gh api repos/Danathar/zfs-aurora-complex/rulesets
 ```
 
-The first prints `true` and the second lists `protect main`. `false` and `[]`
-mean someone has removed it, and `main` is unprotected again.
+The first prints `true` and the second lists `protect main` and
+`required checks`. `false` and `[]` mean someone has removed them, and `main`
+is unprotected again. If the second call lists only `protect main`, the split
+has not been applied yet: the check is then still inside `protect main`, which
+then has no bypass either.
 
 Before the ruleset, `main` had no protection at all (the calls above printed
 `false` and `[]`). Direct pushes to `main` stopped on their own around
@@ -39,15 +47,25 @@ future workflow that is given write scope.
 
 ## The ruleset
 
-[`.github/rulesets/main.json`](../.github/rulesets/main.json) is the definition
-the live ruleset was applied from. It is in GitHub's import format, so it
-applies as-is. What each rule does:
+[`.github/rulesets/main.json`](../.github/rulesets/main.json) (`protect main`)
+and [`.github/rulesets/main-checks.json`](../.github/rulesets/main-checks.json)
+(`required checks`) are the definitions the live rulesets were applied from.
+They are in GitHub's import format, so they apply as-is. GitHub enforces both
+on every change to `main`. What each rule does:
 
-- **Targets `~DEFAULT_BRANCH`**, so it follows a rename of `main`. The `status`
-  branch that `akmods-failure-triage.yml` pushes badges to is not covered, and
-  does not need to be: nothing builds from it.
-- **No bypass actors.** A bypass for Actions or for an App hands back the direct
-  push this exists to stop.
+- **Targets `~DEFAULT_BRANCH`**, so it follows a rename of `main`. Both files
+  target it. The `status` branch that `akmods-failure-triage.yml` pushes badges
+  to is not covered, and does not need to be: nothing builds from it.
+- **One bypass actor, the Renovate app, and only through a pull request.**
+  `protect main` lists `{"actor_id": 2740, "actor_type": "Integration",
+  "bypass_mode": "pull_request"}`. 2740 is the Renovate GitHub App
+  (`gh api /apps/renovate`). In `pull_request` mode Renovate can merge its own
+  pull request without the code owner's approval. It still cannot push to
+  `main` directly, delete it or rewrite it. A bypass only skips the rules of
+  the ruleset that lists it, and `required checks` lists no bypass actors, so
+  Renovate's pull request still has to pass `Python Unit Tests`. No other app,
+  and not Actions, may bypass: that would hand back the direct push this
+  exists to stop.
 - **`deletion` and `non_fast_forward`** stop `main` being deleted or rewritten.
 - **`pull_request` with 0 approvals, and code owner review required.** GitHub
   does not let anyone approve their own pull request. On a single-maintainer
@@ -59,7 +77,8 @@ applies as-is. What each rule does:
   Tier 3 paths ([`risk-tiers.md`](./risk-tiers.md)), so a pull request that
   touches one of them and that someone other than the owner opened -- the Hive
   app, Renovate, a contributor -- cannot merge until the owner approves it on
-  GitHub, and that approval is on record. A pull request that touches no
+  GitHub, and that approval is on record. The one exception is the Renovate
+  bypass above, for Renovate's patch, minor, digest and pin updates. A pull request that touches no
   listed path merges on the required check alone. That is why `CODEOWNERS`
   has no catch-all `*` line, and `tests/test_codeowners.py` fails if one comes
   back.
@@ -74,17 +93,19 @@ applies as-is. What each rule does:
   `gh` token included, merges Tier 3 changes on the required check alone. The
   gate binds every other author. Every file under `.github/workflows/` is
   Tier 3, not only `build.yml`, because once a workflow is on `main` any job
-  in it can ask for the production signing key. So Renovate's pull requests
-  that bump a pin in any workflow, or in `publish-native-image/`, wait for the
-  owner's approval.
+  in it can ask for the production signing key. So Renovate's major updates,
+  OpenZFS minor-line bumps and cosign bumps in any workflow, or in
+  `publish-native-image/`, wait for the owner's approval. Its patch, minor,
+  digest and pin updates no longer do (the bypass above).
 
   `dismiss_stale_reviews_on_push` is on, so a review given
   before a later push does not carry over. The file also carries
   `required_reviewers: []` and `require_extra_approval_for_unattributed_changes: true`,
   both as GitHub reported them on the live ruleset, so the file and the live
   ruleset agree.
-- **One required check, `Python Unit Tests`.** It is the only check every pull
-  request gets. `test.yml` runs it on every pull request, with no path filter
+- **One required check, `Python Unit Tests`, in its own ruleset.** It is the
+  only rule in `main-checks.json`, so the Renovate bypass in `main.json` does
+  not reach it. It is the only check every pull request gets. `test.yml` runs it on every pull request, with no path filter
   and no `if:`. `Build PR Image (No Push)` in `build-pr.yml` is not required,
   because `build-pr.yml` ignores Markdown and `docs/**`, so a docs-only pull
   request never gets it and would wait forever.
@@ -93,20 +114,72 @@ applies as-is. What each rule does:
   clean for a month.
   `integration_id` 15368 is GitHub Actions, so a status with the same name
   posted by anything else does not count.
-  `strict_required_status_checks_policy` is on, so a pull request must be up
-  to date with `main` before it merges: each merge leaves the other open pull
-  requests behind, and each must update from `main` and pass the check again
-  ([`multi-agent.md`](./multi-agent.md#a-pull-request-must-be-up-to-date-before-it-merges)).
+  Strict mode is off (`strict_required_status_checks_policy` is `false`): a
+  pull request does not have to be up to date with `main` before it merges,
+  but the check must pass on its own head commit. See
+  [Pull requests do not have to be up to date](#pull-requests-do-not-have-to-be-up-to-date)
+  and [`multi-agent.md`](./multi-agent.md#a-pull-request-does-not-have-to-be-up-to-date-before-it-merges).
 
 The check is a unit-test and lint gate. It is not a build gate: a green
 `Python Unit Tests` says the Python tools and their tests pass, not that the
 image builds ([`CLAUDE.md`](../CLAUDE.md) section 0 rule 4).
 
-Renovate does not automerge: `renovate.json` sets `automerge` to `false` in
-its pin/digest rule and its OpenZFS minor-line rule, and no rule or top-level
-setting turns it on (Renovate's default is off), so there is no `automergeType: branch` push for the
-ruleset to break. No workflow pushes to `main`: the only `git push` in
-`.github/workflows/` targets the `status` branch.
+Renovate merges only through a pull request (`"automergeType": "pr"`), never
+by pushing its branch to `main`. No workflow pushes to `main`: the only
+`git push` in `.github/workflows/` targets the `status` branch.
+
+## Pull requests do not have to be up to date
+
+Strict mode used to be on: GitHub refused to merge a pull request until its
+branch had been updated with the latest `main` and the check had run again.
+It is off now. The owner turned it off (November 2026) because of Renovate's
+pull requests. Every merge to `main` made each open bump pull request stale
+again, and nothing brought them up to date: `renovate.json` sets `rebaseWhen`
+to `conflicted`, so Renovate does not update a branch that is only behind
+`main`, and once anyone else pushes to a Renovate branch, Renovate leaves that
+branch alone. So bump pull requests piled up waiting for the owner to update
+them by hand, although
+[AGENTS.md section 9, "Owner's standing decisions"](../AGENTS.md#9-owners-standing-decisions)
+already approves routine patch and minor updates with green CI.
+
+What still holds: `Python Unit Tests` must pass on the pull request's own head
+commit before anything merges. What is given up: two pull requests that each
+pass on their own can still break `main` together, because neither was tested
+on top of the other. `test.yml` also runs `Python Unit Tests` on every push to
+`main`, so such a pair shows red there, but only after the merge, and
+`build.yml` starts on that same push.
+
+## Renovate merges its own non-major updates
+
+Renovate now merges its own patch, minor, digest and pin updates once the
+required check passes, without the owner's approval. This is AGENTS.md's
+standing decision for routine updates, applied by the bot instead of by hand.
+Three settings make it work, and each one is needed:
+
+- `renovate.json` turns `automerge` on for those update types, with
+  `"automergeType": "pr"` and `"platformAutomerge": false`. Renovate itself
+  merges the pull request once its checks are green. GitHub's own auto-merge is
+  not used, because it would wait for code owner review and ignore the bypass.
+- `protect main` lists the Renovate app as a bypass actor in `pull_request`
+  mode, so its merge does not wait for code owner review on Tier 3 paths.
+- The required check lives in `required checks`, a ruleset with no bypass
+  actors. A bypass skips only the rules of the ruleset that lists it, so CI is
+  still enforced on Renovate's pull requests by GitHub, not only by Renovate's
+  own wait for green checks.
+
+What still waits for the owner: major updates, an OpenZFS minor-line bump
+(new on-disk pool features can break rollback to the previous image), and a
+cosign bump (`docs/architecture-overview.md` makes version-specific claims
+about it). `renovate.json` keeps `automerge` off for each of those, and
+`tests/test_renovate_config.py` checks that. Renovate pull requests that
+change no Tier 3 path, and every pull request from anyone else, are unchanged.
+
+`renovate.json` also lists the Hive app's commit addresses in
+`gitIgnoredAuthors`. Without that, the first Hive commit on a Renovate branch
+(an "update branch" merge, say) makes Renovate treat the branch as edited by a
+person: it stops rebasing it and will not merge it. The cost: a commit the Hive
+app makes on a Renovate branch is merged with Renovate's update, under the
+bypass, without the owner's approval. `Python Unit Tests` still has to pass.
 
 ## Merge queue
 
@@ -114,7 +187,7 @@ GitHub's merge queue is unavailable on a repository owned by a personal account,
 so the Hive criterion `acmm:merge-queue` is not credited by a file here. Hive
 credits it when the repository's `merge_strategy` is `hive-serialized` and the
 default branch has a known, non-empty set of required checks. The required check
-is this ruleset's `Python Unit Tests`. `merge_strategy` is a setting on the Hive
+is `Python Unit Tests`, in the `required checks` ruleset. `merge_strategy` is a setting on the Hive
 dashboard that only the repository owner can change; it is not stored in this
 repository, so nothing here can make it true. Until the owner sets it, that
 criterion stays open.
@@ -130,20 +203,32 @@ then theirs. Do not fix it by adding a bypass actor.
 
 ## Applying and changing it
 
-A pull request cannot change repository settings. A repository admin applied it
-once, with:
+A pull request cannot change repository settings. A repository admin applied
+`protect main` once, with:
 
 ```bash
 gh api --method POST repos/Danathar/zfs-aurora-complex/rulesets \
   --input .github/rulesets/main.json
 ```
 
-To change it later, edit the file through a pull request, then update the live
-ruleset from the file:
+and creates `required checks` the same way from its own file. Create it
+before the `PUT` that takes the check out of `protect main`, so that `main` is
+never without a required check:
+
+```bash
+gh api --method POST repos/Danathar/zfs-aurora-complex/rulesets \
+  --input .github/rulesets/main-checks.json
+```
+
+To change either later, edit its file through a pull request, then update the
+live ruleset from the file:
 
 ```bash
 gh api --method PUT repos/Danathar/zfs-aurora-complex/rulesets/24901134 \
   --input .github/rulesets/main.json
+id=$(gh api repos/Danathar/zfs-aurora-complex/rulesets --jq '.[] | select(.name == "required checks") | .id')
+gh api --method PUT repos/Danathar/zfs-aurora-complex/rulesets/$id \
+  --input .github/rulesets/main-checks.json
 ```
 
 Renaming the `Python Unit Tests` job, adding a path filter or an `if:` to it, or

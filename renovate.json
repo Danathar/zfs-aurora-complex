@@ -7,6 +7,13 @@
 
   "rebaseWhen": "conflicted",
 
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "gitIgnoredAuthors": [
+    "320561496+danathar-atomic-hive[bot]@users.noreply.github.com",
+    "danathar-atomic-hive[bot]@users.noreply.github.com"
+  ],
+
   "customManagers": [
     {
       "customType": "regex",
@@ -83,9 +90,9 @@
 
   "packageRules": [
     {
-      "description": "Do not automerge anything, including digest pins. Merging to main triggers the production workflow, which builds, signs with this repo's key, and promotes to :latest. Automerge made that an unattended path from a third-party service (Renovate) all the way to the published image with no human in it. The content of a pin update is low risk; the property of having such a path at all is the thing being removed. Renovate still opens the PRs and CI still runs on them -- merging is one click.",
-      "automerge": false,
-      "matchUpdateTypes": ["pin", "pinDigest"]
+      "description": "Renovate merges its own patch, minor, digest and pin updates once CI is green. AGENTS.md section 9 (\"Owner's standing decisions\") already approves routine patch and minor updates, digest and SHA pins included, with green CI; before this, each of those PRs still waited for the owner's code owner review and for someone to bring it up to date with main. Merging to main builds, signs and promotes, so three things keep this bounded. Renovate merges the PR itself (automergeType pr, platformAutomerge false at the top of this file): GitHub's native auto-merge would wait for code owner review and ignore the bypass. The `protect main` ruleset lets only the Renovate app bypass, and only by merging a PR. The required `Python Unit Tests` check lives in a second ruleset (.github/rulesets/main-checks.json) that nothing can bypass, so GitHub still enforces CI on these merges. Major updates do not match this rule and stay manual, and the OpenZFS and cosign rules below turn automerge back off for those two. This rule is first so those later rules win.",
+      "automerge": true,
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"]
     },
     {
       "description": "Containerfile base-image ARGs are resolved at build time by this repo's own CI input resolution (ci_tools/resolve_build_inputs.py), not hand-pinned versions Renovate should track.",
@@ -98,7 +105,7 @@
       "matchPackageNames": ["openzfs/zfs"]
     },
     {
-      "description": "Never automerge a cosign version bump. docs/architecture-overview.md carries version-specific compatibility claims (legacy signature format, the --new-bundle-format flag the akmods build container's preinstalled cosign does not recognize) checked against the currently pinned version and that preinstalled cosign; a new pin needs those claims re-verified, not just installed.",
+      "description": "Never automerge a cosign version bump. docs/architecture-overview.md carries version-specific compatibility claims (legacy signature format, the --new-bundle-format flag the akmods build container's preinstalled cosign does not recognize) checked against the currently pinned version and that preinstalled cosign; a new pin needs those claims re-verified, not just installed. The weekly group below leaves cosign out, so a cosign bump waits for the owner in its own PR instead of holding back the whole week's group: Renovate automerges a group only when every update in it may automerge.",
       "automerge": false,
       "matchPackageNames": ["sigstore/cosign"]
     },
@@ -113,9 +120,9 @@
       "pinDigests": false
     },
     {
-      "description": "Put every minor, patch and digest update in one weekly PR. Nearly every dependency here is pinned in a workflow or in ci/defaults.json, which .github/CODEOWNERS holds for the owner's approval, so each separate Renovate PR waited on the owner by itself (three of them in the week of 2026-10-26). Grouping changes how many PRs there are, not what needs approving: nothing here automerges, and the ruleset still requires the code owner's review on the grouped PR. Two dependencies stay out. An OpenZFS minor-line bump stays its own deliberate decision (see the OpenZFS rule above), and Chunkah is pinned only in files no code owner holds, so its updates keep merging without waiting for the week's bundle. Major updates stay separate too. This rule is last so its groupName replaces the akmods build container group, which keeps both devcontainer copies together in the one weekly PR.",
+      "description": "Put every minor, patch and digest update in one weekly PR. Nearly every dependency here is pinned in a workflow or in ci/defaults.json, which .github/CODEOWNERS holds for the owner's approval, so each separate Renovate PR waited on the owner by itself (three of them in the week of 2026-10-26). The grouped PR now merges itself once CI is green (the automerge rule above), but only when every update in it may automerge, so the updates that must wait for the owner stay out. Three dependencies stay out. An OpenZFS minor-line bump stays its own deliberate decision (see the OpenZFS rule above), a cosign bump needs its doc claims re-checked (see the cosign rule above), and Chunkah is pinned only in files no code owner holds, so its updates keep merging without waiting for the week's bundle. Major updates stay separate too. This rule is last so its groupName replaces the akmods build container group, which keeps both devcontainer copies together in the one weekly PR.",
       "groupName": "weekly dependency updates",
-      "matchPackageNames": ["!openzfs/zfs", "!quay.io/coreos/chunkah"],
+      "matchPackageNames": ["!openzfs/zfs", "!quay.io/coreos/chunkah", "!sigstore/cosign"],
       "matchUpdateTypes": ["minor", "patch", "digest"]
     }
   ]

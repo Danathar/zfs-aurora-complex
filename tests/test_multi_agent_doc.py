@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DOC = REPO_ROOT / "docs" / "multi-agent.md"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
+CHECKS_RULESET = REPO_ROOT / ".github" / "rulesets" / "main-checks.json"
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 RENOVATE = REPO_ROOT / "renovate.json"
 
@@ -33,7 +34,12 @@ def workflow_files() -> list[Path]:
 
 
 def ruleset_rule(kind: str) -> dict:
-    rules = json.loads(RULESET.read_text(encoding="utf-8"))["rules"]
+    """The one rule of this type across both rulesets, `protect main` and `required checks`."""
+    rules = [
+        rule
+        for path in (RULESET, CHECKS_RULESET)
+        for rule in json.loads(path.read_text(encoding="utf-8"))["rules"]
+    ]
     (rule,) = [r for r in rules if r["type"] == kind]
     return rule
 
@@ -90,10 +96,13 @@ class ConcurrencyClaimTests(unittest.TestCase):
 
 
 class RulesetClaimTests(unittest.TestCase):
-    def test_strict_required_status_checks_policy_is_true(self) -> None:
+    def test_strict_required_status_checks_policy_is_false(self) -> None:
         params = ruleset_rule("required_status_checks")["parameters"]
-        self.assertIs(params["strict_required_status_checks_policy"], True)
-        self.assertIn("`strict_required_status_checks_policy` to `true`", " ".join(doc_text().split()))
+        self.assertIs(params["strict_required_status_checks_policy"], False)
+        text = " ".join(doc_text().split())
+        self.assertIn("`strict_required_status_checks_policy` to `false`", text)
+        self.assertIn("(../.github/rulesets/main-checks.json)", text)
+        self.assertIn('AGENTS.md section 9, "Owner\'s standing decisions"', text)
 
     def test_the_required_check_is_the_one_the_page_names(self) -> None:
         params = ruleset_rule("required_status_checks")["parameters"]
@@ -101,21 +110,31 @@ class RulesetClaimTests(unittest.TestCase):
         self.assertEqual(contexts, ["Python Unit Tests"])
         self.assertIn("The required check is `Python Unit Tests`", doc_text())
 
-    def test_no_approval_but_the_code_owners_and_no_bypass(self) -> None:
+    def test_no_approval_but_the_code_owners_and_only_renovate_bypasses(self) -> None:
         params = ruleset_rule("pull_request")["parameters"]
         self.assertEqual(params["required_approving_review_count"], 0)
         self.assertIs(params["require_code_owner_review"], True)
-        self.assertEqual(json.loads(RULESET.read_text("utf-8"))["bypass_actors"], [])
+        self.assertEqual(
+            json.loads(RULESET.read_text("utf-8"))["bypass_actors"],
+            [{"actor_id": 2740, "actor_type": "Integration", "bypass_mode": "pull_request"}],
+        )
+        self.assertEqual(json.loads(CHECKS_RULESET.read_text("utf-8"))["bypass_actors"], [])
         text = " ".join(doc_text().split())
         self.assertIn(
-            "it requires no approving review except the code owner's on Tier 3 paths, and it allows no bypass actors",
+            "they require no approving review except the code owner's on Tier 3 paths, and the only "
+            "bypass actor is the Renovate app, which may merge its own non-major updates without "
+            "the code owner's review but cannot skip the required check",
             text,
         )
 
     def test_there_is_no_merge_queue_rule(self) -> None:
         # The page says the queue is unavailable; a ruleset that grew a merge_queue rule makes
         # the "serialise by hand" advice stale.
-        types = [r["type"] for r in json.loads(RULESET.read_text("utf-8"))["rules"]]
+        types = [
+            r["type"]
+            for path in (RULESET, CHECKS_RULESET)
+            for r in json.loads(path.read_text("utf-8"))["rules"]
+        ]
         self.assertNotIn("merge_queue", types)
 
 
@@ -124,11 +143,21 @@ class MergeClaimTests(unittest.TestCase):
         deny = json.loads(SETTINGS.read_text("utf-8"))["permissions"]["deny"]
         self.assertIn("Bash(gh pr merge:*)", deny)
 
-    def test_renovate_has_no_automerge_turned_on(self) -> None:
-        text = RENOVATE.read_text(encoding="utf-8")
-        self.assertNotRegex(text, r'"automerge"\s*:\s*true')
-        self.assertIn('"automerge": false', text)
-        self.assertNotIn("automergeType", text)
+    def test_renovate_automerges_only_what_the_page_says(self) -> None:
+        config = json.loads(RENOVATE.read_text(encoding="utf-8"))
+        (on,) = [rule for rule in config["packageRules"] if rule.get("automerge") is True]
+        self.assertEqual(set(on["matchUpdateTypes"]), {"minor", "patch", "digest", "pin", "pinDigest"})
+        held = {
+            name
+            for rule in config["packageRules"]
+            if rule.get("automerge") is False
+            for name in rule.get("matchPackageNames", [])
+        }
+        self.assertEqual(held, {"openzfs/zfs", "sigstore/cosign"})
+        self.assertEqual(config["automergeType"], "pr")
+        text = " ".join(doc_text().split())
+        self.assertIn("merges its own patch, minor, digest and pin updates", text)
+        self.assertIn("keeps it `false` for major updates, OpenZFS minor-line bumps and cosign bumps", text)
 
     def test_the_rule_the_page_cites_is_rule_6_and_says_what_the_page_says(self) -> None:
         agents = " ".join((REPO_ROOT / "AGENTS.md").read_text("utf-8").split())

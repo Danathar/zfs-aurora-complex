@@ -20,8 +20,8 @@ name: Agent PR signature
 # has no in-repo AI workflow. `edited` is in the trigger so that adding the
 # line to the description re-runs the check without a new commit.
 #
-# It is advisory: the ruleset in .github/rulesets/main.json does not require
-# it. The owner can add it there once it has run clean for a month.
+# It is advisory: the ruleset in .github/rulesets/main-checks.json does not
+# require it. The owner can add it there once it has run clean for a month.
 #
 # `pull_request`, never `pull_request_target`: the job needs nothing from the
 # base repository. Its token has no permissions at all, nothing is checked
