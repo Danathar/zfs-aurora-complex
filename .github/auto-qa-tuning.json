@@ -78,6 +78,7 @@
     { "workflow": "nightly-compliance.yml", "job": "published-image", "timeout_minutes": 15 },
 
     { "workflow": "agent-audit.yml", "job": "audit", "timeout_minutes": 15 },
+    { "workflow": "agent-signature.yml", "job": "signature", "timeout_minutes": 5 },
 
     { "workflow": "boot-test.yml", "job": "boot", "timeout_minutes": 60,
       "note": "Host setup, a multi-GB pull and up to two VM boots of at most 15 minutes each. The first hosted run (39125903251) took 6 minutes with one boot." },

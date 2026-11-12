@@ -367,6 +367,44 @@ class BuildStickyIssuePayloadTests(unittest.TestCase):
         self.assertIn("akmods@0e06cd70879a", payload["title"])
         self.assertIn("`implicit declaration of function`", payload["body"])
 
+    def test_upstream_compat_key_ignores_akmods_ref_when_zfs_version_known(self) -> None:
+        def payload_for(ref: str) -> dict:
+            return build_sticky_issue_payload(
+                failure_kind=FAILURE_KIND_UPSTREAM_COMPAT,
+                kernel_release="7.3.3-200.fc44.x86_64",
+                akmods_upstream_ref=ref,
+                fedora_version="44",
+                run_id="12345",
+                run_url="https://github.com/example/repo/actions/runs/12345",
+                matched_patterns=[ZFS_MAX_KERNEL_MISMATCH_PATTERN],
+                zfs_version="2.4.4",
+                max_kernel="7.2",
+            )
+
+        first = payload_for("b002f8b20a76aaaaaaaa")
+        second = payload_for("d157597bf671bbbbbbbb")
+        self.assertEqual(first["key"], second["key"])
+        self.assertEqual(first["key"], "upstream-compat:7.3.3-200.fc44.x86_64:zfs-2.4.4")
+        self.assertNotEqual(first["title"], second["title"])
+
+    def test_transient_network_key_still_includes_akmods_ref(self) -> None:
+        def payload_for(ref: str) -> dict:
+            return build_sticky_issue_payload(
+                failure_kind=FAILURE_KIND_TRANSIENT_NETWORK,
+                kernel_release="7.3.3-200.fc44.x86_64",
+                akmods_upstream_ref=ref,
+                fedora_version="44",
+                run_id="12345",
+                run_url="https://github.com/example/repo/actions/runs/12345",
+                matched_patterns=["Could not resolve host"],
+                zfs_version="2.4.4",
+            )
+
+        first = payload_for("b002f8b20a76aaaaaaaa")
+        second = payload_for("d157597bf671bbbbbbbb")
+        self.assertIn("b002f8b20a76", first["key"])
+        self.assertNotEqual(first["key"], second["key"])
+
     def test_unknown_kind_uses_different_title_prefix(self) -> None:
         payload = build_sticky_issue_payload(
             failure_kind=FAILURE_KIND_UNKNOWN,
@@ -569,7 +607,7 @@ class MainTests(unittest.TestCase):
             self.assertEqual(payload["failure_kind"], FAILURE_KIND_UPSTREAM_COMPAT)
             self.assertEqual(
                 payload["key"],
-                "upstream-compat:7.0.4-200.fc44.x86_64:28079918460b",
+                "upstream-compat:7.0.4-200.fc44.x86_64:zfs-2.4.1",
             )
             # write_akmods_badge reads these two off the payload rather than
             # re-parsing `summary`, so main() has to put them there.
