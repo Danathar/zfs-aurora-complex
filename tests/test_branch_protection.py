@@ -370,13 +370,9 @@ class TheBumpSectionsMatchTheFiles(unittest.TestCase):
         self.assertEqual(load_checks_ruleset()["bypass_actors"], [])
         self.assertEqual(load_checks_ruleset()["name"], "required checks")
 
-    def test_the_ignored_authors_the_page_names_are_the_hive_apps(self) -> None:
-        self.assertIn("lists the Hive app's commit addresses in `gitIgnoredAuthors`", self.renovate)
-        authors = self.config["gitIgnoredAuthors"]
-        self.assertTrue(authors)
-        for author in authors:
-            self.assertRegex(author, r"^(\d+\+)?danathar-atomic-hive\[bot\]@users\.noreply\.github\.com$")
-
+    def test_the_page_says_the_hive_app_is_not_an_ignored_author(self) -> None:
+        self.assertIn("deliberately does not list the Hive app in `gitIgnoredAuthors`", self.renovate)
+        self.assertNotIn("gitIgnoredAuthors", self.config)
 
 class TheDocsThatRouteAChangeNameIt(unittest.TestCase):
     def test_risk_tiers_puts_the_ruleset_in_tier_3(self) -> None:

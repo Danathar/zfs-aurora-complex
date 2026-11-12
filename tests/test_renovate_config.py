@@ -532,15 +532,9 @@ class PackageRuleTests(unittest.TestCase):
                     )
                     self.assertIs(settings.get("automerge"), False)
 
-    def test_the_hive_apps_commits_do_not_stop_renovate(self) -> None:
-        """Renovate treats a branch with someone else's commit as edited and stops managing it."""
-        self.assertEqual(
-            self.config["gitIgnoredAuthors"],
-            [
-                "320561496+danathar-atomic-hive[bot]@users.noreply.github.com",
-                "danathar-atomic-hive[bot]@users.noreply.github.com",
-            ],
-        )
+    def test_no_other_identity_can_ride_renovates_bypass(self) -> None:
+        """A commit listed here would merge under Renovate's bypass without owner review."""
+        self.assertNotIn("gitIgnoredAuthors", self.config)
 
     def test_every_rule_says_why_it_exists(self) -> None:
         for index, rule in enumerate(self.rules):

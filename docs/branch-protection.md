@@ -174,12 +174,12 @@ about it). `renovate.json` keeps `automerge` off for each of those, and
 `tests/test_renovate_config.py` checks that. Renovate pull requests that
 change no Tier 3 path, and every pull request from anyone else, are unchanged.
 
-`renovate.json` also lists the Hive app's commit addresses in
-`gitIgnoredAuthors`. Without that, the first Hive commit on a Renovate branch
-(an "update branch" merge, say) makes Renovate treat the branch as edited by a
-person: it stops rebasing it and will not merge it. The cost: a commit the Hive
-app makes on a Renovate branch is merged with Renovate's update, under the
-bypass, without the owner's approval. `Python Unit Tests` still has to pass.
+`renovate.json` deliberately does not list the Hive app in
+`gitIgnoredAuthors`. A commit anyone other than Renovate adds to a Renovate
+branch makes Renovate stop merging that branch, and that is wanted: otherwise a
+Hive commit on a Renovate branch would merge under Renovate's bypass without the
+owner's approval. When a Renovate branch needs rebuilding, the Hive ticks the
+rebase box on the pull request and Renovate regenerates the branch from scratch.
 
 ## Merge queue
 

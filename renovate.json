@@ -9,10 +9,6 @@
 
   "automergeType": "pr",
   "platformAutomerge": false,
-  "gitIgnoredAuthors": [
-    "320561496+danathar-atomic-hive[bot]@users.noreply.github.com",
-    "danathar-atomic-hive[bot]@users.noreply.github.com"
-  ],
 
   "customManagers": [
     {
