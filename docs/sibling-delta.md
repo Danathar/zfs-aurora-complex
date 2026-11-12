@@ -92,7 +92,7 @@ names, and keep them in step by hand.
 
 | Test tool | Status | Note |
 |---|---|---|
-| `check_coverage.py` | differs on purpose: comments and docstrings only; the sister's name the projects its per-module floors came from and say its `.claude/settings.json` allows the command, where this copy says an agent's permission config may allow it | Both run git with `core.fsmonitor` switched off. |
+| `check_coverage.py` | differs on purpose: comments and docstrings only; the sister's name the projects its per-module floors came from and say its `.claude/settings.json` allows the command, where this copy says an agent's permission config may allow it | Both run git with `core.fsmonitor` switched off. Both enforce a missing-statement ceiling per module and report one that could be lowered (added here in #304). |
 | `mutation_check.py` | differs on purpose: the module docstring only; each names its own issue for why the check exists, and this copy says it is a copy of the sister's | Added here in #244. |
 | `run_tests.py` | differs on purpose: each forwards the typeguard options of the typeguard on its own CI runner (this copy the four typeguard 4.4.4 offers; the sister also forwards `--typeguard-packages-ignore`); otherwise comment wording and the layout of one line | Both refuse the same pytest options and run git with `core.fsmonitor` switched off. Each lists every other option it forwards in `FORWARDED`, which `tests/test_run_tests.py` holds against the installed pytest; compare the two sets when either side changes one. |
 

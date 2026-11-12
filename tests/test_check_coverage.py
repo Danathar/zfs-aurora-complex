@@ -8,19 +8,24 @@ Goal: Pin each way the gate is meant to fail, and the message it fails with.
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from check_coverage import (
     CoverageGateError,
     evaluate,
+    load_ceilings,
     load_covered_counts,
     load_manifest,
+    load_missing_lines,
+    lowerable_ceilings,
     main,
     shipped_executables,
 )
@@ -39,10 +44,20 @@ def _manifest(floors: dict[str, int], unmeasured: dict[str, str] | None = None) 
     return document
 
 
-def _report(files: dict[str, tuple[int, int]]) -> dict[str, object]:
+def _report(
+    files: dict[str, tuple[int, int]], missing: dict[str, list[int]] | None = None
+) -> dict[str, object]:
+    missing = missing or {}
     return {
         "files": {
-            path: {"summary": {"covered_lines": covered, "num_statements": total}}
+            path: {
+                "missing_lines": missing.get(path, []),
+                "summary": {
+                    "covered_lines": covered,
+                    "num_statements": total,
+                    "missing_lines": len(missing.get(path, [])),
+                },
+            }
             for path, (covered, total) in files.items()
         }
     }
@@ -236,6 +251,84 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("(100%)", passes[0])
 
 
+class CeilingTests(unittest.TestCase):
+    def _evaluate(self, ceilings: dict[str, int], missing: dict[str, list[int]]):
+        counts = {"a.py": (5, 10)}
+        return evaluate({"a.py": 5}, counts, ceilings=ceilings, missing=missing)
+
+    def test_a_module_over_its_ceiling_fails_and_names_the_missing_lines(self) -> None:
+        failures, _, _ = self._evaluate({"a.py": 1}, {"a.py": [12, 40]})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("a.py: 2 statements missing, ceiling is 1", failures[0])
+        self.assertIn("missing lines: 12, 40", failures[0])
+
+    def test_a_module_at_its_ceiling_passes(self) -> None:
+        failures, _, _ = self._evaluate({"a.py": 2}, {"a.py": [12, 40]})
+        self.assertEqual(failures, [])
+
+    def test_a_module_under_its_ceiling_passes(self) -> None:
+        failures, _, _ = self._evaluate({"a.py": 3}, {"a.py": [12]})
+        self.assertEqual(failures, [])
+
+    def test_a_module_under_its_ceiling_is_reported_as_lowerable(self) -> None:
+        self.assertEqual(
+            lowerable_ceilings({"a.py": 5}, {"a.py": 3}, {"a.py": [12]}),
+            ["a.py: ceiling 3, missing 1"],
+        )
+
+    def test_a_module_at_its_ceiling_is_not_reported_as_lowerable(self) -> None:
+        self.assertEqual(lowerable_ceilings({"a.py": 5}, {"a.py": 2}, {"a.py": [12, 40]}), [])
+
+    def test_a_module_over_its_ceiling_is_not_reported_as_lowerable(self) -> None:
+        self.assertEqual(lowerable_ceilings({"a.py": 5}, {"a.py": 1}, {"a.py": [12, 40]}), [])
+
+    def test_a_module_absent_from_ceilings_has_a_ceiling_of_zero(self) -> None:
+        failures, _, _ = self._evaluate({}, {"a.py": [7]})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("ceiling is 0", failures[0])
+        self.assertIn("missing lines: 7", failures[0])
+
+    def test_a_fully_covered_module_absent_from_ceilings_passes(self) -> None:
+        failures, _, _ = self._evaluate({}, {"a.py": []})
+        self.assertEqual(failures, [])
+
+    def test_a_ceiling_for_an_unmeasured_module_fails(self) -> None:
+        failures, _, _ = self._evaluate({"gone.py": 1}, {"a.py": []})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("gone.py", failures[0])
+        self.assertIn("did not measure it", failures[0])
+
+    def test_ceilings_are_not_checked_without_a_missing_report(self) -> None:
+        failures, _, _ = evaluate({"a.py": 5}, {"a.py": (5, 10)})
+        self.assertEqual(failures, [])
+
+    def test_load_ceilings_is_optional_and_rejects_non_integers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            path = _write(directory, "none.json", _manifest({"a.py": 1}))
+            self.assertEqual(load_ceilings(path), {})
+            path = _write(directory, "ok.json", {"floors": {"a.py": 1}, "ceilings": {"a.py": 2}})
+            self.assertEqual(load_ceilings(path), {"a.py": 2})
+            for ceiling in ("1", 1.5, None, True, -1):
+                with self.subTest(ceiling=ceiling):
+                    bad = _write(directory, "bad.json", {"floors": {"a.py": 1}, "ceilings": {"a.py": ceiling}})
+                    with self.assertRaises(CoverageGateError) as caught:
+                        load_ceilings(bad)
+                    self.assertIn("non-negative integer", str(caught.exception))
+
+    def test_load_missing_lines_reads_the_line_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = _write(
+                Path(temp_dir), "coverage.json", _report({"a.py": (5, 7)}, {"a.py": [3, 9]})
+            )
+            self.assertEqual(load_missing_lines(path), {"a.py": [3, 9]})
+
+    def test_the_recorded_ceilings_only_name_modules_with_floors(self) -> None:
+        root = Path(__file__).resolve().parent.parent / ".coverage-thresholds.json"
+        floors, _ = load_manifest(root)
+        self.assertEqual(set(load_ceilings(root)) - set(floors), set())
+
+
 class MainExitStatusTests(unittest.TestCase):
     def _paths(self, temp_dir: str, floors: dict[str, int], files: dict[str, tuple[int, int]]):
         directory = Path(temp_dir)
@@ -258,6 +351,34 @@ class MainExitStatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             argv = self._paths(temp_dir, {"a.py": 9}, {"a.py": (5, 10)})
             self.assertEqual(main(argv), 1)
+
+    def test_exits_one_when_a_ceiling_is_exceeded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            argv = [
+                "--thresholds",
+                str(_write(directory, "t.json", {"floors": {"a.py": 5}, "ceilings": {"a.py": 1}})),
+                "--coverage-report",
+                str(_write(directory, "c.json", _report({"a.py": (5, 10)}, {"a.py": [1, 2]}))),
+                "--skip-completeness",
+            ]
+            self.assertEqual(main(argv), 1)
+
+    def test_prints_could_lower_and_exits_zero_when_under_a_ceiling(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            argv = [
+                "--thresholds",
+                str(_write(directory, "t.json", {"floors": {"a.py": 5}, "ceilings": {"a.py": 3}})),
+                "--coverage-report",
+                str(_write(directory, "c.json", _report({"a.py": (5, 10)}, {"a.py": [1]}))),
+                "--skip-completeness",
+            ]
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                status = main(argv)
+            self.assertEqual(status, 0)
+            self.assertIn("coverage: could lower a.py: ceiling 3, missing 1", stream.getvalue())
 
     def test_exits_two_when_the_gate_cannot_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

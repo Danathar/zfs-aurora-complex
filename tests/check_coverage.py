@@ -1,7 +1,7 @@
 """
 Script: tests/check_coverage.py
-What: Enforces the per-module coverage floors recorded in .coverage-thresholds.json.
-Doing: Reads the coverage.json produced by the test run and compares each module's covered-statement count against its floor.
+What: Enforces the per-module coverage floors and missing-statement ceilings recorded in .coverage-thresholds.json.
+Doing: Reads the coverage.json produced by the test run and compares each module's covered-statement count against its floor and its missing-statement count against its ceiling.
 Why: A repository-wide percentage is the wrong gate here -- CONTRIBUTING says the number moving is not a finding, and one well-tested module can hide another that stopped being exercised at all.
 Goal: Make a test that stops reaching a module fail on the pull request that stops it, without ever blocking a change on a percentage.
 
@@ -22,6 +22,18 @@ floor is evidenced by an absence being closed -- the suite demonstrably reached
 those lines. Lowering one is evidenced by an absence, and a deleted test and a
 deliberately removed code path look identical from the count alone. So lowering
 a floor stays a decision a person makes in a diff, with a reason in the commit.
+
+Ceilings are the same idea from the other side. A floor is a covered count, so a
+pull request that adds a new fail-closed `raise` with no test leaves every floor
+passing: the gate notices tests that stop reaching lines, never new lines that
+were never reached. `ceilings` records, per module, how many statements coverage
+reports as missing today, and the gate fails when a module has more. A module
+with no entry in `ceilings` has a ceiling of 0, so new code in a module that is
+fully covered must arrive with its test. The rule is floors' rule the other way
+round: lowering a ceiling is routine (you added a test that reaches a guard);
+raising one is a decision a person makes in a diff, with a reason in the commit.
+The ceiling is enforced for every module that has a floor, which is every module
+coverage measures, because a measured module without a floor already fails.
 
 The floors only ever cover what `--cov` measures, which left a hole: a file that
 ships and executes but sits outside those paths had no entry anywhere, so it was
@@ -144,6 +156,36 @@ def load_manifest(path: Path) -> tuple[dict[str, int], dict[str, str]]:
     return floors, unmeasured
 
 
+def load_ceilings(path: Path) -> dict[str, int]:
+    """
+    Return the `ceilings` section: `{module path: most statements allowed missing}`.
+
+    The section is optional so a manifest without one still means what it did.
+    A module absent from it is treated as having a ceiling of 0 by `evaluate`.
+    """
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise CoverageGateError(f"No thresholds file at {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CoverageGateError(f"{path} is not valid JSON: {exc}") from exc
+
+    raw_ceilings = raw.get("ceilings", {}) if isinstance(raw, dict) else {}
+    if not isinstance(raw_ceilings, dict):
+        raise CoverageGateError(f"{path}: 'ceilings' must be an object of path -> maximum")
+
+    ceilings: dict[str, int] = {}
+    for module_path, ceiling in raw_ceilings.items():
+        if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling < 0:
+            raise CoverageGateError(
+                f"{path}: ceiling for {module_path} must be a non-negative integer, "
+                f"got {ceiling!r}"
+            )
+        ceilings[module_path] = ceiling
+    return ceilings
+
+
 def shipped_executables(repo_root: Path) -> set[str]:
     """
     Return every tracked file that ships and executes, outside `tests/`.
@@ -217,11 +259,46 @@ def load_covered_counts(path: Path) -> dict[str, tuple[int, int]]:
     return counts
 
 
+def load_missing_lines(path: Path) -> dict[str, list[int]]:
+    """
+    Return `{module path: line numbers coverage reports as missing}` from coverage.json.
+
+    The count comes from `summary.missing_lines`, the same statement-level figure
+    the floors use; the line numbers are what make a failure self-explanatory.
+    If a report carries a count but no line list, the list is padded with 0
+    placeholders so the count still gates; `evaluate` leaves those out of the
+    printed line numbers.
+    """
+
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise CoverageGateError(
+            f"No coverage report at {path}. Run pytest with --cov-report=json first."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise CoverageGateError(f"{path} is not valid JSON: {exc}") from exc
+
+    files = report.get("files")
+    if not isinstance(files, dict):
+        raise CoverageGateError(f"{path} reports no files; the coverage run measured nothing")
+
+    missing: dict[str, list[int]] = {}
+    for module_path, entry in files.items():
+        lines = list(entry.get("missing_lines", []))
+        count = entry["summary"].get("missing_lines", len(lines))
+        # Keep the count authoritative; the list is only for display.
+        missing[module_path] = lines if len(lines) == count else lines + [0] * (count - len(lines))
+    return missing
+
+
 def evaluate(
     floors: dict[str, int],
     counts: dict[str, tuple[int, int]],
     unmeasured: dict[str, str] | None = None,
     shipped: set[str] | None = None,
+    ceilings: dict[str, int] | None = None,
+    missing: dict[str, list[int]] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """
     Compare floors against measured counts, and check the manifest is complete.
@@ -235,8 +312,13 @@ def evaluate(
     * an `unmeasured` entry coverage did reach -- it should carry a floor
     * an `unmeasured` entry that no longer exists
 
+    * a module with more missing statements than its ceiling -- a guard or
+      branch that no test reaches was added; a module absent from `ceilings`
+      has a ceiling of 0
+    * a ceiling naming a module nothing measured -- stale after a rename
+
     `unmeasured` and `shipped` default to empty so the floor comparison can be
-    exercised on its own.
+    exercised on its own. The ceiling check runs only when `missing` is given.
     """
 
     unmeasured = unmeasured or {}
@@ -266,6 +348,26 @@ def evaluate(
         passes.append(f"{module_path}: {covered}/{total} statements ({percent}%), floor {floor}")
         if covered > floor:
             raisable.append(f"{module_path}: floor {floor}, reached {covered}")
+
+    if missing is not None:
+        ceilings = ceilings or {}
+        for module_path, ceiling in sorted(ceilings.items()):
+            if module_path not in counts:
+                failures.append(
+                    f"{module_path}: has a ceiling of {ceiling} but the coverage run did not "
+                    f"measure it -- remove the stale entry"
+                )
+        for module_path in sorted(set(missing) & set(floors)):
+            lines = missing[module_path]
+            ceiling = ceilings.get(module_path, 0)
+            if len(lines) > ceiling:
+                shown = ", ".join(str(n) for n in lines if n) or "unknown"
+                failures.append(
+                    f"{module_path}: {len(lines)} statements missing, ceiling is {ceiling} "
+                    f"-- {len(lines) - ceiling} more are unreached than recorded; "
+                    f"missing lines: {shown}. Add a test that reaches them, or raise the "
+                    f"ceiling in .coverage-thresholds.json with a reason"
+                )
 
     for module_path in sorted(set(counts) - set(floors)):
         covered, total = counts[module_path]
@@ -300,6 +402,27 @@ def evaluate(
         )
 
     return failures, passes, raisable
+
+
+def lowerable_ceilings(
+    floors: dict[str, int],
+    ceilings: dict[str, int],
+    missing: dict[str, list[int]],
+) -> list[str]:
+    """
+    Report modules whose missing-statement count is below their ceiling.
+
+    Mirrors `raisable` for floors and is report-only for the same reason: it
+    never fails the gate. Without it, room left by a new test is silently
+    available to the next untested guard.
+    """
+
+    lowerable: list[str] = []
+    for module_path in sorted(set(missing) & set(floors)):
+        ceiling = ceilings.get(module_path, 0)
+        if len(missing[module_path]) < ceiling:
+            lowerable.append(f"{module_path}: ceiling {ceiling}, missing {len(missing[module_path])}")
+    return lowerable
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -337,13 +460,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         floors, unmeasured = load_manifest(args.thresholds)
+        ceilings = load_ceilings(args.thresholds)
         counts = load_covered_counts(args.coverage_report)
+        missing = load_missing_lines(args.coverage_report)
         shipped = set() if args.skip_completeness else shipped_executables(args.repo_root)
     except CoverageGateError as exc:
         print(f"coverage: {exc}", file=sys.stderr)
         return 2
 
-    failures, passes, raisable = evaluate(floors, counts, unmeasured, shipped)
+    failures, passes, raisable = evaluate(floors, counts, unmeasured, shipped, ceilings, missing)
 
     for line in passes:
         print(f"coverage: PASS {line}")
@@ -351,6 +476,9 @@ def main(argv: list[str] | None = None) -> int:
         # Reported, never applied. See the module docstring on why raising is a
         # decision someone makes in a diff.
         print(f"coverage: could raise {line}")
+    for line in lowerable_ceilings(floors, ceilings, missing):
+        # Reported, never applied or failed: at or under the ceiling still passes.
+        print(f"coverage: could lower {line}")
 
     if failures:
         for line in failures:
