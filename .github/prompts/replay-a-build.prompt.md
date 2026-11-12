@@ -14,9 +14,9 @@ version. It does not pin the ZFS kernel modules. Those come from the
 shared akmods cache image, and the cache check reuses whatever cache matches
 the kernel release and ZFS version, whichever akmods commit built it. The
 akmods source commit matters only when the cache is rebuilt, and it is not
-pinned by default either: `AKMODS_UPSTREAM_REF` is empty, so
+pinned by the lock file either. When `AKMODS_UPSTREAM_REF` is empty,
 `_resolve_default_akmods_ref()` resolves the tracked `main` ref afresh on every
-run. Either way the replay can ship modules built from different source than
+run; when it holds a commit SHA, that commit is used. Either way the replay can ship modules built from different source than
 the run you are reproducing. Say so in the result rather than concluding from a
 non-reproduction that the cause was not in the inputs.
 
