@@ -171,7 +171,9 @@ What still waits for the owner: major updates, an OpenZFS minor-line bump
 (new on-disk pool features can break rollback to the previous image), and a
 cosign bump (`docs/architecture-overview.md` makes version-specific claims
 about it). `renovate.json` keeps `automerge` off for each of those, and
-`tests/test_renovate_config.py` checks that. Renovate pull requests that
+`tests/test_renovate_config.py` checks that. A new GitHub Actions release also waits three days
+(`minimumReleaseAge`) before Renovate takes it, so a compromised action release
+has time to be found and pulled before it can merge into a signing workflow. Renovate pull requests that
 change no Tier 3 path, and every pull request from anyone else, are unchanged.
 
 `renovate.json` deliberately does not list the Hive app in

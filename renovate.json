@@ -91,6 +91,11 @@
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"]
     },
     {
+      "description": "Wait three days before taking a new GitHub Actions release. Non-major action updates merge without the owner (rule above), and a compromised action usually ships as a fresh release that is found and pulled within days; this is the window in which it can be caught before it reaches a workflow that signs images.",
+      "matchManagers": ["github-actions"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
       "description": "Containerfile base-image ARGs are resolved at build time by this repo's own CI input resolution (ci_tools/resolve_build_inputs.py), not hand-pinned versions Renovate should track.",
       "enabled": false,
       "matchManagers": ["dockerfile"]
