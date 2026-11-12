@@ -661,9 +661,11 @@ class ReplayLockFileTests(unittest.TestCase):
 
     def test_the_unpinned_akmods_source_warning_still_describes_the_resolver(self) -> None:
         # The prompt's headline caveat: the replay is partial because
-        # AKMODS_UPSTREAM_REF is empty by default and the ref re-resolves.
+        # the akmods source is not in the lock file: an empty AKMODS_UPSTREAM_REF
+        # re-resolves the tracked ref, a SHA uses that commit.
         # Temporary guard pin (Danathar/akmods#255, removed by Danathar/akmods#260): a 40-hex SHA.
         self.assertRegex(self.defaults["AKMODS_UPSTREAM_REF"], r"^[0-9a-f]{40}$")
+        self.assertIn("when it holds a commit SHA, that commit is used", " ".join(self.text.split()))
         self.assertIn(
             "def _resolve_default_akmods_ref(",
             (CI_TOOLS / "resolve_build_inputs.py").read_text(encoding="utf-8"),

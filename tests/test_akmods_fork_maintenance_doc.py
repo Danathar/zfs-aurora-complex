@@ -305,7 +305,9 @@ class ValidationInstructionTests(unittest.TestCase):
         """
         `main` follows the fork's tracking branch, so the pushed commit is live on the next
         run. The step has to say the rebuild validates after the fact, and the defaults
-        file has to still be on the floating track that makes that true.
+        file has to still be on the floating track that makes that true. While the
+        temporary `AKMODS_UPSTREAM_REF` pin is set, it must also say the rebuild builds
+        the pinned commit, not the pushed one.
         """
 
         after_push = " ".join(_after_push_step().split())
@@ -318,6 +320,13 @@ class ValidationInstructionTests(unittest.TestCase):
         self.assertNotIn("before `main` floats onto it", after_push)
         defaults = load_repo_defaults()
         self.assertEqual(defaults.get("AKMODS_UPSTREAM_TRACK"), "main")
+        if defaults.get("AKMODS_UPSTREAM_REF"):
+            # While the guard pin is set, the rebuild builds the pinned commit.
+            self.assertIn(
+                "a `rebuild_akmods=true` run rebuilds the pinned commit, not the pushed one",
+                after_push,
+            )
+            self.assertIn("Danathar/akmods#260", after_push)
         # Temporary guard pin (Danathar/akmods#255, removed by Danathar/akmods#260): a 40-hex SHA.
         self.assertRegex(defaults.get("AKMODS_UPSTREAM_REF", ""), r"^[0-9a-f]{40}$")
 

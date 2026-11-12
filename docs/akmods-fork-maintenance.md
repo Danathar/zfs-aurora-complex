@@ -136,7 +136,11 @@ Before pushing the fork:
    the synced `Justfile` or `build-kmod-zfs.sh`. The rebuild runs on `main`, so it
    republishes the shared cache and promotes `:latest` unless you also set
    `promote_to_stable=false`. With the floating track, `main` already resolves the
-   pushed fork commit, so this validates the sync after it lands, not before
+   pushed fork commit, so this validates the sync after it lands, not before.
+   While `AKMODS_UPSTREAM_REF` is set in `ci/defaults.json` (the temporary guard pin
+   from Danathar/akmods#255), a `rebuild_akmods=true` run rebuilds the pinned commit,
+   not the pushed one. To validate a pushed fork commit, move the pin to it (in a
+   branch or pull request) or clear the pin as tracked by Danathar/akmods#260
 
 ## What Usually Forces A Temporary Pin
 
