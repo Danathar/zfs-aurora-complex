@@ -607,7 +607,7 @@ class MainTests(unittest.TestCase):
             self.assertEqual(payload["failure_kind"], FAILURE_KIND_UPSTREAM_COMPAT)
             self.assertEqual(
                 payload["key"],
-                "upstream-compat:7.0.4-200.fc44.x86_64:28079918460b",
+                "upstream-compat:7.0.4-200.fc44.x86_64:zfs-2.4.1",
             )
             # write_akmods_badge reads these two off the payload rather than
             # re-parsing `summary`, so main() has to put them there.
