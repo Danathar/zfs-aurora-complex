@@ -21,6 +21,8 @@ The repo supports three resolution modes, checked in order:
 2. **Explicit pin in `ci/defaults.json`.** If the `AKMODS_UPSTREAM_REF` field in [`ci/defaults.json`](../ci/defaults.json) is non-empty, that commit is used. This is how you freeze the repo to a known-good SHA during an outage.
 3. **Floating tracking ref.** Otherwise, `AKMODS_UPSTREAM_TRACK` (default `"main"`) is resolved via `git ls-remote` against `AKMODS_UPSTREAM_REPO` at the start of every run, and the resulting SHA is pinned for the rest of the run.
 
+Temporary pin: `AKMODS_UPSTREAM_REF` is currently set to a known-good `Danathar/akmods` commit so the signing-key port tracked in Danathar/akmods#255 cannot reach this repo's builds before it is validated. It is removed (set back to `""`) by Danathar/akmods#260 after a build against the ported commit passes.
+
 The floating mode is the self-healing default. A transient upstream mismatch stays red until upstream lands a compatible commit, at which point the next cron run picks it up without any human edit.
 
 Every build records the resolved commit SHA in two places:

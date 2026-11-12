@@ -318,7 +318,8 @@ class ValidationInstructionTests(unittest.TestCase):
         self.assertNotIn("before `main` floats onto it", after_push)
         defaults = load_repo_defaults()
         self.assertEqual(defaults.get("AKMODS_UPSTREAM_TRACK"), "main")
-        self.assertEqual(defaults.get("AKMODS_UPSTREAM_REF", ""), "")
+        # Temporary guard pin (Danathar/akmods#255, removed by Danathar/akmods#260): a 40-hex SHA.
+        self.assertRegex(defaults.get("AKMODS_UPSTREAM_REF", ""), r"^[0-9a-f]{40}$")
 
     def test_the_files_a_green_pull_request_run_says_nothing_about_are_checked_above(self) -> None:
         """The synced files the step names must be ones the pre-push steps already check."""
