@@ -8,7 +8,7 @@ name: Agent audit trail
 # of it lives. A Hive pull request ends its description with a `— hive:`
 # signature line naming the role, backend and model that wrote it, and every
 # commit on it carries a Signed-off-by trailer. Nothing checked either once the
-# merge was in: the only required status check in .github/rulesets/main.json
+# merge was in: the only required status check, in .github/rulesets/main-checks.json,
 # is `Python Unit Tests`, and an omp-backed run pushes under the maintainer's
 # own login, so the author alone cannot say which merged pull requests an
 # agent wrote.

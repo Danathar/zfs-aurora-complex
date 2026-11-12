@@ -6,7 +6,10 @@
 # not ask an author for their own review, so the owner's own pull requests,
 # and anything opened with the owner's token, are not held (see
 # docs/branch-protection.md). A pull request that touches none of these paths
-# merges on the required check alone, as before.
+# merges on the required check alone, as before. One more exception: the
+# Renovate app may bypass that review to merge its own patch, minor, digest and
+# pin updates, still only through a pull request and still behind the required
+# check (.github/rulesets/main-checks.json).
 #
 # That is why there is no catch-all `*` line: it would put every other author's
 # pull request behind the owner's approval. tests/test_codeowners.py fails if one comes back,
@@ -17,7 +20,8 @@
 # Every workflow, not only build.yml. Once a workflow is on main, any job in it
 # can declare the production-signing environment and get the signing key, so a
 # change to any of them from anyone but the owner waits for the owner.
-# Renovate's pin bumps in workflows wait too; that is the cost.
+# Renovate's major updates in workflows wait too; its non-major ones merge
+# themselves on green CI.
 /.github/workflows/                                           @Danathar
 
 # The seven files AGENTS.md section 0 rule 2 names. The first, build.yml, is

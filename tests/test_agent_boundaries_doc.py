@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DOC = REPO_ROOT / "docs" / "agent-boundaries.md"
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
+CHECKS_RULESET = REPO_ROOT / ".github" / "rulesets" / "main-checks.json"
 
 # Paths the page names in backticks. Globs and placeholders are excluded by the character class.
 _PATH_RE = re.compile(r"`((?:\.github|\.claude|docs|tests)/[A-Za-z0-9_./-]+)`")
@@ -152,17 +153,23 @@ class SettingsRowTests(unittest.TestCase):
 class RulesetRowTests(unittest.TestCase):
     """The first two gate rows against the ruleset and the workflow job."""
 
-    def test_the_ruleset_row_says_no_bypass_and_the_file_has_none(self) -> None:
-        self.assertIn("It has no bypass actors.", _gate_row(".github/rulesets/main.json"))
+    def test_the_ruleset_row_names_the_one_bypass_and_the_file_has_only_it(self) -> None:
+        row = _gate_row(".github/rulesets/main.json")
+        self.assertIn("Its one bypass actor, the Renovate app, may only merge a pull request", row)
+        self.assertIn("nothing may bypass the required check in", row)
         ruleset = json.loads(RULESET.read_text(encoding="utf-8"))
-        self.assertEqual(ruleset["bypass_actors"], [])
+        self.assertEqual(
+            ruleset["bypass_actors"],
+            [{"actor_id": 2740, "actor_type": "Integration", "bypass_mode": "pull_request"}],
+        )
+        self.assertEqual(json.loads(CHECKS_RULESET.read_text(encoding="utf-8"))["bypass_actors"], [])
         types = {rule["type"] for rule in ruleset["rules"]}
         self.assertLessEqual({"deletion", "non_fast_forward", "pull_request"}, types)
 
     def test_the_required_check_is_a_job_name_in_test_yml(self) -> None:
         row = _gate_row("Python Unit Tests")
         self.assertIn("test.yml", row)
-        ruleset = json.loads(RULESET.read_text(encoding="utf-8"))
+        ruleset = json.loads(CHECKS_RULESET.read_text(encoding="utf-8"))
         (checks,) = [r for r in ruleset["rules"] if r["type"] == "required_status_checks"]
         contexts = [c["context"] for c in checks["parameters"]["required_status_checks"]]
         self.assertEqual(contexts, ["Python Unit Tests"])

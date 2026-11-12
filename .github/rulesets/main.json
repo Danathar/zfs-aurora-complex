@@ -8,7 +8,13 @@
       "exclude": []
     }
   },
-  "bypass_actors": [],
+  "bypass_actors": [
+    {
+      "actor_id": 2740,
+      "actor_type": "Integration",
+      "bypass_mode": "pull_request"
+    }
+  ],
   "rules": [
     {
       "type": "deletion"
@@ -27,19 +33,6 @@
         "required_review_thread_resolution": false,
         "require_extra_approval_for_unattributed_changes": true,
         "allowed_merge_methods": ["merge", "squash", "rebase"]
-      }
-    },
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "strict_required_status_checks_policy": true,
-        "do_not_enforce_on_create": false,
-        "required_status_checks": [
-          {
-            "context": "Python Unit Tests",
-            "integration_id": 15368
-          }
-        ]
       }
     }
   ]
