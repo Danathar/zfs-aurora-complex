@@ -121,6 +121,16 @@ the commit message, never something applied automatically.
 This is not a coverage percentage in disguise. If your change legitimately
 removes a code path, the floor moves down with it and you say so.
 
+Ceilings are the same gate from the other side. `ceilings` in the same file
+records, per module, how many statements coverage reports as missing today; a
+module with no entry has a ceiling of 0. A new fail-closed `raise` with no test
+leaves every floor passing, but it adds a missing statement, so the gate fails
+and prints the module and the missing line numbers. Lowering a ceiling is
+routine: add the test that reaches the guard, then drop the number; the gate
+prints `coverage: could lower <module>: ceiling N, missing M` (without failing)
+when a module sits under its ceiling, so spare room is not silently reused. Raising one
+is a decision, made in the diff with a reason in the commit message.
+
 To run the gate the way `test.yml` does, add `--cov-report=json` to the command
 above and then:
 
