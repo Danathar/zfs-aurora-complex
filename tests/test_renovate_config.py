@@ -532,6 +532,14 @@ class PackageRuleTests(unittest.TestCase):
                     )
                     self.assertIs(settings.get("automerge"), False)
 
+    def test_github_actions_releases_wait_three_days(self) -> None:
+        """Non-major action updates merge without the owner; the wait is the window to catch a bad release."""
+        ages = [rule for rule in self.rules if "minimumReleaseAge" in rule]
+        self.assertEqual(len(ages), 1)
+        self.assertEqual(ages[0].get("matchManagers"), ["github-actions"])
+        self.assertEqual(ages[0]["minimumReleaseAge"], "3 days")
+        self.assertNotIn("minimumReleaseAge", self.config)
+
     def test_no_other_identity_can_ride_renovates_bypass(self) -> None:
         """A commit listed here would merge under Renovate's bypass without owner review."""
         self.assertNotIn("gitIgnoredAuthors", self.config)
