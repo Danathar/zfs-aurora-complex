@@ -185,6 +185,7 @@ def build_sticky_issue_payload(
 
     Key fields:
     - `key`: identifies the distinct failure so one issue tracks one outage
+      (kernel + akmods ref; kernel + OpenZFS version for upstream-compat when known)
     - `title`: human-readable title the sticky-issue workflow uses verbatim
     - `body`: pre-rendered markdown body
     - `zfs_version`/`max_kernel`: structured OpenZFS metadata (when known) so
@@ -192,6 +193,11 @@ def build_sticky_issue_payload(
     """
     safe_ref = (akmods_upstream_ref or "unknown-ref")[:12]
     key = f"{failure_kind}:{kernel_release or 'unknown-kernel'}:{safe_ref}"
+    if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT and zfs_version:
+        # The akmods ref does not change why this OpenZFS release cannot build
+        # for this kernel, so key on the release to avoid a duplicate issue per
+        # upstream commit.
+        key = f"{failure_kind}:{kernel_release or 'unknown-kernel'}:zfs-{zfs_version}"
     if failure_kind == FAILURE_KIND_UPSTREAM_COMPAT:
         title = f"Upstream ZFS/kernel incompatibility: {kernel_release} + akmods@{safe_ref}"
     elif failure_kind == FAILURE_KIND_TRANSIENT_NETWORK:
