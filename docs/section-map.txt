@@ -59,6 +59,8 @@
   prose: narrative: conduct rule for how an agent works
 ## 8. Findings about the Bash guard hook: what is in scope
   joined: tests/test_agent_permission_boundary.py
+## 9. Owner's standing decisions
+  prose: narrative: a standing ruling on which owner questions agents decide themselves
 
 [CLAUDE.md]
 ## 0. This Repository Is In Production — Read This First
