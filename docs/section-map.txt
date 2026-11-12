@@ -275,6 +275,10 @@
   prose: narrative: argument for the ruleset; the rules themselves are in the joined sections
 ## The ruleset
   joined: tests/test_branch_protection.py
+## Pull requests do not have to be up to date
+  joined: tests/test_branch_protection.py
+## Renovate merges its own non-major updates
+  joined: tests/test_branch_protection.py
 ## Merge queue
   prose: unchecked: states whether the ruleset uses a merge queue
 ## A pull request that never gets the check
@@ -471,7 +475,7 @@
   joined: tests/test_multi_agent_doc.py
 ## Keeping agents from colliding
   joined: tests/test_multi_agent_doc.py
-### A pull request must be up to date before it merges
+### A pull request does not have to be up to date before it merges
   joined: tests/test_multi_agent_doc.py
 ## Who merges
   joined: tests/test_multi_agent_doc.py

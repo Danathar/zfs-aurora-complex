@@ -287,8 +287,11 @@ Every file in `.github/workflows/` has an entry here.
 ## A Renovate pull request fails or looks wrong
 
 - **Recognise one:** author `app/renovate`, branch `renovate/…`. Renovate opens
-  dependency, action and digest bumps and never merges one: `renovate.json` sets
-  `automerge` to `false` so that every merge to `main` stays a person's click.
+  dependency, action and digest bumps. It merges its own patch, minor, digest
+  and pin updates once `Python Unit Tests` passes. `renovate.json` sets
+  `automerge` to `false` for major updates, OpenZFS minor-line bumps and cosign
+  bumps, so those wait for a person
+  ([`branch-protection.md`](./branch-protection.md#renovate-merges-its-own-non-major-updates)).
 - **First:** read which check failed. A red `Python Unit Tests` is often a guard
   that two pinned values must move together. Two Renovate pull requests bumped the
   `ghcr.io/ublue-os/devcontainer` digest in one place each and both failed
