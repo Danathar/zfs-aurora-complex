@@ -123,26 +123,14 @@ DEVCONTAINER_DEPENDENCIES = (
     },
 )
 
-# The one group every minor, patch and digest update goes into, so the owner
-# approves one Renovate PR a week. The dependencies below are the shapes
-# Renovate offered in the week of 2026-10-26, as packageRules see them, plus
-# the updates the group must leave alone. The devcontainer copies above belong
-# to the group too. cosign comes from the github-actions manager reading
-# cosign-installer's `cosign-release` input, which it reports as depType
-# "uses-with".
+# The one group every minor, patch and digest update goes into, so there is
+# one Renovate PR a week, which merges itself once CI is green. The
+# dependencies below are the shapes Renovate offered in the week of 2026-10-26,
+# as packageRules see them, plus the updates the group must leave alone. The
+# devcontainer copies above belong to the group too.
 WEEKLY_GROUP = "weekly dependency updates"
 
 WEEKLY_DEPENDENCIES = (
-    {
-        "manager": "github-actions",
-        "fileName": ".github/actions/install-signing-tools/action.yml",
-        "packageName": "sigstore/cosign",
-        "depName": "sigstore/cosign",
-        "datasource": "github-releases",
-        "depType": "uses-with",
-        "currentValue": "v3.1.3",
-        "updateType": "patch",
-    },
     {
         "manager": "github-actions",
         "fileName": ".github/workflows/build.yml",
@@ -168,7 +156,25 @@ WEEKLY_DEPENDENCIES = (
     ),
 )
 
+# A cosign bump waits for the owner, and Renovate automerges a group only when every update in it
+# may automerge, so cosign gets its own PR instead of holding back the week's group. It comes from
+# the github-actions manager reading cosign-installer's `cosign-release` input, which it reports as
+# depType "uses-with".
+COSIGN_DEPENDENCIES = (
+    {
+        "manager": "github-actions",
+        "fileName": ".github/actions/install-signing-tools/action.yml",
+        "packageName": "sigstore/cosign",
+        "depName": "sigstore/cosign",
+        "datasource": "github-releases",
+        "depType": "uses-with",
+        "currentValue": "v3.1.3",
+        "updateType": "patch",
+    },
+)
+
 UNGROUPED_DEPENDENCIES = (
+    *COSIGN_DEPENDENCIES,
     {
         "manager": "custom.regex",
         "fileName": "ci/defaults.json",
@@ -487,26 +493,62 @@ class PackageRuleTests(unittest.TestCase):
         cls.rules = cls.config["packageRules"]
         cls.managers = managers_by_dep(cls.config)
 
-    def test_nothing_in_the_config_turns_automerge_on(self) -> None:
-        """Merging to main builds, signs and promotes; no unattended path may exist."""
+    def test_automerge_is_on_only_for_non_major_updates_in_one_rule(self) -> None:
+        """AGENTS.md section 9 pre-approves patch, minor, digest and pin updates; majors stay manual."""
         self.assertNotIn("automerge", self.config)
+        on = [rule for rule in self.rules if rule.get("automerge") is True]
+        self.assertEqual(len(on), 1, on)
+        self.assertEqual(
+            set(on[0]["matchUpdateTypes"]), {"minor", "patch", "digest", "pin", "pinDigest"}
+        )
+        # No narrowing key: every dependency's non-major update is covered, and later rules
+        # are what turn it back off.
+        self.assertEqual(set(on[0]), {"description", "automerge", "matchUpdateTypes"})
+        self.assertIs(self.rules[0], on[0], "a later rule must be able to turn automerge back off")
+
+    def test_renovate_merges_through_its_own_pr_merge_not_githubs_auto_merge(self) -> None:
+        """GitHub's native auto-merge would wait for code owner review and ignore the bypass."""
+        self.assertIs(self.config["platformAutomerge"], False)
+        self.assertEqual(self.config["automergeType"], "pr")
         for rule in self.rules:
             with self.subTest(rule=rule["description"][:60]):
-                self.assertIsNot(rule.get("automerge"), True)
+                self.assertNotIn("platformAutomerge", rule)
+                self.assertNotIn("automergeType", rule)
+
+    def test_a_major_update_never_automerges(self) -> None:
+        for dependency in (*WEEKLY_DEPENDENCIES, *DEVCONTAINER_DEPENDENCIES, *UNGROUPED_DEPENDENCIES):
+            major = {**dependency, "updateType": "major"}
+            with self.subTest(dependency=dependency["packageName"]):
+                self.assertIsNot(resolve_package_rules(self.rules, major).get("automerge"), True)
+
+    def test_openzfs_and_cosign_updates_never_automerge(self) -> None:
+        openzfs = [dep for dep in UNGROUPED_DEPENDENCIES if dep["packageName"] == "openzfs/zfs"]
+        self.assertEqual(len(openzfs), 1)
+        for dependency in (*COSIGN_DEPENDENCIES, *openzfs):
+            for update_type in ("minor", "patch", "digest", "pin", "pinDigest"):
+                with self.subTest(dependency=dependency["packageName"], update_type=update_type):
+                    settings = resolve_package_rules(
+                        self.rules, {**dependency, "updateType": update_type}
+                    )
+                    self.assertIs(settings.get("automerge"), False)
+
+    def test_no_other_identity_can_ride_renovates_bypass(self) -> None:
+        """A commit listed here would merge under Renovate's bypass without owner review."""
+        self.assertNotIn("gitIgnoredAuthors", self.config)
 
     def test_every_rule_says_why_it_exists(self) -> None:
         for index, rule in enumerate(self.rules):
             with self.subTest(index=index):
                 self.assertTrue(rule.get("description", "").strip())
 
-    def test_pin_and_pindigest_updates_are_held_back_from_automerge(self) -> None:
+    def test_pin_and_pindigest_updates_automerge(self) -> None:
         matching = [
             rule
             for rule in self.rules
             if {"pin", "pinDigest"} <= set(rule.get("matchUpdateTypes", []))
         ]
         self.assertEqual(len(matching), 1, "no single rule covers both pin and pinDigest")
-        self.assertIs(matching[0]["automerge"], False)
+        self.assertIs(matching[0]["automerge"], True)
 
     def test_every_matchpackagenames_rule_names_a_dependency_a_manager_actually_produces(
         self,
@@ -559,16 +601,21 @@ class PackageRuleTests(unittest.TestCase):
                 self.assertNotIn(narrowing, matching[0])
 
     def test_the_weekly_group_gathers_every_minor_patch_and_digest_update(self) -> None:
-        """One Renovate PR a week for the owner to approve, instead of one per dependency."""
+        """One Renovate PR a week, instead of one per dependency, and it merges itself.
+
+        Renovate automerges a group only when every update in it may automerge, so one update
+        in the group with automerge off would hold the whole week's PR for the owner.
+        """
         for dependency in (*WEEKLY_DEPENDENCIES, *DEVCONTAINER_DEPENDENCIES):
             with self.subTest(dependency=f"{dependency['packageName']} in {dependency['fileName']}"):
                 settings = resolve_package_rules(self.rules, dependency)
                 self.assertEqual(settings.get("groupName"), WEEKLY_GROUP)
                 self.assertIsNot(settings.get("enabled"), False)
-                self.assertIsNot(settings.get("automerge"), True)
+                self.assertIs(settings.get("automerge"), True)
 
     def test_the_weekly_group_leaves_out_the_updates_that_stay_on_their_own(self) -> None:
-        """An OpenZFS line is a decision, Chunkah needs no owner, and a major stays apart."""
+        """An OpenZFS line is a decision, cosign waits for the owner, Chunkah needs no owner, and a
+        major stays apart."""
         for dependency in UNGROUPED_DEPENDENCIES:
             with self.subTest(dependency=f"{dependency['packageName']} {dependency['updateType']}"):
                 settings = resolve_package_rules(self.rules, dependency)
@@ -580,7 +627,10 @@ class PackageRuleTests(unittest.TestCase):
         self.assertEqual(len(matching), 1)
         names = matching[0]["matchPackageNames"]
         self.assertTrue(all(name.startswith("!") for name in names), names)
-        self.assertEqual({name[1:] for name in names}, {"openzfs/zfs", "quay.io/coreos/chunkah"})
+        self.assertEqual(
+            {name[1:] for name in names},
+            {"openzfs/zfs", "quay.io/coreos/chunkah", "sigstore/cosign"},
+        )
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name[1:], self.managers)

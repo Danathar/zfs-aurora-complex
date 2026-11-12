@@ -51,8 +51,10 @@ Labelled `area/safety-critical`.
 - `.github/workflows/`, every workflow and not only `build.yml`, because once a
   workflow is on `main` any job in it can declare the production-signing
   environment and be handed the key that signs the published image. The cost:
-  every workflow change from anyone but the owner waits for the owner,
-  Renovate's pin bumps included
+  every workflow change from anyone but the owner waits for the owner, except
+  Renovate's own patch, minor, digest and pin updates, which merge themselves
+  on green CI (see
+  [`branch-protection.md`](./branch-protection.md#renovate-merges-its-own-non-major-updates))
 - `.github/policies/workflow-permissions.json`, because a token that gains
   `packages: write` can push an image to the registry these machines pull from
 - `.github/rulesets/`, because the ruleset in it is what keeps `main`, and so

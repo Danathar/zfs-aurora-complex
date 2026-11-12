@@ -24,7 +24,7 @@ much review a change needs is [`risk-tiers.md`](./risk-tiers.md).
 
 | Gate | What it stops | Holds for | Explained in |
 | --- | --- | --- | --- |
-| [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. It has no bypass actors. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
+| [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. Its one bypass actor, the Renovate app, may only merge a pull request past code owner review; nothing may bypass the required check in [`main-checks.json`](../.github/rulesets/main-checks.json). | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | [`.github/CODEOWNERS`](../.github/CODEOWNERS), with the ruleset's `require_code_owner_review` | Merging a pull request that touches a Tier 3 path before the owner has approved it on GitHub. | every author but the owner: a pull request opened as the owner, including by an agent using the owner's token, is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | The required `Python Unit Tests` check in [`test.yml`](../.github/workflows/test.yml) | Merging a pull request whose unit suite or `ruff check` fails. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | [`.github/policies/workflow-permissions.json`](../.github/policies/workflow-permissions.json) | A workflow's `GITHUB_TOKEN` gaining a scope the policy file does not grant: the unit suite fails until the same pull request changes both. | every agent | [SECURITY-AI.md](./SECURITY-AI.md#what-an-agent-may-do-unattended) |
@@ -83,6 +83,13 @@ anyone but the owner that touches one waits for the owner's approval, and any
 other pull request does not. The owner's own pull requests are not held: GitHub
 does not ask an author for their own review. A catch-all `*` line would put
 every other author's pull request behind that approval.
+
+One exception, by the owner's choice: Renovate merges its own patch, minor,
+digest and pin updates without that approval, through a bypass that can only
+merge a pull request and cannot skip the required check. AGENTS.md section 9,
+"Owner's standing decisions", already approves those updates with green CI.
+[`branch-protection.md`](./branch-protection.md#renovate-merges-its-own-non-major-updates)
+explains how it is set up and what still waits for the owner.
 
 When there is a second reviewer,
 [`branch-protection.md`](./branch-protection.md#when-there-is-a-second-reviewer)

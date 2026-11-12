@@ -8,6 +8,7 @@ Goal: Make a workflow added without a runbook entry, a renamed workflow or job, 
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -185,8 +186,22 @@ class RenovateEntryTests(unittest.TestCase):
         source = (REPO_ROOT / "tests" / "test_workflow_build_container.py").read_text(encoding="utf-8")
         self.assertIn("def test_container_literals_match_the_checked_in_default", source)
 
-    def test_renovate_sets_automerge_false(self) -> None:
-        self.assertIn('"automerge": false', (REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+    def test_renovate_holds_back_what_the_entry_says(self) -> None:
+        config = json.loads((REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+        held = {
+            name
+            for rule in config["packageRules"]
+            if rule.get("automerge") is False
+            for name in rule.get("matchPackageNames", [])
+        }
+        self.assertEqual(held, {"openzfs/zfs", "sigstore/cosign"})
+        (on,) = [rule for rule in config["packageRules"] if rule.get("automerge") is True]
+        self.assertEqual(set(on["matchUpdateTypes"]), {"minor", "patch", "digest", "pin", "pinDigest"})
+        text = " ".join(doc_text().split())
+        self.assertIn("It merges its own patch, minor, digest and pin updates", text)
+        self.assertIn(
+            "`automerge` to `false` for major updates, OpenZFS minor-line bumps and cosign bumps", text
+        )
 
     def test_renovate_rebases_only_a_conflicting_branch(self) -> None:
         self.assertIn("`rebaseWhen` to `conflicted`", doc_text())

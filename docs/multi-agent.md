@@ -206,30 +206,35 @@ the work has to keep:
 4. **Keep a pull request to one change.** A small pull request that touches few
    files has few ways to overlap with another.
 5. **Do not touch an open Renovate pull request.** It is the dependency app's, and
-   it is rebased by the app.
+   it is rebased, and for non-major updates merged, by the app.
 
-### A pull request must be up to date before it merges
+### A pull request does not have to be up to date before it merges
 
 The required check is `Python Unit Tests`. The ruleset in
-[`.github/rulesets/main.json`](../.github/rulesets/main.json) sets
-`strict_required_status_checks_policy` to `true`. In plain terms: GitHub will not
-merge a pull request until its branch contains everything on `main` and
-`Python Unit Tests` has passed on that combined code.
+[`.github/rulesets/main-checks.json`](../.github/rulesets/main-checks.json)
+sets `strict_required_status_checks_policy` to `false`. In plain terms: a pull
+request whose check passed on its own head commit can merge even when `main`
+has moved on since. GitHub no longer makes it catch up with `main` first.
 
-So if pull request A and pull request B each pass, and both change the same
-function from different directions, B cannot merge straight after A. Once A
-merges, B is out of date: it has to update from `main`, and the rerun of
-`Python Unit Tests` shows whether the two changes break each other before `main`
-does. That matters because a push to `main` that changes more than documentation
-starts `build.yml`, the workflow that signs and promotes an image. See
-[`branch-protection.md`](./branch-protection.md) for the ruleset itself, and
-[`safety-model.md`](./safety-model.md) for what a bad `main` can reach.
+It used to be `true`. The owner turned it off because every merge made each
+open Renovate pull request stale again, and nothing brought them up to date:
+`renovate.json` sets `rebaseWhen` to `conflicted`, and once anyone else pushes
+to a Renovate branch, Renovate leaves that branch alone. Those bump pull
+requests piled up waiting for the owner, although
+[AGENTS.md section 9, "Owner's standing decisions"](../AGENTS.md#9-owners-standing-decisions)
+already approves routine patch and minor updates with green CI.
 
-The cost falls on parallel work. GitHub's merge queue is unavailable on a
-repository owned by a personal account, so nothing does the updating for you:
-every merge leaves each other open pull request behind `main`, and each one must
-be updated and wait for `Python Unit Tests` again before it can merge. Agents
-working in parallel should expect that.
+The cost is the gap strict mode closed. If pull request A and pull request B
+each pass, and both change the same function from different directions, B can
+now merge straight after A without being tested on top of it. `test.yml` runs
+`Python Unit Tests` again on the push to `main`, so a broken pair shows up
+there, but after the merge, and a push to `main` that changes more than
+documentation also starts `build.yml`, the workflow that signs and promotes an
+image. GitHub's merge queue is unavailable on a repository owned by a personal
+account. When two open pull requests change the same code, update the second
+from `main` and let its check run again before merging it. See
+[`branch-protection.md`](./branch-protection.md) for the rulesets themselves,
+and [`safety-model.md`](./safety-model.md) for what a bad `main` can reach.
 
 To check what the live ruleset says rather than trust this page:
 
@@ -244,9 +249,12 @@ Two logins merge here: the maintainer, `Danathar`, and the Hive app,
 #174, `Danathar` had merged 69 and the Hive app 26. Every merge before
 2026-10-12 was the maintainer's. From that day the Hive app merged all 21 of its
 own agents' merged pull requests, two the maintainer opened (#143 and #145), and
-three of Renovate's (#75, #78 and #123). Renovate does not merge its own:
-`renovate.json` sets `automerge` to `false`
-([`branch-protection.md`](./branch-protection.md)). Check:
+three of Renovate's (#75, #78 and #123). Since November 2026 Renovate also
+merges its own patch, minor, digest and pin updates once `Python Unit Tests`
+passes: `renovate.json` turns `automerge` on for those, and keeps it `false`
+for major updates, OpenZFS minor-line bumps and cosign bumps
+([`branch-protection.md`](./branch-protection.md#renovate-merges-its-own-non-major-updates)).
+Check:
 
 ```bash
 gh pr list --state merged --limit 1000 --json mergedBy \
@@ -254,9 +262,11 @@ gh pr list --state merged --limit 1000 --json mergedBy \
 ```
 
 A merge to `main` builds, signs and promotes the image, so the required checks are
-the gate. The ruleset requires a pull request and a passing `Python Unit Tests`;
-it requires no approving review except the code owner's on Tier 3 paths, and it
-allows no bypass actors. It applies to the Hive app as to anyone else.
+the gate. The rulesets require a pull request and a passing `Python Unit Tests`;
+they require no approving review except the code owner's on Tier 3 paths, and
+the only bypass actor is the Renovate app, which may merge its own non-major
+updates without the code owner's review but cannot skip the required check.
+They apply to the Hive app as to anyone else.
 
 Agent sessions the maintainer runs do not merge on their own initiative.
 [`AGENTS.md`](../AGENTS.md) section 0 rule 6 says not to push, promote, tag, or
