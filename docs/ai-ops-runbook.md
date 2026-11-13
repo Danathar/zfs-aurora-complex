@@ -169,7 +169,11 @@ Every file in `.github/workflows/` has an entry here.
   that really built something, and refreshes the two README badges that are not
   GitHub's own. The job is "Manage sticky akmods failure issue". See the next
   section for the issues themselves. It does not report a scheduled failure that
-  has nothing to do with akmods; `auto-issues.yml` does.
+  has nothing to do with akmods; `auto-issues.yml` does. When that job closes a
+  sticky issue, a second job, "Re-run pull request builds stopped by the cleared
+  failure", re-runs the failed jobs of each open pull request's newest
+  `build-pr.yml` run, because those builds failed on the same stop and nothing
+  else starts them again. Pull requests from forks are left alone.
 - **First:** if this workflow itself is red, the build it reports on is unaffected.
   Open the run and read the failing step. Until it is fixed the issue and badges
   may be stale.

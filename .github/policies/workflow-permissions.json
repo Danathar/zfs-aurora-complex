@@ -16,7 +16,8 @@
     "akmods-failure-triage.yml": {
       "workflow": null,
       "jobs": {
-        "triage": {"contents": "write", "issues": "write", "actions": "read", "packages": "read"}
+        "triage": {"contents": "write", "issues": "write", "actions": "read", "packages": "read"},
+        "rerun-pr-builds": {"actions": "write", "pull-requests": "read"}
       }
     },
     "auto-issues.yml": {

@@ -92,6 +92,7 @@
 
     { "workflow": "build-pr.yml", "job": "build-pr-image", "timeout_minutes": 45 },
 
-    { "workflow": "akmods-failure-triage.yml", "job": "triage", "timeout_minutes": 10 }
+    { "workflow": "akmods-failure-triage.yml", "job": "triage", "timeout_minutes": 10 },
+    { "workflow": "akmods-failure-triage.yml", "job": "rerun-pr-builds", "timeout_minutes": 5 }
   ]
 }

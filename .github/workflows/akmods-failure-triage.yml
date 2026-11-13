@@ -5,7 +5,8 @@ name: Akmods Failure Triage
 # incompatibilities. The build workflow itself still fails loudly — this
 # workflow only adds visibility on top of red builds. On a green build it
 # auto-closes all open akmods-failure sticky issues so transient failures do not
-# stay pinned.
+# stay pinned, and re-runs the pull request image builds that the cleared
+# failure stopped (the `rerun-pr-builds` job below).
 #
 # It also keeps small JSON files on the `status` branch in sync with the same
 # state, so the README's OpenZFS/kernel badge can show *why* a build is
@@ -39,6 +40,9 @@ jobs:
       issues: write
       actions: read
       packages: read
+    # Read by the rerun-pr-builds job below.
+    outputs:
+      cleared: ${{ steps.close_sticky.outputs.cleared }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -158,6 +162,7 @@ jobs:
             }
 
       - name: Close stale sticky issues on successful run
+        id: close_sticky
         if: github.event.workflow_run.conclusion == 'success' && steps.download.outputs.build_ran == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -185,6 +190,8 @@ jobs:
               });
               core.info(`Closed sticky issue #${issue.number}`);
             }
+            // Tells the rerun-pr-builds job that a build stop has just cleared.
+            core.setOutput('cleared', open.length > 0 ? 'true' : 'false');
 
       # Only two conclusions tell us anything new about OpenZFS/kernel compat:
       # a classified upstream-compat failure (has_payload is only 'true' when
@@ -286,3 +293,67 @@ jobs:
             git commit -q -m "Update status badges"
             git push origin HEAD:status
           fi
+
+  # A pull request's image build checks the shared akmods image that the main
+  # build publishes, so while an akmods build stop is open every pull request
+  # build fails with it too. Once a green main build clears the stop (the
+  # triage job just closed its sticky issue), nothing starts those pull
+  # request builds again: Renovate rebases its weekly PR only on a conflict
+  # (`rebaseWhen: conflicted` in renovate.json), so it would stay red until
+  # someone re-ran it by hand. This job re-runs the failed jobs of each open pull
+  # request's newest image build, once per cleared stop.
+  #
+  # It is a job of its own so that `actions: write` never reaches the triage
+  # job's token, which already holds `contents: write`. Only pull requests
+  # from this repository's own branches are re-run; a fork's build is left to
+  # its author. A build that failed for some other reason just fails again,
+  # which costs one build and nothing else.
+  rerun-pr-builds:
+    name: Re-run pull request builds stopped by the cleared failure
+    runs-on: ubuntu-26.04
+    # A few API calls per open pull request; no build runs in this job.
+    timeout-minutes: 5
+    needs: triage
+    if: needs.triage.outputs.cleared == 'true'
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Re-run failed pull request image builds
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            for (const pr of pulls) {
+              // A deleted fork has no head repository.
+              if (!pr.head.repo || pr.head.repo.full_name !== `${owner}/${repo}`) {
+                continue;
+              }
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: 'build-pr.yml',
+                event: 'pull_request',
+                head_sha: pr.head.sha,
+                per_page: 1,
+              });
+              // Newest first, so this is the build the pull request shows.
+              const latest = runs.data.workflow_runs[0];
+              if (!latest || latest.status !== 'completed' || latest.conclusion !== 'failure') {
+                continue;
+              }
+              // One pull request that cannot be re-run (a run past GitHub's
+              // 30-day re-run limit, say) must not stop the rest.
+              try {
+                await github.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: latest.id });
+                core.info(`Re-ran the failed jobs of run ${latest.id} for #${pr.number}`);
+              } catch (error) {
+                core.warning(`Could not re-run run ${latest.id} for #${pr.number}: ${error.message}`);
+              }
+            }
