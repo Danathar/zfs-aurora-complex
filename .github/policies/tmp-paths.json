@@ -1,0 +1,70 @@
+{
+  "$comment": "Fixed-name folders directly under /tmp that shipped files may mention. /tmp is world-writable and shared, so any local account can create a fixed-name folder first and have a root process work through it. tests/test_tmp_path_policy.py scans every tracked text file outside tests/ and .claude/ and fails on a /tmp/<name> that is not listed here as the exact (file, tmp_path) pair, and on an entry here that matches nothing. Prefer PrivateTmp=yes, RuntimeDirectory=/StateDirectory=, mktemp -d (or $RUNNER_TEMP in workflows) or a root-owned /run/<name> over adding an entry. Each `why` must say why the use is safe.",
+  "allowed": [
+    {
+      "file": "files/usr/lib/systemd/system/brew-setup.service.d/10-private-tmp.conf",
+      "tmp_path": "/tmp/homebrew",
+      "why": "comment or doc explaining the brew-setup drop-in that confines the upstream unit's /tmp/homebrew with PrivateTmp=yes (the earlier problem, #291); not an instruction"
+    },
+    {
+      "file": "build_files/build-image.sh",
+      "tmp_path": "/tmp/homebrew",
+      "why": "comment or doc explaining the brew-setup drop-in that confines the upstream unit's /tmp/homebrew with PrivateTmp=yes (the earlier problem, #291); not an instruction"
+    },
+    {
+      "file": "docs/architecture-overview.md",
+      "tmp_path": "/tmp/homebrew",
+      "why": "comment or doc explaining the brew-setup drop-in that confines the upstream unit's /tmp/homebrew with PrivateTmp=yes (the earlier problem, #291); not an instruction"
+    },
+    {
+      "file": "ci_tools/akmods_clone_pinned.py",
+      "tmp_path": "/tmp/akmods",
+      "why": "CI-only helper run on GitHub-hosted runners, which have a single user and are discarded after the job (run from .github/actions/prepare-main-akmods in build.yml on ubuntu-26.04)"
+    },
+    {
+      "file": "ci_tools/akmods_build_and_publish.py",
+      "tmp_path": "/tmp/akmods",
+      "why": "CI-only helper run on GitHub-hosted runners, which have a single user and are discarded after the job (run from .github/actions/prepare-main-akmods in build.yml on ubuntu-26.04)"
+    },
+    {
+      "file": "ci_tools/akmods_configure_zfs_target.py",
+      "tmp_path": "/tmp/akmods",
+      "why": "CI-only helper run on GitHub-hosted runners, which have a single user and are discarded after the job (run from .github/actions/prepare-main-akmods in build.yml on ubuntu-26.04)"
+    },
+    {
+      "file": "docs/design-deep-dive.md",
+      "tmp_path": "/tmp/akmods",
+      "why": "doc describing the CI-only clone of the akmods fork in /tmp/akmods on a discarded GitHub-hosted runner"
+    },
+    {
+      "file": "docs/akmods-fork-maintenance.md",
+      "tmp_path": "/tmp/akmods",
+      "why": "doc describing the CI-only clone of the akmods fork in /tmp/akmods on a discarded GitHub-hosted runner; strings asserted by doc tests"
+    },
+    {
+      "file": "docs/architecture-overview.md",
+      "tmp_path": "/tmp/akmods",
+      "why": "doc describing the CI-only clone of the akmods fork in /tmp/akmods on a discarded GitHub-hosted runner; strings asserted by doc tests"
+    },
+    {
+      "file": "docs/glossary.md",
+      "tmp_path": "/tmp/akmods",
+      "why": "doc describing the CI-only clone of the akmods fork in /tmp/akmods on a discarded GitHub-hosted runner; strings asserted by doc tests"
+    },
+    {
+      "file": "docs/review-rubric.md",
+      "tmp_path": "/tmp/akmods",
+      "why": "doc describing the CI-only clone of the akmods fork in /tmp/akmods on a discarded GitHub-hosted runner; strings asserted by doc tests"
+    },
+    {
+      "file": ".github/actions/rechunk-native-image/action.yml",
+      "tmp_path": "/tmp/chunkah-oci.tar",
+      "why": "composite action that runs only on GitHub-hosted runners (build.yml, build-pr.yml), single user, discarded after the job"
+    },
+    {
+      "file": "containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py",
+      "tmp_path": "/tmp/akmods-zfs",
+      "why": "runs only during the image build (build_files/build-image.sh), inside the throwaway build container"
+    }
+  ]
+}
