@@ -191,7 +191,33 @@ jobs:
               core.info(`Closed sticky issue #${issue.number}`);
             }
             // Tells the rerun-pr-builds job that a build stop has just cleared.
-            core.setOutput('cleared', open.length > 0 ? 'true' : 'false');
+            // Closing a sticky issue here is one sign, not the only one: the
+            // issue can already be closed (by hand, or by a merged pull
+            // request whose body says "closes #N"), and then this green build
+            // finds nothing open. The previous build of this branch having
+            // failed counts too.
+            let cleared = open.length > 0;
+            if (!cleared) {
+              const run = context.payload.workflow_run;
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: run.workflow_id,
+                branch: run.head_branch,
+                status: 'completed',
+                per_page: 20,
+              });
+              // Newest first. A cancelled run says nothing about the build, and
+              // a fork's run of this workflow's name is not this branch's build.
+              const previous = runs.data.workflow_runs.find(r =>
+                r.id !== run.id &&
+                r.created_at < run.created_at &&
+                r.head_repository && r.head_repository.full_name === `${context.repo.owner}/${context.repo.repo}` &&
+                r.conclusion !== 'cancelled' &&
+                r.conclusion !== 'skipped');
+              cleared = previous !== undefined && previous.conclusion === 'failure';
+            }
+            core.setOutput('cleared', cleared ? 'true' : 'false');
 
       # Only two conclusions tell us anything new about OpenZFS/kernel compat:
       # a classified upstream-compat failure (has_payload is only 'true' when
@@ -297,11 +323,12 @@ jobs:
   # A pull request's image build checks the shared akmods image that the main
   # build publishes, so while an akmods build stop is open every pull request
   # build fails with it too. Once a green main build clears the stop (the
-  # triage job just closed its sticky issue), nothing starts those pull
-  # request builds again: Renovate rebases its weekly PR only on a conflict
-  # (`rebaseWhen: conflicted` in renovate.json), so it would stay red until
-  # someone re-ran it by hand. This job re-runs the failed jobs of each open pull
-  # request's newest image build, once per cleared stop.
+  # triage job just closed its sticky issue, or the previous main build
+  # failed), nothing starts those pull request builds again: Renovate rebases
+  # its weekly PR only on a conflict (`rebaseWhen: conflicted` in
+  # renovate.json), so it would stay red until someone re-ran it by hand. This
+  # job re-runs the failed jobs of each open pull request's newest image build,
+  # once per cleared stop.
   #
   # It is a job of its own so that `actions: write` never reaches the triage
   # job's token, which already holds `contents: write`. Only pull requests

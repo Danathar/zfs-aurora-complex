@@ -170,8 +170,9 @@ Every file in `.github/workflows/` has an entry here.
   GitHub's own. The job is "Manage sticky akmods failure issue". See the next
   section for the issues themselves. It does not report a scheduled failure that
   has nothing to do with akmods; `auto-issues.yml` does. When that job closes a
-  sticky issue, a second job, "Re-run pull request builds stopped by the cleared
-  failure", re-runs the failed jobs of each open pull request's newest
+  sticky issue, or a green build follows a failed one (the sticky issue may
+  already have been closed by hand or by a merged pull request), a second job,
+  "Re-run pull request builds stopped by the cleared failure", re-runs the failed jobs of each open pull request's newest
   `build-pr.yml` run, because those builds failed on the same stop and nothing
   else starts them again. Pull requests from forks are left alone.
 - **First:** if this workflow itself is red, the build it reports on is unaffected.
