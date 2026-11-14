@@ -1189,12 +1189,11 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
     # --- the scan's own edges ---------------------------------------------
 
     def test_a_two_token_git_global_option_does_not_hide_the_subcommand(self) -> None:
-        # `--git-dir` and `--namespace` are stepped over rather than refused
-        # outright, so without skipping their value half, the value is read
-        # as the subcommand, git is forgotten, and the operand scan never
-        # starts. The `=` spelling needs no skip because it is one word.
+        # `--namespace` is stepped over rather than refused outright, so
+        # without skipping its value half, the value is read as the
+        # subcommand, git is forgotten, and the operand scan never starts.
+        # The `=` spelling needs no skip because it is one word.
         for command in (
-            "git --git-dir=/tmp/x diff /dev/null /etc/shadow",
             "git --namespace=x diff /dev/null /etc/shadow",
             "git --namespace x diff /dev/null /etc/shadow",
         ):
@@ -1206,6 +1205,7 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
         for command in (
             "git -C / diff /dev/null /etc/shadow",
             "git -c core.pager=cat diff /dev/null /etc/shadow",
+            "git --git-dir=/tmp/x diff /dev/null /etc/shadow",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, "git global option")
@@ -1249,13 +1249,39 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command, "git global option")
 
-    def test_relocation_only_git_global_options_are_still_stepped_over(self) -> None:
-        # `--git-dir`, `--work-tree`, `--namespace`, `--super-prefix` and
-        # `--attr-source` only report where git looks; they load no program
-        # and the operand scan still runs on the words that follow.
-        self.assertAllowed("git --git-dir=.git diff HEAD")
-        self.assertAllowed("git --work-tree=. --git-dir=.git diff HEAD")
-        self.assertAllowed("git --namespace=x --git-dir=.git diff HEAD")
+    def test_a_git_global_option_that_names_another_repository_is_refused(self) -> None:
+        # `--git-dir <dir>` and `--bare` (`--git-dir=.`) make git load that
+        # repository's config, so a bare repository committed into a branch
+        # can name a diff.x.textconv program that `git log -p` runs. The
+        # settings env's safe.bareRepository=explicit refuses only the
+        # discovered spelling (`-C evil`, `cd evil`); naming the directory is
+        # what makes it explicit, so these are the spellings left for the
+        # hook (tests/test_claude_settings_git_env.py runs them for real).
+        # `--work-tree <dir>` is -C for the files git compares against.
+        for command in (
+            "git --git-dir=evil log -p -1",
+            "git --git-dir evil show",
+            "git --bare log -p -1",
+            "git --no-pager --bare show",
+            "git --work-tree=/etc diff HEAD",
+            "git --work-tree /etc diff HEAD",
+            "git --work-tree=. --git-dir=.git diff HEAD",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, "git global option")
+
+    def test_bare_after_the_subcommand_is_not_the_global_option(self) -> None:
+        # The refusal reads only the words between `git` and the
+        # subcommand; `--bare` after it is the subcommand's own flag.
+        self.assertAllowed("git init --bare evil")
+
+    def test_rename_only_git_global_options_are_still_stepped_over(self) -> None:
+        # `--namespace`, `--super-prefix` and `--attr-source` only rename
+        # what git reports; they load no program and the operand scan still
+        # runs on the words that follow.
+        self.assertAllowed("git --namespace=x diff HEAD")
+        self.assertAllowed("git --namespace x diff HEAD")
+        self.assertAllowed("git --attr-source=HEAD diff HEAD")
 
     def test_a_glob_that_bash_expands_into_extra_operands_is_refused(self) -> None:
         # Bash rewrites `/home/<user>/.ssh/*` into however many files match
@@ -2789,9 +2815,31 @@ CORPUS: tuple[Row, ...] = (
         "options",
         "git --namespace x diff -- cosign.pub LICENSE",
         "allowed",
-        "--namespace, --super-prefix, --attr-source, --git-dir and --work-tree rename or "
-        "relocate what git reports rather than loading a program; they are stepped over so the "
-        "subcommand behind them is still found",
+        "--namespace, --super-prefix and --attr-source rename what git reports rather than "
+        "loading a program; they are stepped over so the subcommand behind them is still found",
+    ),
+    Row(
+        "options",
+        "git status; git --git-dir=evil log -p -1",
+        "refused",
+        "loads that repository's config, so a bare repository committed into a branch names a "
+        "textconv program; safe.bareRepository=explicit lets the named spelling through",
+        "a git global option written before the subcommand",
+    ),
+    Row(
+        "options",
+        "git status; git --bare log -p -1",
+        "refused",
+        "--bare is --git-dir=., the same explicit spelling with the directory left out",
+        "a git global option written before the subcommand",
+    ),
+    Row(
+        "options",
+        "git status; git --work-tree=/etc diff HEAD",
+        "refused",
+        "compares tracked paths against another directory, printing files outside the checkout "
+        "as -C does",
+        "a git global option written before the subcommand",
     ),
     Row(
         "options",
