@@ -4,8 +4,8 @@ What: Tests the `rerun-pr-builds` job in .github/workflows/akmods-failure-triage
 re-runs the failed pull request image builds once a green main build clears an akmods build stop.
 Doing: Checks how the job is wired (it runs only on the triage job's `cleared` output, which only
 the close step sets, and its token holds nothing but `actions: write` and `pull-requests: read`),
-runs the close step's own script to see that it reports `cleared` only when it closed an issue,
-then runs the job's own `script:` text under node with stand-ins for `github`, `context` and
+runs the close step's own script to see that it reports `cleared` only when a stop just cleared
+(it closed an open issue, or the previous build of the branch failed), then runs the job's own `script:` text under node with stand-ins for `github`, `context` and
 `core` that record every API call, against a table of open pull requests and their newest
 `build-pr.yml` run.
 Why: A pull request's image build checks the shared akmods image the main build publishes, so an
@@ -85,26 +85,56 @@ new AsyncFunction('github', 'context', 'core', input.script)(github, context, co
 """
 
 
-# Runs the close step's script with the open sticky issues it lists, and prints what it wrote and
-# which outputs it set.
+# Runs the close step's script with the open sticky issues it lists and the earlier runs of the
+# main build the API lists (newest first), and prints what it wrote, which run listings it asked
+# for, and which outputs it set.
 CLOSE_HARNESS = r"""
 const fs = require('fs');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const writes = [];
+const listings = [];
 const outputs = {};
 const record = (name) => async (params) => { writes.push([name, params.issue_number]); return { data: {} }; };
 const github = {
   paginate: async () => input.issues,
-  rest: { issues: { listForRepo: () => {}, createComment: record('createComment'), update: record('update') } },
+  rest: {
+    issues: { listForRepo: () => {}, createComment: record('createComment'), update: record('update') },
+    actions: {
+      listWorkflowRuns: async (params) => {
+        listings.push(params);
+        return { data: { workflow_runs: input.runs.slice(0, params.per_page) } };
+      },
+    },
+  },
 };
-const context = { repo: { owner: 'o', repo: 'r' }, payload: { workflow_run: { head_sha: '0123abc' } } };
+const context = { repo: { owner: 'o', repo: 'r' }, payload: { workflow_run: input.run } };
 const core = { info: () => {}, setOutput: (name, value) => { outputs[name] = value; } };
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 new AsyncFunction('github', 'context', 'core', input.script)(github, context, core).then(
-  () => process.stdout.write(JSON.stringify({ writes, outputs })),
+  () => process.stdout.write(JSON.stringify({ writes, listings, outputs })),
   (error) => { console.error(error); process.exit(1); },
 );
 """
+
+
+# The green main build the close step runs after.
+MAIN_RUN = {
+    "id": 4242,
+    "head_sha": "0123abc",
+    "workflow_id": 7,
+    "head_branch": "main",
+    "created_at": "2026-11-14T06:00:00Z",
+}
+
+
+def build(run_id: int, conclusion: str, created_at: str, repo: str = "o/r") -> dict:
+    """An earlier run of the main build, as listWorkflowRuns returns it."""
+    return {
+        "id": run_id,
+        "conclusion": conclusion,
+        "created_at": created_at,
+        "head_repository": {"full_name": repo},
+    }
 
 
 def pull(number: int, sha: str, head_repo: str | None = "o/r") -> dict:
@@ -154,13 +184,20 @@ class RerunPrBuildsWiringTests(unittest.TestCase):
 @unittest.skipIf(yaml is None, "PyYAML is not installed")
 @unittest.skipIf(NODE is None, "node is not installed")
 class CloseStepClearedOutputTests(unittest.TestCase):
-    def run_close(self, issues: list[dict]) -> dict:
+    def run_close(self, issues: list[dict], runs: list[dict] | None = None) -> dict:
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         steps = {step.get("name"): step for step in workflow["jobs"]["triage"]["steps"]}
         self.assertIn(CLOSE_STEP, steps, f"no step named {CLOSE_STEP!r}; was it renamed?")
         result = subprocess.run(
             [NODE, "-e", CLOSE_HARNESS],
-            input=json.dumps({"script": steps[CLOSE_STEP]["with"]["script"], "issues": issues}),
+            input=json.dumps(
+                {
+                    "script": steps[CLOSE_STEP]["with"]["script"],
+                    "issues": issues,
+                    "run": MAIN_RUN,
+                    "runs": runs or [],
+                }
+            ),
             capture_output=True,
             text=True,
             check=False,
@@ -178,9 +215,76 @@ class CloseStepClearedOutputTests(unittest.TestCase):
         self.assertEqual(report["outputs"], {"cleared": "true"})
 
     def test_no_open_sticky_issue_means_nothing_cleared(self) -> None:
-        report = self.run_close([])
+        report = self.run_close([], runs=[build(4241, "success", "2026-11-14T05:00:00Z")])
+        # Green after green: no stop cleared, so no pull request build is re-run.
         self.assertEqual(report["writes"], [])
         self.assertEqual(report["outputs"], {"cleared": "false"})
+
+    def test_a_green_build_after_a_failed_one_clears_with_the_issue_already_closed(self) -> None:
+        # The sticky issue was closed early (by hand, or by a merged pull request saying
+        # "closes #N"), so this build finds nothing open. The stop still just cleared.
+        report = self.run_close([], runs=[build(4241, "failure", "2026-11-14T05:00:00Z")])
+        self.assertEqual(report["outputs"], {"cleared": "true"})
+        self.assertEqual(report["writes"], [])
+        self.assertEqual(
+            report["listings"],
+            [
+                {
+                    "owner": "o",
+                    "repo": "r",
+                    "workflow_id": 7,
+                    "branch": "main",
+                    "status": "completed",
+                    "per_page": 20,
+                }
+            ],
+        )
+
+    def test_a_cancelled_run_is_passed_over_for_the_build_before_it(self) -> None:
+        runs = [
+            build(4241, "cancelled", "2026-11-14T05:00:00Z"),
+            build(4240, "failure", "2026-11-14T04:00:00Z"),
+        ]
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "true"})
+
+    def test_a_skipped_run_is_passed_over_for_the_build_before_it(self) -> None:
+        runs = [
+            build(4241, "skipped", "2026-11-14T05:00:00Z"),
+            build(4240, "success", "2026-11-14T04:00:00Z"),
+        ]
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "false"})
+
+    def test_a_forks_failed_run_is_not_this_branchs_previous_build(self) -> None:
+        runs = [
+            build(4241, "failure", "2026-11-14T05:00:00Z", repo="fork/r"),
+            build(4240, "success", "2026-11-14T04:00:00Z"),
+        ]
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "false"})
+
+    def test_the_run_is_not_its_own_previous_build(self) -> None:
+        runs = [
+            build(MAIN_RUN["id"], "failure", MAIN_RUN["created_at"]),
+            build(4241, "success", "2026-11-14T05:00:00Z"),
+        ]
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "false"})
+
+    def test_a_run_newer_than_this_one_is_not_its_previous_build(self) -> None:
+        # Triage runs queue in completion order, so a later build can already be listed.
+        runs = [
+            build(4243, "failure", "2026-11-14T07:00:00Z"),
+            build(4241, "success", "2026-11-14T05:00:00Z"),
+        ]
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "false"})
+
+    def test_no_earlier_build_at_all_is_not_a_clear(self) -> None:
+        self.assertEqual(self.run_close([], runs=[])["outputs"], {"cleared": "false"})
+
+    def test_closing_an_open_issue_clears_without_reading_the_run_history(self) -> None:
+        report = self.run_close(
+            [{"number": 5}], runs=[build(4241, "success", "2026-11-14T05:00:00Z")]
+        )
+        self.assertEqual(report["outputs"], {"cleared": "true"})
+        self.assertEqual(report["listings"], [])
 
 
 @unittest.skipIf(yaml is None, "PyYAML is not installed")
