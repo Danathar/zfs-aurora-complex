@@ -248,11 +248,13 @@ class CloseStepClearedOutputTests(unittest.TestCase):
         self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "true"})
 
     def test_a_skipped_run_is_passed_over_for_the_build_before_it(self) -> None:
+        # The build before the skipped one failed, so only passing over the skipped run finds
+        # the clear. With a green build behind it, both readings would report no clear.
         runs = [
             build(4241, "skipped", "2026-11-14T05:00:00Z"),
-            build(4240, "success", "2026-11-14T04:00:00Z"),
+            build(4240, "failure", "2026-11-14T04:00:00Z"),
         ]
-        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "false"})
+        self.assertEqual(self.run_close([], runs=runs)["outputs"], {"cleared": "true"})
 
     def test_a_forks_failed_run_is_not_this_branchs_previous_build(self) -> None:
         runs = [
