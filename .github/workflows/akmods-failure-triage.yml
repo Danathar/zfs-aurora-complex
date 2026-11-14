@@ -19,9 +19,19 @@ on:
     types:
       - completed
 
+# Every build completion gets its own triage run. With cancel-in-progress, a
+# build finishing while an earlier completion's triage is still running would
+# cancel it: before the akmods-failure issue is opened (auto-issues.yml leaves
+# that issue to this workflow, so nothing else reports the stop), or before the
+# rerun-pr-builds job re-runs the pull request builds a cleared stop left red
+# (the next triage run then finds a green previous build and re-runs nothing).
+# `queue: max` keeps every waiting run: with the default `queue: single`, a
+# third completion would cancel the one already pending. Runs go one at a time
+# in completion order, so the badges still end on the newest build's state.
 concurrency:
   group: akmods-failure-triage
-  cancel-in-progress: true
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   triage:
