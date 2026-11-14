@@ -271,5 +271,18 @@ class TriageGuardTests(unittest.TestCase):
         )
 
 
+@unittest.skipIf(yaml is None, "PyYAML is not installed")
+class TriageConcurrencyTests(unittest.TestCase):
+    def test_a_later_build_completion_waits_for_the_running_triage(self) -> None:
+        # A cancelled triage run loses the akmods-failure issue (auto-issues.yml leaves it to
+        # this workflow) and the one-time re-run of the pull request builds a cleared stop
+        # left red. See the comment above the workflow's concurrency block.
+        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(
+            workflow["concurrency"],
+            {"group": "akmods-failure-triage", "cancel-in-progress": False, "queue": "max"},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
