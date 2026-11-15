@@ -12,8 +12,10 @@ wherever it sits. A branch can commit one as ordinary files (`evil/HEAD`,
 checkout's `.git/`, and its `info/attributes` (`* diff=x`) plus config
 (`diff.x.textconv`) name a program git runs to render the diff. The `env` block sets
 `safe.bareRepository=explicit` for every command an agent runs, so git refuses such a
-directory unless it is named with `--git-dir`. The checkout's own `.git/` is not bare
-and is unaffected.
+directory unless it is named with `--git-dir` (or `--bare`, which is `--git-dir=.`).
+Those named spellings are refused by `.claude/hooks/gate-git-diff.sh` instead, which
+the last test below checks against the same planted repository. The checkout's own
+`.git/` is not bare and is unaffected.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
+GATE = REPO_ROOT / ".claude" / "hooks" / "gate-git-diff.sh"
+BASH = shutil.which("bash")
+JQ = shutil.which("jq")
 
 EXPECTED_ENV = {
     "GIT_CONFIG_COUNT": "1",
@@ -132,6 +137,42 @@ class SettingsEnvTests(unittest.TestCase):
         log = _git(self.victim, agent_env, "log", "-1", "--format=%s")
         self.assertEqual(log.returncode, 0)
         self.assertEqual(log.stdout.strip(), "x")
+
+    @unittest.skipUnless(BASH and JQ, "the gate is a bash script written in terms of jq")
+    def test_explicit_spellings_the_setting_allows_are_refused_by_the_gate(self) -> None:
+        # `--git-dir=evil` and `--bare` name the directory, which is what
+        # safe.bareRepository=explicit allows, so the planted program still
+        # runs with the settings env applied. The guard hook is what stops
+        # these spellings; prove both halves so neither assertion is vacuous.
+        agent_env = {**_base_env(self.dir), **self.settings_env}
+        evil = self.victim / "evil"
+        for cwd, args in (
+            (self.victim, ["--git-dir=evil", "log", "-p", "-1"]),
+            (self.victim, ["--git-dir", "evil", "show"]),
+            (evil, ["--bare", "log", "-p", "-1"]),
+        ):
+            with self.subTest(cwd=cwd.name, args=args):
+                self.marker.unlink(missing_ok=True)
+                _git(cwd, agent_env, *args)
+                self.assertTrue(
+                    self.marker.exists(),
+                    f"git {' '.join(args)} did not reach the planted program with the setting",
+                )
+                command = "git " + " ".join(args)
+                gate = subprocess.run(
+                    [BASH, str(GATE)],
+                    input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=str(REPO_ROOT),
+                    env=dict(os.environ, CLAUDE_PROJECT_DIR=str(REPO_ROOT)),
+                    check=False,
+                )
+                self.assertEqual(
+                    gate.returncode, 2, f"{command!r} passed the gate: {gate.stderr!r}"
+                )
+                self.assertIn("git global option", gate.stderr)
 
     def _routes(self) -> list[tuple[Path, list[str]]]:
         """The pre-approved commands that reach the planted repository, and where from."""
