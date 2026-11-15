@@ -229,6 +229,14 @@ the lines you changed in the measured modules, runs the test files that import
 each module, and lists every mutant no test failed on in the job's step
 summary. It never blocks a merge.
 
+It also covers the git guard hook, `.claude/hooks/gate-git-diff.sh`, which is
+bash and so not a measured module. When a pull request changes it, the check
+breaks each changed line in a few fixed ways (drops one alternative from a
+`case` pattern, turns a `refuse` call into `:`, swaps `-eq`/`-ne` and
+`==`/`!=`, flips a `x=1` or `x=0` assignment), runs the three test files that
+run the hook against each one, and puts the original file back afterwards.
+Its survivors go in the same report and the same ledger (#329).
+
 For each mutant it lists, either add a test that fails against it, or add it to
 [`.mutation-survivors.json`](./.mutation-survivors.json) with the reason it
 cannot matter: no input can tell it apart from the original, or it only makes a

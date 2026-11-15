@@ -1,7 +1,7 @@
 """
 Script: tests/mutation_check.py
-What: Mutation-tests the lines a change touches in the measured modules, and reports the survivors.
-Doing: Runs cosmic-ray over only the changed lines of each changed module, runs only the test files that import that module, and prints a Markdown report of every surviving mutant .mutation-survivors.json has not accepted.
+What: Mutation-tests the lines a change touches in the measured modules and the git guard hook, and reports the survivors.
+Doing: Runs cosmic-ray over only the changed lines of each changed module, runs only the test files that import that module, does the same for the changed lines of .claude/hooks/gate-git-diff.sh with a few bash operators of its own, and prints a Markdown report of every surviving mutant .mutation-survivors.json has not accepted.
 Why: Line coverage says a rule ran; it does not say a test would notice the rule breaking. Run by hand against #210, 27 of the 62 mutants on its changed lines survived the tests (#243).
 Goal: Report, on the pull request that adds it, a change whose tests would not notice it breaking.
 
@@ -26,8 +26,17 @@ Before mutating a module it runs that module's test files once against the
 unmodified code. A test that already fails there would kill every mutant, and
 the report would read as clean, so a failing baseline stops the run instead.
 
-It mutates the files in place, one mutant at a time, and cosmic-ray restores
-each file afterwards. Run it in a checkout you are not editing.
+The git guard hook, .claude/hooks/gate-git-diff.sh, is bash, which cosmic-ray
+cannot read, so its changed lines get a small fixed set of bash mutants
+instead (see bash_mutants): drop one alternative from a `case` pattern, turn
+a `refuse` call into `:`, swap `-eq`/`-ne` and `==`/`!=`, and flip a `x=1` or
+`x=0` assignment. Each runs against HOOK_TESTS, the test files that run the
+hook. Their survivors go in the same report and the same ledger
+(Danathar/akmods#192 for the ruling, #329 here).
+
+It mutates the files in place, one mutant at a time, and restores each file
+afterwards: cosmic-ray for a Python module, a try/finally that rewrites the
+original bytes for the hook. Run it in a checkout you are not editing.
 
 Exit status: 0 when no unaccepted mutant survives, 1 when one does or when a
 changed module has no test file that imports it, 2 when the unmodified tests
@@ -53,6 +62,16 @@ LEDGER = ROOT / ".mutation-survivors.json"
 # fails when the two lists disagree.
 MEASURED = ("ci_tools", "shared", "containerfiles/zfs-akmods", "files/scripts")
 
+# The bash hook that re-gates the allow-listed git commands, and the test
+# files that run it. Line coverage leaves the hook out by decision
+# (tests/check_coverage.py); mutation testing does not.
+HOOK = ".claude/hooks/gate-git-diff.sh"
+HOOK_TESTS = (
+    "tests/test_git_diff_gate.py",
+    "tests/test_gate_refusal_corpus.py",
+    "tests/test_claude_settings_git_env.py",
+)
+
 # cosmic-ray's core operators replace each binary operator with every other
 # one and each comparison with every other one. Most of those replacements
 # raise on the first call and say nothing a single swap would not, while
@@ -73,6 +92,13 @@ KEPT_SWAPS = {
 TIMEOUT_SECONDS = 120.0
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
+# The bash mutants other than a dropped case alternative. Each pattern must
+# start and end on code (see code_columns), never in a string or a comment.
+TEST_SWAPS = {"-eq": "-ne", "-ne": "-eq", "==": "!=", "!=": "=="}
+TEST_WORD = re.compile(r"(?<!\S)(-eq|-ne|==|!=)(?!\S)")
+FLAG = re.compile(r"(?<![^\s;])[A-Za-z_]\w*=([01])(?![^\s;)])")
+REFUSE = re.compile(r"(?<![^\s;&|(])refuse(?![^\s;)])")
+
 
 def kept_operator(name: str) -> bool:
     """Whether a mutation by the cosmic-ray operator `name` is worth running."""
@@ -90,6 +116,121 @@ def changed_lines(diff: str) -> set[int]:
             count = 1 if match.group(2) is None else int(match.group(2))
             lines.update(range(start, start + count))
     return lines
+
+
+def code_columns(line: str) -> list[bool]:
+    """Which characters of one line of bash are code: outside quotes and comments.
+
+    It reads one line on its own, so a quote it misreads cannot hide the rest
+    of the file. A `$(...)` inside double quotes is code again.
+    """
+    code = [False] * len(line)
+    state = ""  # "" for code, or the quote that is open: ', " or $'
+    outer = []  # [state to return to, open parentheses] per `$(` in double quotes
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if state == "":
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == "#" and (i == 0 or line[i - 1] in " \t"):
+                break
+            if line.startswith("$'", i):
+                state, i = "$'", i + 2
+                continue
+            if ch in "'\"":
+                state = ch
+            elif ch == ")" and outer and not outer[-1][1]:
+                state = outer.pop()[0]
+            else:
+                if outer and ch in "()":
+                    outer[-1][1] += 1 if ch == "(" else -1
+                code[i] = True
+        elif ch == "\\" and state != "'":
+            i += 2
+            continue
+        elif ch == state[-1]:
+            state = ""
+        elif state == '"' and line.startswith("$(", i):
+            outer.append([state, 0])
+            state, i = "", i + 2
+            continue
+        i += 1
+    return code
+
+
+def case_alternatives(line: str) -> list[tuple[int, int]] | None:
+    """The spans of the alternatives of the `case` pattern one line holds, or None.
+
+    The line is the pattern, optionally after `(`, ended by `)` or by `| \\`
+    when the pattern carries on to the next line. A quoted alternative such
+    as `'|'` is one word.
+    """
+    i = len(line) - len(line.lstrip()) + (line.lstrip().startswith("("))
+    spans = []
+    while True:
+        start = i
+        while i < len(line) and line[i] not in " \t|()":
+            if line[i] in ";&<>`":
+                return None
+            if line[i] in "'\"":
+                end = line.find(line[i], i + 1)
+                if end < 0:
+                    return None
+                i = end
+            i += 1
+        if i == start:
+            return None
+        spans.append((start, i))
+        rest = line[i:].lstrip(" \t")
+        if rest.startswith(")"):
+            return spans
+        if not rest.startswith("|"):
+            return None
+        after = rest[1:].lstrip(" \t")
+        if after.rstrip() == "\\":
+            return spans
+        i = len(line) - len(after)
+
+
+def bash_mutants(source: str, lines: set[int]) -> list[tuple[int, str, str]]:
+    """(line number, operator, mutated line) for each bash mutant on `lines` of `source`.
+
+    The operators are the ones #329 names: drop one alternative from a `case`
+    pattern of two or more, turn a `refuse` call into the no-op `:`, swap
+    `-eq`/`-ne` and `==`/`!=`, and flip `x=1`/`x=0`. A comment line has none.
+    """
+    rows = source.splitlines()
+    found = []
+    for number in sorted(n for n in lines if 1 <= n <= len(rows)):
+        line = rows[number - 1]
+        if line.lstrip().startswith("#"):
+            continue
+        spans = case_alternatives(line)
+        if spans and len(spans) > 1:
+            words = [line[a:b] for a, b in spans]
+            for index, word in enumerate(words):
+                kept = " | ".join(words[:index] + words[index + 1 :])
+                mutated = line[: spans[0][0]] + kept + line[spans[-1][1] :]
+                found.append((number, f"bash/DropCaseAlternative_{word}", mutated))
+        code = code_columns(line)
+        for pattern in (REFUSE, TEST_WORD, FLAG):
+            for match in pattern.finditer(line):
+                if not (code[match.start()] and code[match.end() - 1]):
+                    continue
+                if pattern is REFUSE:
+                    operator, start, end, new = "bash/RefuseToNoop", *match.span(), ":"
+                elif pattern is TEST_WORD:
+                    old = match.group(1)
+                    new = TEST_SWAPS[old]
+                    operator, start, end = f"bash/SwapTest_{old}_{new}", *match.span()
+                else:
+                    old = match.group(1)
+                    new = "0" if old == "1" else "1"
+                    operator, start, end = f"bash/FlipFlag_{old}_{new}", *match.span(1)
+                found.append((number, operator, line[:start] + new + line[end:]))
+    return found
 
 
 def annotation_spans(source: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
@@ -303,7 +444,8 @@ def report(
         ]
         for s in new:
             line = s["line"].replace("|", "\\|")
-            out.append(f"| `{s['module']}:{s['line_number']}` | `{s['operator']}` | `{line}` |")
+            operator = s["operator"].replace("|", "\\|")
+            out.append(f"| `{s['module']}:{s['line_number']}` | `{operator}` | `{line}` |")
     elif not untested:
         out.append("No surviving mutant outside the ledger.")
     return "\n".join(out).rstrip("\n") + "\n", len(untested) + len(new)
@@ -346,6 +488,56 @@ def check(
     return outcomes(dump), survivors(dump, ROOT)
 
 
+def run_mutant(tests: tuple[str, ...]) -> str:
+    """Run `tests` against the mutant on disk: killed, survived or timeout."""
+    try:
+        result = subprocess.run(
+            test_command(tests),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout"
+    return "survived" if result.returncode == 0 else "killed"
+
+
+def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
+    """Mutate the lines of HOOK that differ from `base`; return the outcome.
+
+    Each mutant is written over the hook in place, so the tests run the hook
+    they always run. The original bytes are written back however the run ends.
+    """
+    baseline(HOOK_TESTS)
+    path = ROOT / HOOK
+    original = path.read_bytes()
+    source = original.decode("utf-8")
+    rows = source.splitlines(keepends=True)
+    lines = changed_lines(git("diff", "-U0", base, "--", HOOK))
+    counts, found = {}, []
+    try:
+        for number, operator, mutated in bash_mutants(source, lines):
+            row = rows[number - 1]
+            ending = row[len(row.rstrip("\r\n")) :]
+            text = "".join([*rows[: number - 1], mutated + ending, *rows[number:]])
+            path.write_bytes(text.encode("utf-8"))
+            outcome = run_mutant(HOOK_TESTS)
+            counts[outcome] = counts.get(outcome, 0) + 1
+            if outcome == "survived":
+                found.append(
+                    {
+                        "module": HOOK,
+                        "line_number": number,
+                        "operator": operator,
+                        "line": row.strip(),
+                    }
+                )
+    finally:
+        path.write_bytes(original)
+    return counts, found
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -363,13 +555,16 @@ def main(argv=None) -> int:
     # it no longer exists to mutate.
     changed = git(
         "diff", "--name-only", "--diff-filter=d", args.base, "--",
-        *(f"{directory}/*.py" for directory in MEASURED),
+        *(f"{directory}/*.py" for directory in MEASURED), HOOK,
     ).splitlines()
     results = {}
     os.chdir(ROOT)
     try:
         with tempfile.TemporaryDirectory() as workdir:
             for target in sorted(changed):
+                if target == HOOK:
+                    results[target] = check_hook(args.base)
+                    continue
                 tests = importing_tests(target)
                 results[target] = check(target, tests, args.base, Path(workdir)) if tests else None
     except subprocess.CalledProcessError as error:

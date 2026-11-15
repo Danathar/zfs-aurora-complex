@@ -2,7 +2,7 @@
 Script: tests/test_mutation_check.py
 What: Tests for tests/mutation_check.py, the diff-scoped mutation run.
 Doing: Stubs the cosmic-ray processes and work database, which only a mutation run installs; everything else is real.
-Why: The diff parsing, the annotation spans, the report, the committed ledger and the test files chosen per module decide what the check can see, and a check that silently sees less reads as evidence.
+Why: The diff parsing, the annotation spans, the bash mutants of the git guard hook, the report, the committed ledger and the test files chosen per module decide what the check can see, and a check that silently sees less reads as evidence.
 Goal: Pin each of those, and join the module list to the --cov paths test.yml measures.
 """
 
@@ -24,9 +24,14 @@ from unittest import mock
 
 import mutation_check
 from mutation_check import (
+    HOOK,
+    HOOK_TESTS,
     MEASURED,
     annotation_spans,
+    bash_mutants,
+    case_alternatives,
     changed_lines,
+    code_columns,
     config_text,
     importing_tests,
     imports_target,
@@ -328,6 +333,229 @@ class ImportingTestsTests(unittest.TestCase):
                 self.assertTrue(importing_tests(target))
 
 
+def code_text(line: str) -> str:
+    return "".join(ch for ch, code in zip(line, code_columns(line)) if code)
+
+
+class CodeColumnsTests(unittest.TestCase):
+    def test_quotes_are_not_code(self) -> None:
+        self.assertEqual(code_text("""x == 'a == b' "c == d" $'e == f' y"""), "x ==    y")
+
+    def test_a_comment_is_not_code_but_a_hash_inside_a_word_is(self) -> None:
+        self.assertEqual(code_text("x=0 # y=1"), "x=0 ")
+        self.assertEqual(code_text("((${#a[@]} == 0))"), "((${#a[@]} == 0))")
+
+    def test_a_substitution_inside_double_quotes_is_code_again(self) -> None:
+        self.assertEqual(code_text('"a $(f (x) "b" == c) d" == e'), "f (x)  == c == e")
+
+    def test_an_escaped_character_is_not_code(self) -> None:
+        self.assertEqual(code_text(r"a \' == b"), "a  == b")
+        self.assertEqual(code_text(r'"a \" == b" c'), " c")
+
+
+class CaseAlternativesTests(unittest.TestCase):
+    def words(self, line: str):
+        spans = case_alternatives(line)
+        return None if spans is None else [line[a:b] for a, b in spans]
+
+    def test_reads_each_alternative_of_a_pattern(self) -> None:
+        self.assertEqual(
+            self.words("    --namespace | --super-prefix | --attr-source)"),
+            ["--namespace", "--super-prefix", "--attr-source"],
+        )
+        self.assertEqual(self.words("  (a|b) x=1 ;;"), ["a", "b"])
+        self.assertEqual(self.words("  *) refuse x ;;"), ["*"])
+
+    def test_a_quoted_alternative_is_one_word(self) -> None:
+        self.assertEqual(self.words(r"""  '|' | "'" | $'\t')"""), ["'|'", '"\'"', r"$'\t'"])
+
+    def test_a_pattern_that_carries_on_to_the_next_line_counts(self) -> None:
+        self.assertEqual(self.words("    -c* | -C* | \\"), ["-c*", "-C*"])
+
+    def test_a_line_that_is_not_a_pattern_is_none(self) -> None:
+        for line in (
+            "x=$(a | b)",
+            "echo a | grep b)",
+            "a | b",
+            "a >x | b)",
+            "  ;;",
+            "  'unclosed | b)",
+            "",
+        ):
+            with self.subTest(line=line):
+                self.assertIsNone(case_alternatives(line))
+
+
+class BashMutantsTests(unittest.TestCase):
+    def mutants(self, source: str):
+        lines = set(range(1, source.count("\n") + 2))
+        return [(op, line) for _, op, line in bash_mutants(source, lines)]
+
+    def test_drops_each_alternative_of_a_case_pattern(self) -> None:
+        self.assertEqual(
+            self.mutants("    --namespace | --super-prefix | --attr-source)"),
+            [
+                ("bash/DropCaseAlternative_--namespace", "    --super-prefix | --attr-source)"),
+                ("bash/DropCaseAlternative_--super-prefix", "    --namespace | --attr-source)"),
+                ("bash/DropCaseAlternative_--attr-source", "    --namespace | --super-prefix)"),
+            ],
+        )
+
+    def test_a_single_alternative_is_not_dropped(self) -> None:
+        self.assertEqual(self.mutants("  -) x=1 ;;"), [("bash/FlipFlag_1_0", "  -) x=0 ;;")])
+
+    def test_turns_each_refuse_call_into_a_no_op(self) -> None:
+        self.assertEqual(
+            self.mutants('((x)) && refuse "${MSG}"; refuse y'),
+            [
+                ("bash/RefuseToNoop", '((x)) && : "${MSG}"; refuse y'),
+                ("bash/RefuseToNoop", '((x)) && refuse "${MSG}"; : y'),
+            ],
+        )
+
+    def test_the_refuse_definition_and_other_names_are_not_mutated(self) -> None:
+        self.assertEqual(self.mutants("refuse() {\nrefuse_all x\nover-refuse x"), [])
+
+    def test_swaps_each_test_operator(self) -> None:
+        line = '[[ "$a" == x || "$b" != y ]] && [ 1 -eq 2 ] || [ 1 -ne 2 ]'
+        self.assertEqual(
+            self.mutants(line),
+            [
+                ("bash/SwapTest_==_!=", line.replace("==", "!=")),
+                ("bash/SwapTest_!=_==", line.replace("!=", "==")),
+                ("bash/SwapTest_-eq_-ne", line.replace("-eq", "-ne")),
+                ("bash/SwapTest_-ne_-eq", line.replace("-ne", "-eq")),
+            ],
+        )
+
+    def test_an_operator_glued_to_a_word_is_not_swapped(self) -> None:
+        self.assertEqual(self.mutants("x==y a!=b --foo-eq"), [])
+
+    def test_flips_each_zero_or_one_assignment(self) -> None:
+        self.assertEqual(
+            self.mutants("local a=1; b=0 c=1)"),
+            [
+                ("bash/FlipFlag_1_0", "local a=0; b=0 c=1)"),
+                ("bash/FlipFlag_0_1", "local a=1; b=1 c=1)"),
+                ("bash/FlipFlag_1_0", "local a=1; b=0 c=0)"),
+            ],
+        )
+
+    def test_an_option_value_or_a_longer_number_is_not_flipped(self) -> None:
+        self.assertEqual(self.mutants("git --foo=1 x=10 x=1a y=$x"), [])
+
+    def test_nothing_in_a_string_or_a_comment_is_mutated(self) -> None:
+        self.assertEqual(
+            self.mutants("""m='a == b refuse x=1' "c != d" # x=1 refuse\n  # a | b)"""), []
+        )
+
+    def test_only_the_changed_lines_are_mutated(self) -> None:
+        self.assertEqual(
+            [(n, line) for n, _, line in bash_mutants("a=1\nb=1\nc=1\n", {2, 9})], [(2, "b=0")]
+        )
+
+    def test_the_issue_329_instance_is_one_of_the_hook_mutants(self) -> None:
+        # Dropping --attr-source from this arm let `git --attr-source HEAD
+        # diff /dev/null /etc/shadow` through, and no test noticed (#329).
+        source = (ROOT / HOOK).read_text(encoding="utf-8")
+        arm = source.splitlines().index("    --namespace | --super-prefix | --attr-source)") + 1
+        self.assertIn(
+            ("bash/DropCaseAlternative_--attr-source", "    --namespace | --super-prefix)"),
+            [(op, line) for _, op, line in bash_mutants(source, {arm})],
+        )
+
+
+class HookTestsTests(unittest.TestCase):
+    def test_each_hook_test_file_is_tracked_and_runs_the_hook(self) -> None:
+        # By its path, or as the PreToolUse hook .claude/settings.json registers.
+        names = set(tracked("tests/test_*.py"))
+        for test in HOOK_TESTS:
+            with self.subTest(test=test):
+                self.assertIn(test, names)
+                text = (ROOT / test).read_text(encoding="utf-8")
+                self.assertRegex(text, r'gate-git-diff\.sh|\["PreToolUse"\]')
+
+
+class CheckHookTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.hook = self.root / HOOK
+        self.hook.parent.mkdir(parents=True)
+        self.original = b"a=1\r\nb=1\n[[ x == y ]]\n"
+        self.hook.write_bytes(self.original)
+
+    def run_check(self, run_mutant):
+        git = mock.Mock(return_value="@@ -1,2 +1,2 @@\n@@ -3 +3 @@\n")
+        baseline = mock.Mock()
+        with mock.patch.multiple(
+            mutation_check, ROOT=self.root, git=git, run_mutant=run_mutant, baseline=baseline
+        ):
+            try:
+                return mutation_check.check_hook("origin/main")
+            finally:
+                git.assert_called_once_with("diff", "-U0", "origin/main", "--", HOOK)
+                baseline.assert_called_once_with(HOOK_TESTS)
+
+    def test_runs_the_hook_tests_against_each_mutant_written_in_place(self) -> None:
+        seen = []
+
+        def run_mutant(tests):
+            seen.append(self.hook.read_bytes())
+            self.assertEqual(tests, HOOK_TESTS)
+            return ["killed", "survived", "timeout"][len(seen) - 1]
+
+        counts, found = self.run_check(run_mutant)
+        self.assertEqual(
+            seen,
+            [
+                b"a=0\r\nb=1\n[[ x == y ]]\n",
+                b"a=1\r\nb=0\n[[ x == y ]]\n",
+                b"a=1\r\nb=1\n[[ x != y ]]\n",
+            ],
+        )
+        self.assertEqual(counts, {"killed": 1, "survived": 1, "timeout": 1})
+        self.assertEqual(
+            found,
+            [{"module": HOOK, "line_number": 2, "operator": "bash/FlipFlag_1_0", "line": "b=1"}],
+        )
+        self.assertEqual(self.hook.read_bytes(), self.original)
+
+    def test_restores_the_original_bytes_when_a_run_is_interrupted(self) -> None:
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_check(mock.Mock(side_effect=KeyboardInterrupt))
+        self.assertEqual(self.hook.read_bytes(), self.original)
+
+    def test_a_failing_baseline_stops_before_any_mutant_is_written(self) -> None:
+        error = subprocess.CalledProcessError(1, ["pytest"], output="1 failed\n")
+        run_mutant = mock.Mock()
+        with mock.patch.multiple(
+            mutation_check,
+            ROOT=self.root,
+            baseline=mock.Mock(side_effect=error),
+            run_mutant=run_mutant,
+        ), self.assertRaises(subprocess.CalledProcessError):
+            mutation_check.check_hook("b")
+        run_mutant.assert_not_called()
+        self.assertEqual(self.hook.read_bytes(), self.original)
+
+    def test_a_mutant_is_killed_when_the_tests_fail_and_survives_when_they_pass(self) -> None:
+        passing = self.root / "test_passes.py"
+        passing.write_text("def test_passes():\n    assert True\n")
+        failing = self.root / "test_fails.py"
+        failing.write_text("def test_fails():\n    assert False\n")
+        self.assertEqual(mutation_check.run_mutant((str(passing),)), "survived")
+        self.assertEqual(mutation_check.run_mutant((str(failing),)), "killed")
+
+    def test_a_mutant_that_outruns_the_timeout_is_a_timeout(self) -> None:
+        expired = subprocess.TimeoutExpired(["pytest"], mutation_check.TIMEOUT_SECONDS)
+        with mock.patch.object(subprocess, "run", side_effect=expired) as run:
+            self.assertEqual(mutation_check.run_mutant(("tests/t.py",)), "timeout")
+        self.assertEqual(run.call_args.args[0], mutation_check.test_command(("tests/t.py",)))
+        self.assertEqual(run.call_args.kwargs["timeout"], mutation_check.TIMEOUT_SECONDS)
+
+
 class ConfigTextTests(unittest.TestCase):
     def values(self, text: str) -> dict[str, object]:
         # Every value written is a JSON scalar or the empty list, so JSON reads it.
@@ -372,15 +600,23 @@ class LedgerTests(unittest.TestCase):
         keys = [(entry["module"], entry["operator"], entry["line"]) for entry in data["accepted"]]
         self.assertEqual(len(keys), len(set(keys)), "a ledger entry is listed twice")
         self.assertEqual(load_ledger(mutation_check.LEDGER), set(keys))
-        measured = set(tracked(*(f"{directory}/*.py" for directory in MEASURED)))
+        measured = set(tracked(*(f"{directory}/*.py" for directory in MEASURED), HOOK))
         for entry in data["accepted"]:
             with self.subTest(entry=entry):
                 self.assertEqual(set(entry), {"module", "operator", "line", "reason"})
                 self.assertIn(entry["module"], measured)
-                self.assertTrue(kept_operator(entry["operator"]))
                 self.assertTrue(entry["reason"].strip())
                 source = (ROOT / entry["module"]).read_text(encoding="utf-8")
-                self.assertIn(entry["line"], [line.strip() for line in source.splitlines()])
+                rows = [line.strip() for line in source.splitlines()]
+                self.assertIn(entry["line"], rows)
+                if entry["module"] == HOOK:
+                    # The operator must still be one bash_mutants makes on that line.
+                    lines = {n + 1 for n, row in enumerate(rows) if row == entry["line"]}
+                    self.assertIn(
+                        entry["operator"], {op for _, op, _ in bash_mutants(source, lines)}
+                    )
+                else:
+                    self.assertTrue(kept_operator(entry["operator"]))
 
 
 class DumpTests(unittest.TestCase):
@@ -603,7 +839,7 @@ class MainTests(unittest.TestCase):
             (
                 "diff", "--name-only", "--diff-filter=d", "origin/main", "--",
                 "ci_tools/*.py", "shared/*.py", "containerfiles/zfs-akmods/*.py",
-                "files/scripts/*.py",
+                "files/scripts/*.py", ".claude/hooks/gate-git-diff.sh",
             ),
         )
         check.assert_not_called()
@@ -639,6 +875,36 @@ class MainTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
         self.assertIn("No surviving mutant outside the ledger.", out)
+
+    def test_a_changed_hook_gets_the_bash_mutants_and_its_survivors_are_reported(self) -> None:
+        found = [{"module": HOOK, "line_number": 7, "operator": "bash/RefuseToNoop", "line": "a|b"}]
+        check_hook = mock.Mock(return_value=({"killed": 2, "survived": 1}, found))
+        with mock.patch.object(mutation_check, "check_hook", check_hook):
+            code, out, _, _, check, _ = self.run_main(
+                ["--base", "b"],
+                changed=f"ci_tools/a.py\n{HOOK}\n",
+                check=mock.Mock(return_value=({"killed": 1}, [])),
+            )
+        self.assertEqual(code, 1)
+        check_hook.assert_called_once_with("b")
+        self.assertEqual([c.args[0] for c in check.call_args_list], ["ci_tools/a.py"])
+        self.assertIn(f"- `{HOOK}`: 2 killed, 1 survived", out)
+        self.assertIn(f"| `{HOOK}:7` | `bash/RefuseToNoop` | `a\\|b` |", out)
+
+    def test_an_accepted_hook_survivor_is_not_reported(self) -> None:
+        found = [{"module": HOOK, "line_number": 7, "operator": "bash/RefuseToNoop", "line": "ok"}]
+        ledger = Path(self.tmp.name) / "hook-ledger.json"
+        entry = {"module": HOOK, "operator": "bash/RefuseToNoop", "line": "ok", "reason": "r"}
+        ledger.write_text(json.dumps({"accepted": [entry]}))
+        stdout = io.StringIO()
+        with mock.patch.multiple(
+            mutation_check,
+            git=mock.Mock(return_value=f"{HOOK}\n"),
+            check_hook=mock.Mock(return_value=({"survived": 1}, found)),
+        ), mock.patch.object(mutation_check.os, "chdir"), contextlib.redirect_stdout(stdout):
+            code = mutation_check.main(["--base", "b", "--ledger", str(ledger)])
+        self.assertEqual(code, 0)
+        self.assertIn("No surviving mutant outside the ledger.", stdout.getvalue())
 
     def test_a_changed_module_no_test_imports_fails_without_running_cosmic_ray(self) -> None:
         code, out, _, _, check, _ = self.run_main(
