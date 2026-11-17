@@ -50,6 +50,7 @@ import ast
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -503,6 +504,17 @@ def run_mutant(tests: tuple[str, ...]) -> str:
     return "survived" if result.returncode == 0 else "killed"
 
 
+# The signals that end a run with no traceback, and so with no `finally`,
+# unless a handler turns them into an exception. SIGINT already raises
+# KeyboardInterrupt; SIGKILL cannot be caught.
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+
+
+def stop_on_signal(number: int, _frame) -> None:
+    """Exit as the signal would have, but through the `finally` blocks on the way."""
+    raise SystemExit(128 + number)
+
+
 def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
     """Mutate the lines of HOOK that differ from `base`; return the outcome.
 
@@ -516,6 +528,11 @@ def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
     rows = source.splitlines(keepends=True)
     lines = changed_lines(git("diff", "-U0", base, "--", HOOK))
     counts, found = {}, []
+    # SIGTERM and SIGHUP end Python without running a `finally`, which would
+    # leave a mutant as the live PreToolUse hook: a timeout(1), a closed
+    # terminal or a cancelled tool call sends one. Raising instead lets the
+    # `finally` below write the original back (#332).
+    previous = {number: signal.signal(number, stop_on_signal) for number in STOP_SIGNALS}
     try:
         for number, operator, mutated in bash_mutants(source, lines):
             row = rows[number - 1]
@@ -535,6 +552,8 @@ def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
                 )
     finally:
         path.write_bytes(original)
+        for number, handler in previous.items():
+            signal.signal(number, handler)
     return counts, found
 
 
