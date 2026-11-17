@@ -13,9 +13,12 @@ import contextlib
 import io
 import json
 import re
+import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
+import time
 import types
 import unittest
 from pathlib import Path
@@ -526,6 +529,54 @@ class CheckHookTests(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             self.run_check(mock.Mock(side_effect=KeyboardInterrupt))
         self.assertEqual(self.hook.read_bytes(), self.original)
+
+    def test_restores_the_original_bytes_when_the_run_is_terminated(self) -> None:
+        # A real process and a real signal: a mock cannot show that a
+        # `finally` runs, because SIGTERM's default action skips it.
+        started = self.root / "started"
+        child = textwrap.dedent(
+            f"""
+            import sys, time
+            from pathlib import Path
+            from unittest import mock
+            sys.path.insert(0, {str(ROOT / "tests")!r})
+            import mutation_check
+
+            def run_mutant(tests):
+                Path({str(started)!r}).touch()
+                time.sleep(60)
+
+            with mock.patch.multiple(
+                mutation_check,
+                ROOT=Path({str(self.root)!r}),
+                git=mock.Mock(return_value="@@ -1 +1 @@\\n"),
+                baseline=mock.Mock(),
+                run_mutant=run_mutant,
+            ):
+                mutation_check.check_hook("origin/main")
+            """
+        )
+        for number in mutation_check.STOP_SIGNALS:
+            with self.subTest(signal=signal.Signals(number).name):
+                started.unlink(missing_ok=True)
+                self.hook.write_bytes(self.original)
+                process = subprocess.Popen([sys.executable, "-c", child])
+                self.addCleanup(process.kill)
+                deadline = time.monotonic() + 30
+                while not started.exists():
+                    self.assertIsNone(process.poll(), "the child ended before mutating")
+                    self.assertLess(time.monotonic(), deadline, "no mutant was written")
+                    time.sleep(0.05)
+                self.assertEqual(self.hook.read_bytes(), b"a=0\r\nb=1\n[[ x == y ]]\n")
+                process.send_signal(number)
+                self.assertEqual(process.wait(timeout=30), 128 + number)
+                self.assertEqual(self.hook.read_bytes(), self.original)
+
+    def test_puts_the_previous_signal_handlers_back(self) -> None:
+        before = {number: signal.getsignal(number) for number in mutation_check.STOP_SIGNALS}
+        self.run_check(mock.Mock(return_value="killed"))
+        after = {number: signal.getsignal(number) for number in mutation_check.STOP_SIGNALS}
+        self.assertEqual(after, before)
 
     def test_a_failing_baseline_stops_before_any_mutant_is_written(self) -> None:
         error = subprocess.CalledProcessError(1, ["pytest"], output="1 failed\n")
