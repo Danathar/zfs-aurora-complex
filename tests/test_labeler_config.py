@@ -320,22 +320,41 @@ class LabelerWorkflowTests(unittest.TestCase):
         cls.workflow = yaml.safe_load(LABELER_WORKFLOW.read_text(encoding="utf-8"))
         # `on:` is YAML 1.1 true; PyYAML resolves the bare key to the boolean.
         cls.triggers = cls.workflow.get("on", cls.workflow.get(True))
+        cls.jobs = cls.workflow["jobs"]
         cls.steps = [
             step
-            for job in cls.workflow["jobs"].values()
+            for job in cls.jobs.values()
             for step in job.get("steps", [])
         ]
 
     def test_the_scan_finds_the_job(self) -> None:
         self.assertGreater(len(self.steps), 0)
-        self.assertIn("pull_request_target", self.triggers)
+        self.assertEqual(list(self.jobs), ["label"])
+
+    def test_it_runs_on_pull_request_not_pull_request_target(self) -> None:
+        # From 2026-12-02 GitHub no longer runs pull_request_target in a public
+        # repository without an event policy, and the hive's App cannot create
+        # one (the workflow's header has the detail). A switch back would leave
+        # the labeler silently never running.
+        self.assertEqual(list(self.triggers), ["pull_request"])
+        self.assertEqual(
+            self.triggers["pull_request"]["types"], ["opened", "synchronize", "reopened"]
+        )
+
+    def test_fork_pull_requests_are_skipped_not_failed(self) -> None:
+        # A fork's pull_request token is read-only, so the label call would
+        # fail. The job-level condition makes that a skipped run instead.
+        self.assertEqual(
+            self.jobs["label"].get("if"),
+            "github.event.pull_request.head.repo.full_name == github.repository",
+        )
 
     def test_the_job_never_runs_pull_request_code(self) -> None:
-        # This is why pull_request_target is safe here. The job holds a
-        # pull-requests: write token and runs the *base* branch's workflow; the
-        # moment it checks out the head ref or runs a script from the pull
-        # request, that token is reachable from a fork. Adding a checkout is a
-        # one-line change and looks harmless in review.
+        # The job holds a pull-requests: write token. The moment it checks out
+        # the head ref or runs a script from the pull request, that token is
+        # reachable from code nobody has reviewed yet -- and from a fork's code
+        # if the trigger ever goes back to pull_request_target. Adding a
+        # checkout is a one-line change and looks harmless in review.
         for step in self.steps:
             with self.subTest(step=step.get("name", step.get("uses"))):
                 self.assertNotIn("run", step, "a run: step would execute repo code")
