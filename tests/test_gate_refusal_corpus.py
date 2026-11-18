@@ -55,6 +55,10 @@ OPTIONAL_FIELDS = {"wraps"}
 CANONICAL_SHA256 = "86a3ba4c237693b7b4bf9758bae55c7b4a62a19e2176b496be0a166808d2f7cf"
 
 
+# git global options whose value can be the next word (`git -C dir log`).
+GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
+
+
 def allow_prefixes(settings: dict) -> list[str]:
     """The command prefix each wildcard `Bash(...)` allow rule covers.
 
@@ -249,13 +253,36 @@ def inner_words(row: dict) -> list[str]:
     return [pattern for word, _ in shell_words(row["command"]) for pattern in name_patterns(word)]
 
 
+def after_git_options(words: list[str], start: int) -> int:
+    """The index of the first word from `start` that is not a git global option.
+
+    git reads its own options between `git` and the subcommand, so
+    `git --git-dir=evil log -p` and `git -C .. log -p` run `git log`. An
+    option that takes its value as the next word steps over that word too.
+    """
+    i = start
+    while i < len(words) and words[i].startswith("-"):
+        i += 2 if words[i] in GIT_OPTIONS_WITH_VALUE else 1
+    return i
+
+
 def names(words: list[str], prefix: str) -> bool:
-    """Whether consecutive `words` (from `inner_words`) spell out `prefix`."""
-    wanted = prefix.split()
-    return any(
-        all(fnmatchcase(name, pattern) for name, pattern in zip(wanted, words[i : i + len(wanted)]))
-        for i in range(len(words) - len(wanted) + 1)
-    )
+    """Whether consecutive `words` (from `inner_words`) spell out `prefix`.
+
+    Between `git` and the rest of a `git ...` prefix, git's own global
+    options are stepped over (see `after_git_options`).
+    """
+    first, *rest = prefix.split()
+    for i, pattern in enumerate(words):
+        if not fnmatchcase(first, pattern):
+            continue
+        start = after_git_options(words, i + 1) if first == "git" and rest else i + 1
+        following = words[start : start + len(rest)]
+        if len(following) == len(rest) and all(
+            fnmatchcase(name, pattern) for name, pattern in zip(rest, following)
+        ):
+            return True
+    return False
 
 
 def hook_command(settings: dict) -> str:
