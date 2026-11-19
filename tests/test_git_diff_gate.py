@@ -1887,6 +1887,20 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "typeset +x GIT_CONFIG_COUNT; git log -p -1",
+        "refused",
+        "typeset is declare under another name, so +x stops exporting the variable the same way",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "{ unset GIT_CONFIG_COUNT; git log -p -1; }",
+        "refused",
+        "a removal that starts right after a brace group opens is still a command of its own",
+        "settings environment",
+    ),
+    Row(
+        "environment",
         "GIT_CONFIG_COUNT=0; git log -p",
         "refused",
         "a statement of assignments changes the value the shell already exports; a count of 0 "
