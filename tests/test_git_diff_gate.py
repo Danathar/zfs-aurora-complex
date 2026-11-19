@@ -490,7 +490,7 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
         # env options are not.
         for command in (
             "git status; env -S 'git diff /dev/null ./cosign.key'",
-            "env -iS 'git diff /dev/null ./cosign.key'",
+            "env -vS 'git diff /dev/null ./cosign.key'",
             "git status; env --split-string='git diff x'",
             "git status; env --split-string 'git diff x'",
             "git status; env -u X -S 'git diff x'",
@@ -568,7 +568,7 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
             "LD_PRELOAD=/tmp/evil.so git status",
             "FOO=bar git diff HEAD",
             "env FOO=$x git diff HEAD",
-            "env -i PATH=$PATH git diff HEAD",
+            "env -v PATH=$PATH git diff HEAD",
             "env -u X GIT_EXTERNAL_DIFF=/tmp/evil.sh git diff HEAD~1 HEAD",
             "nice -n 5 GIT_EXTERNAL_DIFF=/tmp/evil.sh git diff HEAD~1 HEAD",
             "timeout -s KILL 5 GIT_EXTERNAL_DIFF=/tmp/evil.sh git diff HEAD~1 HEAD",
@@ -617,7 +617,7 @@ class GateBehaviourTests(GateRunner, unittest.TestCase):
         # `--output-file` went quiet on a two-word prefix.
         for command, message in (
             ("env -u X python3 tests/run_tests.py >cosign.pub", "output redirection"),
-            ("env -i gh run view 1 --log >.claude/settings.json", "output redirection"),
+            ("env -v gh run view 1 --log >.claude/settings.json", "output redirection"),
             ("timeout -s KILL 5 skopeo inspect docker://x >cosign.pub", "output redirection"),
             (
                 "timeout 60 cosign verify --output-file cosign.pub --key cosign.pub ref",
@@ -1688,7 +1688,7 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
-        "env -i GIT_EXTERNAL_DIFF=/tmp/evil git diff HEAD",
+        "env -v GIT_EXTERNAL_DIFF=/tmp/evil git diff HEAD",
         "refused",
         "an option before the assignment must not be read as the command's name",
         "an assignment before a command",
@@ -1858,6 +1858,128 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "the assignment reaches echo, which no allow rule covers and which opens nothing",
     ),
+    # Taking away the settings environment (.claude/settings.json's
+    # GIT_CONFIG_COUNT/KEY_0/VALUE_0, which set safe.bareRepository=explicit)
+    # lets `git log -p` run a planted bare folder's textconv program again.
+    # The canonical corpus holds the plain spellings; these are the ones it
+    # does not, behind wrappers and in the forms bash and env also accept.
+    Row(
+        "environment",
+        "unset GIT_CONFIG_COUNT",
+        "refused",
+        "a removal on its own is not tied to the git it reaches, so it is refused wherever "
+        "it stands",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "git status && builtin unset GIT_CONFIG_KEY_0 && git log -p",
+        "refused",
+        "builtin runs the same unset; without its key the count names nothing",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "local +x GIT_CONFIG_COUNT",
+        "refused",
+        "local takes declare's options, so +x stops exporting the variable the same way",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "GIT_CONFIG_COUNT=0; git log -p",
+        "refused",
+        "a statement of assignments changes the value the shell already exports; a count of 0 "
+        "reads no settings at all",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "declare GIT_CONFIG_COUNT=0",
+        "refused",
+        "declare without -x keeps the variable exported and gives it the new value",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -uGIT_CONFIG_COUNT git log -p",
+        "refused",
+        "env -u takes its value attached as readily as in the next word",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env --uns GIT_CONFIG_COUNT git log -p",
+        "refused",
+        "env takes an unambiguous abbreviation of --unset",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env --ign git log -p",
+        "refused",
+        "an abbreviation of --ignore-environment, which empties the environment as -i does",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -vi git log -p",
+        "refused",
+        "-i clustered behind another option still empties the environment",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "timeout -s KILL 5 env -i git log -p",
+        "refused",
+        "an env behind another wrapper and its option values is still in the command's chain",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -i bash -c 'git log -p'",
+        "refused",
+        "the emptied environment reaches a git inside a shell string this scan reads separately",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "exec -lc git log -p",
+        "refused",
+        "bash's exec takes -c clustered with its other options",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "echo $(unset GIT_CONFIG_COUNT); git log -1",
+        "refused",
+        "a command substitution is a command of its own and is read as one",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "export -n FOO; git log -1",
+        "allowed",
+        "un-exporting a variable the settings environment does not set reaches nothing",
+    ),
+    Row(
+        "environment",
+        "export GIT_CONFIG_COUNT; git log -1",
+        "allowed",
+        "exporting it again keeps the value the settings environment gave it",
+    ),
+    Row(
+        "environment",
+        "timeout 5 env -v git log -1",
+        "allowed",
+        "env's other options leave the environment as it is",
+    ),
+    Row(
+        "environment",
+        "git grep -n 'env -i' -- .claude",
+        "allowed",
+        "env -i as a search pattern is an operand of git grep, not a wrapper",
+    ),
     # --- 2. redirection ----------------------------------------------------
     #
     # Output opens a path for writing before the command runs. Input hands the
@@ -1900,7 +2022,7 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "redirection",
-        "git status; env -i python3 tests/run_tests.py >cosign.pub",
+        "git status; env -v python3 tests/run_tests.py >cosign.pub",
         "refused",
         "a wrapper's own option must not be read as the command's name, or the prefix "
         "the gated scan builds starts a word early and matches no allow row",
@@ -2347,7 +2469,7 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "command name",
-        "env -i $G diff /dev/null ./cosign.key",
+        "env -v $G diff /dev/null ./cosign.key",
         "refused",
         "after a wrapper every word is held to the name test, past the wrapper's own options",
         "Spell every command name literally",
@@ -3104,7 +3226,7 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "the name search past a wrapper's own options",
         "((after_wrapper)) || command_word_pending=0",
         "command_word_pending=0",
-        "env -i $G diff /dev/null ./cosign.key",
+        "env -v $G diff /dev/null ./cosign.key",
     ),
     (
         "noglob stepped over as a wrapper",
@@ -3349,6 +3471,36 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         'glob_is_nameless "${pieces[k]##*/}" && continue',
         ":",
         "shopt -s extglob\nls !(foo)",
+    ),
+    (
+        "the settings environment's names",
+        '[[ "${1%%=*}" == GIT_CONFIG* ]]',
+        '[[ "${1%%=*}" == NOT_A_SETTING* ]]',
+        "unset GIT_CONFIG_COUNT",
+    ),
+    (
+        "a statement that assigns the settings environment",
+        'names_settings_env "${seg[i]}" && refuse "${SETTINGS_ENV_MSG}"',
+        'names_settings_env "${seg[i]}" && true',
+        "GIT_CONFIG_COUNT=0; git log -p",
+    ),
+    (
+        "env's -i inside a cluster",
+        '[[ "${ch}" == i ]] && refuse "${SETTINGS_ENV_MSG}"',
+        '[[ "${ch}" == i ]] && true',
+        "env -vi git log -p",
+    ),
+    (
+        "bash's exec -c",
+        '[[ "${word:1}" == *c* ]] && refuse "${SETTINGS_ENV_MSG}"',
+        '[[ "${word:1}" == *c* ]] && true',
+        "exec -lc git log -p",
+    ),
+    (
+        "stepping over another wrapper's option values",
+        'elif [[ "${word}" =~ ^[0-9.]+[smhd]?$ ]] || ((prev_opt)); then',
+        "elif false; then",
+        "timeout -s KILL 5 env -i git log -p",
     ),
 )
 

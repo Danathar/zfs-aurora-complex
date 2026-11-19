@@ -52,7 +52,7 @@ OPTIONAL_FIELDS = {"wraps"}
 
 # SHA-256 of the canonical tests/fixtures/gate-refusal-corpus.json in
 # Danathar/atomic-image-builder. Copy the file from there; never edit it here.
-CANONICAL_SHA256 = "86a3ba4c237693b7b4bf9758bae55c7b4a62a19e2176b496be0a166808d2f7cf"
+CANONICAL_SHA256 = "9bb984ef871ff8ad63b113d48976f4eea4cbb44be270574fc7a9b3819865bd56"
 
 
 # git global options whose value can be the next word (`git -C dir log`).
