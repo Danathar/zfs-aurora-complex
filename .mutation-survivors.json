@@ -3,24 +3,6 @@
   "accepted": [
     {
       "module": ".claude/hooks/gate-git-diff.sh",
-      "operator": "bash/DropCaseAlternative_'}'",
-      "line": "'{' | '}' | '!' | '(' | if | then | else | elif | fi | do | done | while | until | time | coproc) ((i++)) ;;",
-      "reason": "`}` only closes a compound command, so bash allows no word after it in the same command: a segment that starts with it holds nothing else, and with or without the alternative the pass reads no command in it."
-    },
-    {
-      "module": ".claude/hooks/gate-git-diff.sh",
-      "operator": "bash/DropCaseAlternative_fi",
-      "line": "'{' | '}' | '!' | '(' | if | then | else | elif | fi | do | done | while | until | time | coproc) ((i++)) ;;",
-      "reason": "`fi` only closes a compound command, so bash allows no word after it in the same command: a segment that starts with it holds nothing else, and with or without the alternative the pass reads no command in it."
-    },
-    {
-      "module": ".claude/hooks/gate-git-diff.sh",
-      "operator": "bash/DropCaseAlternative_done",
-      "line": "'{' | '}' | '!' | '(' | if | then | else | elif | fi | do | done | while | until | time | coproc) ((i++)) ;;",
-      "reason": "`done` only closes a compound command, so bash allows no word after it in the same command: a segment that starts with it holds nothing else, and with or without the alternative the pass reads no command in it."
-    },
-    {
-      "module": ".claude/hooks/gate-git-diff.sh",
       "operator": "bash/FlipFlag_0_1",
       "line": "local prev_opt=0",
       "reason": "prev_opt is read only in the branch for a wrapper other than env and exec, and the wrapper's name sets it to 0 before that branch runs, so its starting value is never read."

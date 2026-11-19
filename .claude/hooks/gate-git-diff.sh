@@ -1339,9 +1339,12 @@ check_settings_env_segment() {
   # Read only in the branch for another wrapper, after its name has set it.
   local prev_opt=0
   ((n)) || return 0
+  # The words that can open a command and come before its name. A `(` is a
+  # separator, never a word here, and `}`, `fi` and `done` only close a
+  # command: bash allows no word after them in the same one.
   while ((i < n)); do
     case "${seg[i]}" in
-    '{' | '}' | '!' | '(' | if | then | else | elif | fi | do | done | while | until | time | coproc) ((i++)) ;;
+    '{' | '!' | if | then | else | elif | do | while | until | time | coproc) ((i++)) ;;
     *) break ;;
     esac
   done
