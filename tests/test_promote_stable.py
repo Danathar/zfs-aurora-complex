@@ -200,6 +200,26 @@ class PromoteStableTests(unittest.TestCase):
         self.assertIn("no matching signatures", str(context.exception))
         skopeo_copy.assert_not_called()
 
+    def test_missing_verification_key_is_refused_before_cosign_or_any_tag_moves(self) -> None:
+        # Without the public key there is nothing to verify against, so the
+        # promotion must stop before cosign runs and before either tag moves.
+        missing = "/nonexistent/zfs-aurora-complex-test/cosign.pub"
+        env = _env() | {"COSIGN_PUBLIC_KEY_PATH": missing}
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("ci_tools.promote_stable.skopeo_inspect_digest", return_value="sha256:abc"),
+            patch("ci_tools.promote_stable.skopeo_copy") as skopeo_copy,
+            patch("ci_tools.promote_stable.run_cmd") as run_cmd,
+            self.assertRaises(CiToolError) as context,
+        ):
+            main()
+
+        self.assertEqual(
+            str(context.exception), f"Missing required verification key file: {missing}"
+        )
+        run_cmd.assert_not_called()
+        skopeo_copy.assert_not_called()
+
     def test_lists_tags_of_the_image_repository_with_credentials(self) -> None:
         with (
             patch.dict(os.environ, _env(), clear=True),
