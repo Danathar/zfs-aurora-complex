@@ -5,8 +5,9 @@ name: Agent audit trail
 # and fails when one did not leave it.
 #
 # The record is GitHub itself; docs/agent-tasks/README.md says where each part
-# of it lives. A Hive pull request ends its description with a `— hive:`
-# signature line naming the role, backend and model that wrote it, and every
+# of it lives. A Hive pull request ends its description with a `-- hive:`
+# signature line (`— hive:`, with an em dash, before 2026-11-18; both count)
+# naming the role, backend and model that wrote it, and every
 # commit on it carries a Signed-off-by trailer. Nothing checked either once the
 # merge was in: the only required status check, in .github/rulesets/main-checks.json,
 # is `Python Unit Tests`, and an omp-backed run pushes under the maintainer's
@@ -23,7 +24,8 @@ name: Agent audit trail
 #
 # Two things fail the run, because each is checkable from what GitHub holds:
 #
-#   * a pull request the Hive app opened with no `— hive:` signature line;
+#   * a pull request the Hive app opened with no `-- hive:` (or older
+#     `— hive:`) signature line;
 #   * a commit on an agent pull request with no Signed-off-by trailer. A merge
 #     commit is exempt when the pull request went into `main` and every parent
 #     after the first is outside the commits the pull request lists: that is
@@ -109,7 +111,9 @@ jobs:
           fi
 
           # A signature counts only as the body's last non-blank line, in the
-          # documented shape: `— hive: ` and then `key=value` fields. A body
+          # documented shape: `-- hive: ` and then `key=value` fields. The Hive
+          # wrote `— hive: ` (an em dash) until 2026-11-18 (hive v5.322.0), and
+          # that prefix still counts; no other dash does. A body
           # that quotes the line in its text is not signed by it. Lines that
           # are wholly an HTML comment are skipped first: a reader never sees
           # them, and the Hive appends markers such as
@@ -123,7 +127,7 @@ jobs:
           signature_def='def signature:
             (.body // "") | split("\n") | map(sub("\\s+$"; "")) | map(select(length > 0))
             | map(select(test("^\\s*<!--.*-->\\s*$") | not)) | (last // "")
-            | if test("^— hive: [a-z_]+=") then . else null end;'
+            | if test("^(--|—) hive: [a-z_]+=") then . else null end;'
 
           # The Hive app's login as `gh` spells it. The signature clause is
           # what catches the omp-backed runs, which open pull requests under
@@ -196,7 +200,7 @@ jobs:
                   merged_by: ($pr.mergedBy.login // "unknown"),
                   app: ($pr.author.login == "app/danathar-atomic-hive"),
                   enforced: ($pr.mergedAt[:10] >= $enforce),
-                  signature: (signature | if . == null then null else ltrimstr("— hive: ") end),
+                  signature: (signature | if . == null then null else sub("^(--|—) hive: "; "") end),
                   closes: [$d.closingIssuesReferences[].number],
                   tier3: any($pr.labels[]; .name == "area/safety-critical"),
                   commits: ($d.commits | length),
@@ -206,7 +210,7 @@ jobs:
             def findings:
               [ .[]
                 | (if .app and .signature == null
-                   then "#\(.number): opened by the Hive app with no `— hive:` signature line, so the role and model that wrote it are unrecorded"
+                   then "#\(.number): opened by the Hive app with no `-- hive:` signature line (the older `— hive:` also counts), so the role and model that wrote it are unrecorded"
                    else empty end),
                   (if (.unsigned | length) > 0
                    then "#\(.number): commit(s) \(.unsigned | join(", ")) carry no Signed-off-by trailer"

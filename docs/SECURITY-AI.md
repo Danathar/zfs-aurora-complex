@@ -85,7 +85,7 @@ No workflow here holds a model API key; nothing else in CI is secret.
 Autonomous maintenance on this repository goes through
 [Hive](https://github.com/hivecommons/hive) and through nothing else. Hive
 agents file issues and open pull requests as `danathar-atomic-hive`, signed
-`— hive: agent=…`; the gates in `test.yml` and the ruleset
+`-- hive: agent=…` (`— hive: agent=…` before 2026-11-18); the gates in `test.yml` and the ruleset
 ([`branch-protection.md`](./branch-protection.md)) apply to their output
 exactly as to anyone else's. Hive runs outside this repository, so what it
 holds is not a secret or a scope of this repository's workflows.

@@ -72,8 +72,13 @@ Hive is an outside system, not part of this repository. It opens pull requests a
 issues as `app/danathar-atomic-hive` and writes a signature as the last line:
 
 ```text
-— hive: agent=<role> backend=<tool> model=<model>
+-- hive: agent=<role> backend=<tool> model=<model>
 ```
+
+Since 2026-11-18 (hive v5.322.0) the line starts with two ASCII hyphens. Before
+that Hive wrote an em dash, `— hive:`, so older pull requests and issues, such
+as the examples below, carry `— hive: agent=`. Both count wherever the line is
+read.
 
 Hive's pull requests carry the full line. For example, #174 ends:
 
@@ -149,7 +154,7 @@ List the pull requests that carry a Hive signature, if any:
 
 ```sh
 gh pr list --state all --limit 1000 --json number,body \
-  --jq '.[] | select(.body | test("— hive: agent=")) | .number'
+  --jq '.[] | select(.body | test("(--|—) hive: agent=")) | .number'
 ```
 
 See which branch prefix goes with which author, from the real pull requests:
