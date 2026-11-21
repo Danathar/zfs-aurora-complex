@@ -2264,6 +2264,40 @@ CORPUS: tuple[Row, ...] = (
         "allowed",
         "env -i as a search pattern is an operand of git grep, not a wrapper",
     ),
+    # git, printf, grep, egrep and fgrep are left out of the scan that reads
+    # each tail of an unknown program as a command of its own. Each row puts
+    # `env` and `-i` there as separate words, so it is refused as soon as its
+    # command is dropped from that list.
+    Row(
+        "environment",
+        "git grep -n -e env -e -i -- .claude",
+        "allowed",
+        "env and -i as two git grep patterns are operands, not a wrapper and its option",
+    ),
+    Row(
+        "environment",
+        "printf '%s\\n' env -i",
+        "allowed",
+        "printf prints env and -i; it runs nothing",
+    ),
+    Row(
+        "environment",
+        "grep -n -e env -e -i README.md",
+        "allowed",
+        "env and -i as two grep patterns are operands, not a wrapper and its option",
+    ),
+    Row(
+        "environment",
+        "egrep -n -e env -e -i README.md",
+        "allowed",
+        "egrep is grep -E and reads env and -i as patterns too",
+    ),
+    Row(
+        "environment",
+        "fgrep -n -e env -e -i README.md",
+        "allowed",
+        "fgrep is grep -F and reads env and -i as patterns too",
+    ),
     # --- 2. redirection ----------------------------------------------------
     #
     # Output opens a path for writing before the command runs. Input hands the
