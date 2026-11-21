@@ -102,7 +102,8 @@ findings with a severity badge. It opens nothing and merges nothing.
 [`review-rubric.md`](./review-rubric.md) section 8 says what to do with a finding.
 
 **Hive's agents.** Hive's pull requests and issues end with a signature line of
-the form `— hive: agent=<role> backend=... model=...`, and its pull requests come
+the form `-- hive: agent=<role> backend=... model=...` (`— hive:`, with an em
+dash, on those from before 2026-11-18), and its pull requests come
 from `app/danathar-atomic-hive`. **Hive has been active for this repository since
 2026-10-12.** On 2026-10-16, 21 merged pull requests (#133 to #174) had been
 opened by that app, and every one carries that signature. The roles named in
@@ -123,7 +124,7 @@ gh pr list --state all --limit 1000 --json author,headRefName \
 
 # Which pull requests carry a Hive signature:
 gh pr list --state all --limit 1000 --json number,body \
-  -q '.[] | select(.body | test("— hive: agent=")) | .number'
+  -q '.[] | select(.body | test("(--|—) hive: agent=")) | .number'
 ```
 
 Both need `-R Danathar/zfs-aurora-complex` outside a checkout. A branch prefix is
@@ -143,7 +144,7 @@ one. Nothing in the repository receives the request.
 its own backlog, starts an agent, and the agent pushes a branch. Nothing here
 receives that request, so nothing here can be asked about it. What is visible
 here is the result: an issue the agent filed, a branch, a pull request with a
-`— hive:` signature, and labels. The agent claims an issue by commenting on it
+`-- hive:` signature, and labels. The agent claims an issue by commenting on it
 before it starts, so read an issue's comments before taking it.
 
 There is no label that hands work to an agent here. No workflow reacts to a

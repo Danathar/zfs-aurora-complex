@@ -20,7 +20,8 @@ RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
 SESSION_SUMMARY = REPO_ROOT / ".claude" / "session-summary.md"
 
 SLUG = "Danathar/zfs-aurora-complex"
-SIGNATURE_PREFIX = "— hive: agent="
+SIGNATURE_PREFIX = "-- hive: agent="
+LEGACY_SIGNATURE_PREFIX = "— hive: agent="
 HIVE_APP = "app/danathar-atomic-hive"
 
 
@@ -46,11 +47,14 @@ class NoTaskLogTests(unittest.TestCase):
 class SignatureTests(unittest.TestCase):
     def test_the_prefix_the_page_quotes_is_the_one_the_audit_matches(self) -> None:
         self.assertIn(SIGNATURE_PREFIX, page())
+        self.assertIn(LEGACY_SIGNATURE_PREFIX, page())
         audit = AUDIT.read_text(encoding="utf-8")
-        # The audit's jq reads `— hive: ` then `key=value`; the page's prefix is the same line.
-        self.assertIn('"^— hive: [a-z_]+="', audit)
-        self.assertIn("— hive: ", SIGNATURE_PREFIX)
-        self.assertIn('ltrimstr("— hive: ")', audit)
+        # The audit's jq reads `-- hive: ` (or the older `— hive: `) then
+        # `key=value`; the page's prefixes are the same line.
+        self.assertIn('"^(--|—) hive: [a-z_]+="', audit)
+        self.assertIn("-- hive: ", SIGNATURE_PREFIX)
+        self.assertIn("— hive: ", LEGACY_SIGNATURE_PREFIX)
+        self.assertIn('sub("^(--|—) hive: "; "")', audit)
 
     def test_the_app_login_is_the_one_the_audit_treats_as_hive(self) -> None:
         self.assertIn(f"`{HIVE_APP}`", page())
