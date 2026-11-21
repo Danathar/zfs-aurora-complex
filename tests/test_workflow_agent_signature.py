@@ -46,6 +46,8 @@ JOB_NAME = "Check the agent signature line"
 GITHUB_BASH = ["bash", "--noprofile", "--norc", "-e"]
 
 SIGNATURE = "— hive: agent=quality backend=claude model=claude-opus-5-5"
+# The spelling the Hive writes since 2026-11-18 (hive v5.322.0).
+CURRENT_SIGNATURE = "-- hive: agent=scanner backend=claude model=claude-sonnet-5-5 effort=high claude=2.1.327"
 DEFINITION_RE = re.compile(r"^signature_def='([^']*)'$", re.MULTILINE)
 
 
@@ -117,7 +119,7 @@ class SameSignatureTestAsTheAuditTests(unittest.TestCase):
     def test_the_definition_is_the_one_the_issue_names(self) -> None:
         # Guards the comparison above against both sides losing the test together.
         (step,) = self.job_steps()
-        self.assertIn('test("^— hive: [a-z_]+=")', _definition(step["run"]))
+        self.assertIn('test("^(--|—) hive: [a-z_]+=")', _definition(step["run"]))
 
     def job_steps(self) -> list[dict]:
         return _load(WORKFLOW_PATH)["jobs"]["signature"]["steps"]
@@ -143,15 +145,16 @@ class SignatureStepTests(unittest.TestCase):
             check=False,
         )
 
-    def assertSigned(self, description: str) -> None:
+    def assertSigned(self, description: str, signature: str = SIGNATURE) -> None:
         result = self._run(description)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn(f"Signed: {SIGNATURE}", result.stdout)
+        self.assertIn(f"Signed: {signature}", result.stdout)
 
     def assertUnsigned(self, description: str) -> None:
         result = self._run(description)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("::error::", result.stdout)
+        self.assertIn('not a "-- hive:" signature line (the older "— hive:" is still accepted)', result.stdout)
 
     def test_a_signed_description_passes(self) -> None:
         self.assertSigned(f"Closes #1\n\n{SIGNATURE}\n")
@@ -177,6 +180,30 @@ class SignatureStepTests(unittest.TestCase):
 
     def test_a_line_without_a_key_value_field_does_not_sign(self) -> None:
         self.assertUnsigned("Closes #1\n\n— hive: scanner\n")
+
+    def test_the_current_two_hyphen_signature_passes(self) -> None:
+        self.assertSigned(f"Closes #1\n\n{CURRENT_SIGNATURE}\n", CURRENT_SIGNATURE)
+
+    def test_the_current_signature_written_in_the_browser_passes(self) -> None:
+        self.assertSigned(f"Closes #1\r\n\r\n{CURRENT_SIGNATURE}\r\n", CURRENT_SIGNATURE)
+
+    def test_a_hidden_marker_below_the_current_signature_does_not_unsign_it(self) -> None:
+        self.assertSigned(f"Closes #1\n\n{CURRENT_SIGNATURE}\n\n<!-- hive:issue-link-fixed -->\n", CURRENT_SIGNATURE)
+
+    def test_near_misses_of_the_current_signature_do_not_sign(self) -> None:
+        for description in (
+            f"The line looks like\n\n{CURRENT_SIGNATURE}\n\nand this closes #1.\n",
+            "Closes #1\n\n<!-- -- hive: agent=quality -->\n",
+            "Closes #1\n\n-- hive: scanner\n",
+            "Closes #1\n\n-- hive:\n",
+            f"Closes #1\n\n  {CURRENT_SIGNATURE}\n",
+            "Closes #1\n\n- hive: agent=quality\n",
+            "Closes #1\n\n--- hive: agent=quality\n",
+            "Closes #1\n\n--hive: agent=quality\n",
+            "Closes #1\n\n\u2013 hive: agent=quality\n",
+        ):
+            with self.subTest(description=description):
+                self.assertUnsigned(description)
 
     def test_shell_syntax_in_the_description_is_text(self) -> None:
         # The description is data. Nothing in it may run, and it must not end the step early.

@@ -51,6 +51,8 @@ HIVE = {"login": "app/danathar-atomic-hive", "is_bot": True}
 MAINTAINER = {"login": "Danathar", "is_bot": False}
 RENOVATE = {"login": "app/renovate", "is_bot": True}
 SIGNATURE = "— hive: agent=quality backend=claude model=claude-opus-5-5"
+# The spelling the Hive writes since 2026-11-18 (hive v5.322.0).
+CURRENT_SIGNATURE = "-- hive: agent=scanner backend=claude model=claude-sonnet-5-5 effort=high claude=2.1.327"
 ENFORCED = "2026-10-08T12:00:00Z"
 BEFORE = "2026-10-07T12:00:00Z"
 
@@ -350,6 +352,48 @@ class AuditStepTests(unittest.TestCase):
         result = self._run([_pr(24, [_branch_commit()], body=body)])
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertTrue(self._findings()[0].startswith("#24: opened by the Hive app with no"))
+
+    def test_the_current_two_hyphen_signature_signs_like_the_em_dash_one(self) -> None:
+        prs = [
+            _pr(25, [_branch_commit()], body=f"Closes #1\n\n{CURRENT_SIGNATURE}\n"),
+            _pr(26, [_branch_commit()], body=f"Closes #1\r\n\r\n{CURRENT_SIGNATURE}\r\n\r\n<!-- hive:issue-link-fixed -->\r\n"),
+        ]
+        self.assertPasses(self._run(prs))
+        summary = self.summary.read_text(encoding="utf-8")
+        self.assertIn("| agent=scanner backend=claude model=claude-sonnet-5-5 effort=high claude=2.1.327 |", summary)
+        self.assertNotIn("| -- hive:", summary)
+
+    def test_near_misses_of_the_current_signature_do_not_sign(self) -> None:
+        bodies = {
+            40: f"The line looks like\n\n{CURRENT_SIGNATURE}\n\nand this closes #1.\n",
+            41: "Closes #1\n\n-- hive: scanner\n",
+            42: "Closes #1\n\n-- hive:\n",
+            43: "Closes #1\n\n--- hive: agent=scanner\n",
+            44: "Closes #1\n\n--hive: agent=scanner\n",
+            45: "Closes #1\n\n\u2013 hive: agent=scanner\n",
+            46: "Closes #1\n\n<!-- -- hive: agent=scanner -->\n",
+            47: f"Closes #1\n\n  {CURRENT_SIGNATURE}\n",
+        }
+        result = self._run([_pr(n, [_branch_commit()], body=b) for n, b in bodies.items()])
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            sorted(f.split(":")[0] for f in self._findings()), sorted(f"#{n}" for n in bodies)
+        )
+        self.assertIn(
+            "opened by the Hive app with no `-- hive:` signature line (the older `— hive:` also counts)",
+            self._findings()[0],
+        )
+
+    def test_a_maintainer_pull_request_is_selected_by_a_current_signature(self) -> None:
+        unsigned = [_commit("u1", signed=False, parents=[MAIN_0])]
+        prs = [
+            _pr(35, [dict(c) for c in unsigned], author=MAINTAINER, body=f"Closes #1\n\n{CURRENT_SIGNATURE}\n"),
+            _pr(36, [dict(c) for c in unsigned], author=MAINTAINER, body=f"Quotes {CURRENT_SIGNATURE}\n"),
+        ]
+        result = self._run(prs)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual([f.split(":")[0] for f in self._findings()], ["#35"])
+        self.assertIn("1 of the 2 pull requests merged", self.summary.read_text(encoding="utf-8"))
 
     def test_agent_pull_requests_are_selected_by_app_or_signature(self) -> None:
         unsigned = [_commit("u1", signed=False, parents=[MAIN_0])]

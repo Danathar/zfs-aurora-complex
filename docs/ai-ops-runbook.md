@@ -6,7 +6,7 @@ Two kinds of thing act on this repository without a person typing: GitHub
 Actions workflows, and agents. Agents run in the maintainer's own sessions, and
 in an external system called Hive. Hive opens issues and pull requests here as
 `app/danathar-atomic-hive`, and ends the body with a signature line that starts
-`— hive: agent=`. **Hive has been active for this repository since 2026-10-12**,
+`-- hive: agent=` (`— hive: agent=`, with an em dash, before 2026-11-18). **Hive has been active for this repository since 2026-10-12**,
 and its app merges its own pull requests ([`multi-agent.md`](./multi-agent.md)).
 [`docs/SECURITY-AI.md`](./SECURITY-AI.md) says what an agent may do. This page
 says what you do when one of them, or one of the workflows, tells you something.
@@ -217,9 +217,9 @@ Every file in `.github/workflows/` has an entry here.
   include the pull requests the Hive app opened and merged; the "Merged by" and
   "Tier 3" columns together show which safety-critical ones it merged.
 - **Red means a record is missing:** a pull request the Hive app opened with no
-  `— hive:` signature line, or a commit on an agent pull request with no
-  `Signed-off-by:` trailer. Misses merged before 2026-10-08 are listed but do not
-  fail it. A red scheduled run also opens a `Run failing on main: Agent audit
+  `-- hive:` (or older `— hive:`) signature line, or a commit on an agent pull
+  request with no `Signed-off-by:` trailer. Misses merged before 2026-10-08 are
+  listed but do not fail it. A red scheduled run also opens a `Run failing on main: Agent audit
   trail` issue (see `auto-issues.yml` above).
 - **First:** open the run summary. Each finding names the pull request and the
   commits. Merged history is not rewritten to fix one. Say on the pull request
@@ -232,9 +232,9 @@ Every file in `.github/workflows/` has an entry here.
 - **Means:** the signature half of `agent-audit.yml`, asked of an open pull
   request instead of a merged one. Its job "Check the agent signature line" runs
   on a pull request that `danathar-atomic-hive[bot]` opened and is skipped on
-  every other one. It fails when the description's last line is not a `— hive:`
-  signature line, judged by the same definition the audit uses. Its token has no
-  permissions.
+  every other one. It fails when the description's last line is not a `-- hive:`
+  (or older `— hive:`) signature line, judged by the same definition the audit
+  uses. Its token has no permissions.
 - **Advisory:** it is not a required check, so a red run does not stop a merge.
   It can be made required once it has run clean for a month.
 - **First, if it is red:** add the signature line as the last line of the
@@ -317,7 +317,7 @@ Every file in `.github/workflows/` has an entry here.
 
 - **Recognise one:** a pull request from the maintainer's own session, with
   `Co-authored-by:` trailers and often a `Generated with [Claude Code]` line; or,
-  once Hive resumes, author `app/danathar-atomic-hive` with a `— hive: agent=` line
+  once Hive resumes, author `app/danathar-atomic-hive` with a `-- hive: agent=` line
   at the end of the body.
 - **Means:** nothing yet. Green CI is not approval, and a label is not approval
   either: some labels carry authority to the external system this repository is
