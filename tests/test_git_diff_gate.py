@@ -2224,6 +2224,20 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "env -a -i git log -p -1",
+        "refused",
+        "a word after -a that looks like an option is still read as one; refusing it costs "
+        "nothing",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -ax git -i log -1",
+        "allowed",
+        "-ax carries its name in the same word, so git is the command and -i is git's own word",
+    ),
+    Row(
+        "environment",
         "env -a x git log -1",
         "allowed",
         "-a only renames the command env runs; the environment stays as it is",

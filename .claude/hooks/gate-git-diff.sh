@@ -1399,17 +1399,19 @@ check_settings_env_segment() {
           read -ra parts <<<"${value}"
           seg=("${seg[@]:0:i+1}" "${parts[@]}" "${seg[@]:i+1}")
           n=${#seg[@]}
-        elif [[ "${word}" != *=* ]] && ((${#opt} >= 3)) &&
-          [[ --chdir == "${opt}"* || --argv0 == "${opt}"* ]]; then
+        elif [[ "${word}" != *=* ]] && ((${#opt} >= 3)) && [[ --chdir == "${opt}"* ]]; then
           ((i++)) # the option's value
+        elif [[ "${word}" != *=* && "${seg[i+1]-}" != -* ]] && ((${#opt} >= 3)) &&
+          [[ --argv0 == "${opt}"* ]]; then
+          ((i++)) # the name env starts its command under, not the command
         fi
       elif [[ "${word}" == -* ]]; then
-        # A cluster of short options: -i empties the environment; -u, -C, -S
-        # and -a take the rest of the word, or the next word, as their value.
+        # A cluster of short options: -i empties the environment; -u, -C and
+        # -S take the rest of the word, or the next word, as their value.
         for ((j = 1; j < ${#word}; j++)); do
           ch="${word:j:1}"
           [[ "${ch}" == i ]] && refuse "${SETTINGS_ENV_MSG}"
-          if [[ "${ch}" == [uCSa] ]]; then
+          if [[ "${ch}" == [uCS] ]]; then
             value="${word:j+1}"
             if [[ -z "${value}" ]]; then
               ((i++))
@@ -1417,6 +1419,13 @@ check_settings_env_segment() {
             fi
             [[ "${ch}" == u ]] && names_settings_env "${value}" && refuse "${SETTINGS_ENV_MSG}"
             break
+          fi
+          # -a NAME ending the cluster: the next word is the name env starts
+          # its command under, so `env -a x -i` still reads the -i. A next
+          # word that looks like an option is read as one, which can only
+          # refuse more.
+          if ((j == ${#word} - 1)) && [[ "${ch}" == a && "${seg[i+1]-}" != -* ]]; then
+            ((i++))
           fi
         done
       elif [[ "${word}" == *=* ]]; then
