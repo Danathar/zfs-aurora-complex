@@ -1944,9 +1944,43 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "flock /tmp/l env -i git log -p -1",
+        "refused",
+        "env behind flock and its lock file still empties the environment",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "watch env -i git log -p -1",
+        "refused",
+        "env behind watch still empties the environment",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "setsid env -u GIT_CONFIG_COUNT git log -p",
+        "refused",
+        "env -u behind setsid still removes the count",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "flock /tmp/l env -u FOO git log -p",
+        "allowed",
+        "env -u of another name behind flock leaves the setting",
+    ),
+    Row(
+        "environment",
         "timeout -s KILL 5 env -i git log -p",
         "refused",
         "an env behind another wrapper and its option values is still in the command's chain",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "timeout -s KILL 5 /usr/bin/env -i git log -p",
+        "refused",
+        "an env spelled as a path is found only by walking the wrapper chain past the option values",
         "settings environment",
     ),
     Row(
@@ -3673,7 +3707,13 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "stepping over another wrapper's option values",
         'elif [[ "${word}" =~ ^[0-9.]+[smhd]?$ ]] || ((prev_opt)); then',
         "elif false; then",
-        "timeout -s KILL 5 env -i git log -p",
+        "timeout -s KILL 5 /usr/bin/env -i git log -p",
+    ),
+    (
+        "reading the tail behind a program the wrapper walk does not step over",
+        'env | exec | unset | export | declare | typeset | local | readonly)\n        check_settings_env_segment "${seg[@]:k}"',
+        'env | exec | unset | export | declare | typeset | local | readonly)\n        true',
+        "flock /tmp/l env -i git log -p -1",
     ),
 )
 

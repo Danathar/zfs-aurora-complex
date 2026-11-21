@@ -1483,7 +1483,22 @@ check_settings_env_segment() {
       [[ "${word}" == *=* ]] && refuse "${SETTINGS_ENV_MSG}"
     done
     ;;
-  *) ;;
+  git | echo | printf | grep | egrep | fgrep) ;; # git reads its own operands; the others only print or match
+  *)
+    # A program the wrapper walk does not step over (`flock /tmp/l env -i
+    # git`, `watch env -i git`, `setsid env -u NAME git`) runs the words
+    # after it. Read each tail that starts at a word able to drop the
+    # setting as a command of its own, so a longer tail is never skipped.
+    local k
+    for ((k = i + 1; k < n; k++)); do
+      case "${seg[k]}" in
+      env | exec | unset | export | declare | typeset | local | readonly)
+        check_settings_env_segment "${seg[@]:k}"
+        ;;
+      *) ;;
+      esac
+    done
+    ;;
   esac
   return 0
 }
