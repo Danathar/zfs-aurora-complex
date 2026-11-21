@@ -1399,16 +1399,17 @@ check_settings_env_segment() {
           read -ra parts <<<"${value}"
           seg=("${seg[@]:0:i+1}" "${parts[@]}" "${seg[@]:i+1}")
           n=${#seg[@]}
-        elif [[ "${word}" != *=* ]] && ((${#opt} >= 3)) && [[ --chdir == "${opt}"* ]]; then
+        elif [[ "${word}" != *=* ]] && ((${#opt} >= 3)) &&
+          [[ --chdir == "${opt}"* || --argv0 == "${opt}"* ]]; then
           ((i++)) # the option's value
         fi
       elif [[ "${word}" == -* ]]; then
-        # A cluster of short options: -i empties the environment; -u, -C and
-        # -S take the rest of the word, or the next word, as their value.
+        # A cluster of short options: -i empties the environment; -u, -C, -S
+        # and -a take the rest of the word, or the next word, as their value.
         for ((j = 1; j < ${#word}; j++)); do
           ch="${word:j:1}"
           [[ "${ch}" == i ]] && refuse "${SETTINGS_ENV_MSG}"
-          if [[ "${ch}" == [uCS] ]]; then
+          if [[ "${ch}" == [uCSa] ]]; then
             value="${word:j+1}"
             if [[ -z "${value}" ]]; then
               ((i++))

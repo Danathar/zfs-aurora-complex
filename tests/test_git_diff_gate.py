@@ -2188,6 +2188,48 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "env -a x -i git log -p -1",
+        "refused",
+        "-a takes the next word as the name git is started under; the -i after it still "
+        "empties the environment",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env --argv0 x -i git log -p -1",
+        "refused",
+        "--argv0 takes the next word as its value; the -i after it still empties the environment",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env --a x -i git log -p -1",
+        "refused",
+        "an abbreviated --argv0 takes the next word as its value the same way",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -va x -i git log -p -1",
+        "refused",
+        "-a at the end of a cluster of short options takes the next word as its value",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -a x -u GIT_CONFIG_COUNT git log -p -1",
+        "refused",
+        "a -u after -a NAME still removes the variable it names",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "env -a x git log -1",
+        "allowed",
+        "-a only renames the command env runs; the environment stays as it is",
+    ),
+    Row(
+        "environment",
         "env GIT_CONFIG_COUNT=0 bash -c 'git log -p'",
         "refused",
         "an assignment env reads hands the new count to the shell and the git it starts",
