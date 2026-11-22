@@ -174,6 +174,53 @@ class SettingsEnvTests(unittest.TestCase):
                 )
                 self.assertIn("git global option", gate.stderr)
 
+    @unittest.skipUnless(BASH and JQ, "the gate is a bash script written in terms of jq")
+    def test_removing_the_setting_is_refused_by_the_gate(self) -> None:
+        # The protection lives in the environment, so a command that takes the
+        # variables away (or zeroes the count) before the pre-approved
+        # `git log -p` undoes it. Prove each spelling reaches the planted
+        # program with the settings env exported, and that the gate refuses it.
+        agent_env = {**_base_env(self.dir), **self.settings_env}
+        evil = self.victim / "evil"
+        for command in (
+            "unset GIT_CONFIG_COUNT; git log -p -1",
+            "export -n GIT_CONFIG_COUNT; git log -p -1",
+            "declare +x GIT_CONFIG_COUNT; git log -p -1",
+            "env -u GIT_CONFIG_COUNT git log -p -1",
+            "env -i git log -p -1",
+            "exec -c git log -p -1",
+            "GIT_CONFIG_COUNT=0; git log -p -1",
+        ):
+            with self.subTest(command=command):
+                self.marker.unlink(missing_ok=True)
+                subprocess.run(
+                    [BASH, "-c", command],
+                    cwd=evil,
+                    env=agent_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertTrue(
+                    self.marker.exists(),
+                    f"{command!r} did not reach the planted program with the setting",
+                )
+                gate = subprocess.run(
+                    [BASH, str(GATE)],
+                    input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=str(REPO_ROOT),
+                    env=dict(os.environ, CLAUDE_PROJECT_DIR=str(REPO_ROOT)),
+                    check=False,
+                )
+                self.assertEqual(
+                    gate.returncode, 2, f"{command!r} passed the gate: {gate.stderr!r}"
+                )
+                self.assertIn("settings environment", gate.stderr)
+
     def _routes(self) -> list[tuple[Path, list[str]]]:
         """The pre-approved commands that reach the planted repository, and where from."""
         evil = self.victim / "evil"
