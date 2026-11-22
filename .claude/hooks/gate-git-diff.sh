@@ -1495,6 +1495,7 @@ check_settings_env_segment() {
     ;;
   printf)
     # `printf -v NAME` writes its output into NAME instead of printing it.
+    value=''
     for ((j = 0; j < ${#rest[@]}; j++)); do
       case "${rest[j]}" in
       -v)
