@@ -342,6 +342,11 @@ class AuditStepTests(unittest.TestCase):
 
     def test_a_signed_hive_pull_request_passes(self) -> None:
         self.assertPasses(self._run([_pr(22, [_branch_commit()])]))
+        # The older em-dash prefix is stripped from the Signature cell too, as
+        # the current two-hyphen one is below.
+        summary = self.summary.read_text(encoding="utf-8")
+        self.assertIn("| agent=quality backend=claude model=claude-opus-5-5 |", summary)
+        self.assertNotIn("| \u2014 hive:", summary)
 
     def test_a_hidden_marker_below_the_signature_does_not_unsign_it(self) -> None:
         body = f"Closes #1\n\n{SIGNATURE}\n\n<!-- hive:issue-link-fixed -->\n"
