@@ -4036,8 +4036,8 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "let assigning the settings environment",
-        '[[ "${word}" == *GIT_CONFIG* ]] && refuse "${SETTINGS_ENV_MSG}"',
-        '[[ "${word}" == *GIT_CONFIG* ]] && true',
+        '[[ "${word}" == *GIT_CONFIG* ]] && refuse "${SETTINGS_ENV_MSG}"\n    done\n    ;;&',
+        '[[ "${word}" == *GIT_CONFIG* ]] && true\n    done\n    ;;&',
         "let GIT_CONFIG_COUNT=0; git log -p -1",
     ),
     (
