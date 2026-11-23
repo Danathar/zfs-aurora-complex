@@ -77,26 +77,29 @@ on every change to `main`. What each rule does:
   is that every change arrives as a pull request and is merged through one.
   `require_code_owner_review` is `false`. Owner decision 2026-11-23
   (Danathar): ordinary changes merge without the owner's review; only image
-  signing, the rulesets and `CODEOWNERS` still need the owner. Before that it
-  was `true`, and every Tier 3 pull request from anyone but the owner waited
-  for the owner's approval on GitHub.
+  signing, workflows, the rulesets and `CODEOWNERS` still need the owner.
+  Before that it was `true`, and every Tier 3 pull request from anyone but the
+  owner waited for the owner's approval on GitHub.
 
   **What holds the owner-merge paths now is the Hive, not GitHub.** The Hive's
   merge gate (its `auto_merge.human_merge_paths` setting, kept on the Hive and
   not in this repository) lists `cosign.pub`, `ci_tools/sign_image.py`,
   `ci_tools/promote_stable.py`, `files/scripts/configure_signing_policy.py`,
   `.github/actions/install-signing-tools/**`,
-  `.github/actions/publish-native-image/**`, `.github/rulesets/**` and
-  `.github/CODEOWNERS`. The Hive labels a pull request that touches one of them
-  `needs-owner-merge` and leaves it for a person to merge.
-  [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the same paths, so GitHub
-  asks the owner to review such a pull request; it no longer blocks the merge.
-  Every other pull request, Tier 3 ones included (workflows, `.claude/`,
-  the rest of `files/`, `ci/defaults.json`, the akmods cache scripts,
-  `tests/run_tests.py`), merges on the required check and the Hive's AI
-  reviewer, with no owner review. `CODEOWNERS` has no catch-all `*` line, and
-  `tests/test_codeowners.py` fails if one comes back or if the list stops
-  matching those eight paths.
+  `.github/actions/publish-native-image/**`, `.github/workflows/**`,
+  `.github/rulesets/**` and `.github/CODEOWNERS`. Workflows are on the list
+  because the `production-signing` environment has a branch policy but no
+  required reviewer, so any workflow on `main` can ask for it and be handed the
+  cosign key. That makes every workflow part of the signing path. The Hive
+  labels a pull request that touches one of them `needs-owner-merge` and leaves
+  it for a person to merge. [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists
+  the same paths, so GitHub asks the owner to review such a pull request; it no
+  longer blocks the merge. Every other pull request, Tier 3 ones included
+  (`.claude/`, the rest of `files/`, `ci/defaults.json`, the akmods cache
+  scripts, `tests/run_tests.py`), merges on the required check and the Hive's
+  AI reviewer, with no owner review. `CODEOWNERS` has no catch-all `*` line,
+  and `tests/test_codeowners.py` fails if one comes back or if the list stops
+  matching those nine paths.
 
   The Hive's gate binds what the Hive merges. GitHub does not enforce it, so a
   person, or Renovate merging its own patch, minor, digest and pin updates, is

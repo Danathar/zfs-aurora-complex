@@ -50,7 +50,8 @@ Labelled `area/safety-critical`.
   `DEFAULT_BUILD_CONTAINER_IMAGE`)
 - `.github/workflows/`, every workflow and not only `build.yml`, because once a
   workflow is on `main` any job in it can declare the production-signing
-  environment and be handed the key that signs the published image
+  environment and be handed the key that signs the published image, so it
+  also waits for a person to merge it (below)
 - `.github/policies/workflow-permissions.json`, because a token that gains
   `packages: write` can push an image to the registry these machines pull from
 - `.github/rulesets/`, because the ruleset in it is what keeps `main`, and so
@@ -82,21 +83,25 @@ those pools, which breaks the recovery path everything else assumes
 **Never in this tier, regardless of who asks:** weakening a fail-closed check.
 That is not a tier, it is a refusal (`AGENTS.md` section 0 rule 1).
 
-**Only image signing, the rulesets and `CODEOWNERS` wait for the owner.**
-Owner decision 2026-11-23 (Danathar): ordinary changes merge without the
-owner's review. A Tier 3 pull request still needs the full rubric and the
+**Only image signing, workflows, the rulesets and `CODEOWNERS` wait for the
+owner.** Owner decision 2026-11-23 (Danathar): ordinary changes merge without
+the owner's review. A Tier 3 pull request still needs the full rubric and the
 safety-critical statement, but most of this tier now merges on the required
-check and the Hive's AI reviewer, like any other change. These paths still
-need a person to merge them: `cosign.pub`, `ci_tools/sign_image.py`,
+check and the Hive's AI reviewer, like any other change. These paths still need
+a person to merge them: `cosign.pub`, `ci_tools/sign_image.py`,
 `ci_tools/promote_stable.py`, `files/scripts/configure_signing_policy.py`,
 `.github/actions/install-signing-tools/`,
-`.github/actions/publish-native-image/`, `.github/rulesets/` and
-`.github/CODEOWNERS`. An agent may propose a change to one of them, with the
-analysis, on a branch, but may not merge it. The Hive enforces that for what
-it merges: its `human_merge_paths` setting lists those paths, and it labels
-such a pull request `needs-owner-merge` and leaves it for a person. GitHub no
-longer does; [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the same
-paths only so GitHub asks the owner to review them
+`.github/actions/publish-native-image/`, `.github/workflows/`,
+`.github/rulesets/` and `.github/CODEOWNERS`. Workflows are on the list because
+the `production-signing` environment has a branch policy but no required
+reviewer, so any workflow on `main` can ask for it and be handed the cosign
+key. That makes every workflow part of the signing path. An agent may propose a
+change to one of them, with the analysis, on a branch, but may not merge it.
+The Hive enforces that for what it merges: its `human_merge_paths` setting
+lists those paths, and it labels such a pull request `needs-owner-merge` and
+leaves it for a person. GitHub no longer does;
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the same paths only so
+GitHub asks the owner to review them
 ([`branch-protection.md`](./branch-protection.md#the-ruleset)).
 
 ### Tier 2 — can break the build or a published artifact indirectly

@@ -330,7 +330,7 @@ Every file in `.github/workflows/` has an entry here.
 
   Then take the highest risk tier of the files it touches
   ([`risk-tiers.md`](./risk-tiers.md)). An agent may not merge a change to
-  image signing, the rulesets or `CODEOWNERS`; the Hive labels those
+  image signing, a workflow, the rulesets or `CODEOWNERS`; the Hive labels those
   `needs-owner-merge` and leaves them for a person.
 - **Then:** review it with [`review-rubric.md`](./review-rubric.md): a weakened
   fail-closed check first, then the safety-critical statement, then rollback.

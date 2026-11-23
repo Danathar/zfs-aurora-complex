@@ -27,6 +27,12 @@
 /.github/actions/install-signing-tools/                       @Danathar
 /.github/actions/publish-native-image/                        @Danathar
 
+# Every workflow, not only build.yml. The production-signing environment has a
+# branch policy but no required reviewer, so any workflow on main can ask for it
+# and be handed the cosign key. That makes every workflow part of the signing
+# path.
+/.github/workflows/                                           @Danathar
+
 # What keeps main behind a pull request, and this file.
 /.github/rulesets/                                            @Danathar
 /.github/CODEOWNERS                                           @Danathar

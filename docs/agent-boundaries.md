@@ -25,7 +25,7 @@ much review a change needs is [`risk-tiers.md`](./risk-tiers.md).
 | Gate | What it stops | Holds for | Explained in |
 | --- | --- | --- | --- |
 | [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. Its one bypass actor, the Renovate app, may only merge a pull request past its rules; nothing may bypass the required check in [`main-checks.json`](../.github/rulesets/main-checks.json). | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
-| The Hive's `human_merge_paths` setting, mirrored by [`.github/CODEOWNERS`](../.github/CODEOWNERS) | The Hive merging a pull request that touches image signing, the rulesets or `CODEOWNERS`: it labels it `needs-owner-merge` and leaves it for a person. | the Hive only: GitHub does not enforce it, since the ruleset's `require_code_owner_review` is `false`, so a person or Renovate merging is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
+| The Hive's `human_merge_paths` setting, mirrored by [`.github/CODEOWNERS`](../.github/CODEOWNERS) | The Hive merging a pull request that touches image signing, a workflow, the rulesets or `CODEOWNERS`: it labels it `needs-owner-merge` and leaves it for a person. | the Hive only: GitHub does not enforce it, since the ruleset's `require_code_owner_review` is `false`, so a person or Renovate merging is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | The required `Python Unit Tests` check in [`test.yml`](../.github/workflows/test.yml) | Merging a pull request whose unit suite or `ruff check` fails. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | [`.github/policies/workflow-permissions.json`](../.github/policies/workflow-permissions.json) | A workflow's `GITHUB_TOKEN` gaining a scope the policy file does not grant: the unit suite fails until the same pull request changes both. | every agent | [SECURITY-AI.md](./SECURITY-AI.md#what-an-agent-may-do-unattended) |
 | [`.claude/settings.json`](../.claude/settings.json) | Signing, registry pushes and deletes, merging, dispatching a workflow, releases, secrets, labels, the force-push and delete spellings a prefix rule can see, `git reset --hard`, `git clean`, destructive `zpool` and `zfs` commands, and reading `cosign.key`, `cosign.key.*`, `.env`, `.pem`/`.p12` files or SSH keys named `id_rsa`/`id_ed25519` (a key under another name is not denied). It asks before an ordinary push, commit or pull request. | Claude Code sessions only | [SECURITY-AI.md](./SECURITY-AI.md#the-agent-permission-boundary) |
@@ -75,9 +75,13 @@ Review is what catches it.
 ## Why CODEOWNERS lists only the owner-merge paths
 
 Owner decision 2026-11-23 (Danathar): ordinary changes merge without the
-owner's review; only image signing, the rulesets and `CODEOWNERS` still need
-the owner. The ruleset sets `require_code_owner_review` to `false` and needs
-no other approval, so `CODEOWNERS` no longer blocks a merge.
+owner's review; only image signing, workflows, the rulesets and `CODEOWNERS`
+still need the owner. Workflows are on the list because the
+`production-signing` environment has a branch policy but no required reviewer,
+so any workflow on `main` can ask for it and be handed the cosign key. That
+makes every workflow part of the signing path. The ruleset sets
+`require_code_owner_review` to `false` and needs no other approval, so
+`CODEOWNERS` no longer blocks a merge.
 [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the paths the Hive's
 `human_merge_paths` setting lists, and nothing else, so GitHub asks the owner
 to review a pull request that touches one. The Hive is what holds such a pull

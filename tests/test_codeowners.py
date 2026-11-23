@@ -1,8 +1,8 @@
 """
 Script: tests/test_codeowners.py
 What: Joins `.github/CODEOWNERS` to the owner-merge paths, to the `area/safety-critical` globs in `.github/labeler.yml`, and to the ruleset.
-Doing: Parses each CODEOWNERS line, checks it is exactly the eight owner-merge paths, resolves each against the tracked tree, and checks every owned file also carries the safety-critical label.
-Why: By the owner's decision of 2026-11-23, GitHub no longer requires code-owner review. The Hive's human_merge_paths setting holds the image-signing paths, the rulesets and this file for a person to merge, and CODEOWNERS mirrors that list so GitHub asks the owner to review them. A line dropped here stops that request for a signing path; a catch-all line would ask the owner to review every pull request.
+Doing: Parses each CODEOWNERS line, checks it is exactly the nine owner-merge paths, resolves each against the tracked tree, and checks every owned file also carries the safety-critical label.
+Why: By the owner's decision of 2026-11-23, GitHub no longer requires code-owner review. The Hive's human_merge_paths setting holds the image-signing paths, every workflow, the rulesets and this file for a person to merge, and CODEOWNERS mirrors that list so GitHub asks the owner to review them. A line dropped here stops that request for a signing path; a catch-all line would ask the owner to review every pull request.
 Goal: Make a dropped or added line, a stray `*`, or code-owner review turned back on in the ruleset fail here, in the pull request that does it.
 
 The Hive setting itself is not in this repository, so OWNER_MERGE_PATHS below
@@ -28,7 +28,8 @@ RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
 OWNER = "@Danathar"
 
 # The paths the Hive's auto_merge.human_merge_paths lists for this repository
-# (owner decision 2026-11-23), in CODEOWNERS syntax.
+# (owner decision 2026-11-23, with workflows added back the same day), in CODEOWNERS
+# syntax.
 OWNER_MERGE_PATHS = (
     "/cosign.pub",
     "/ci_tools/sign_image.py",
@@ -36,6 +37,7 @@ OWNER_MERGE_PATHS = (
     "/files/scripts/configure_signing_policy.py",
     "/.github/actions/install-signing-tools/",
     "/.github/actions/publish-native-image/",
+    "/.github/workflows/",
     "/.github/rulesets/",
     "/.github/CODEOWNERS",
 )
