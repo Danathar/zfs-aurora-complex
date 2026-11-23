@@ -35,8 +35,7 @@
           # Every workflow, not only build.yml (rule 2's first file). Once a
           # workflow is on main, any job in it can declare the
           # production-signing environment and get the signing key.
-          # docs/risk-tiers.md puts the whole directory in Tier 3, and
-          # .github/CODEOWNERS owns it.
+          # docs/risk-tiers.md puts the whole directory in Tier 3.
           - '.github/workflows/**'
           - '.github/actions/publish-native-image/**'
           # The only local action build.yml's signing jobs run; it installs the
@@ -68,9 +67,9 @@
           # puts it in Tier 3: loosening it reopens a direct push to main, and a
           # push to main starts the build that signs and promotes.
           - '.github/rulesets/**'
-          # Who must approve a change to every path above. docs/risk-tiers.md
-          # puts it in Tier 3: the ruleset requires code-owner review, so
-          # dropping a line here takes that path out from behind the owner.
+          # Which paths GitHub asks the owner to review. docs/risk-tiers.md
+          # puts it in Tier 3: it mirrors the Hive's human_merge_paths list,
+          # the paths that wait for a person to merge them.
           - '.github/CODEOWNERS'
           # The agent permission boundary. docs/risk-tiers.md puts it in Tier 3:
           # settings.json is the allow/deny table and registers the hook, the

@@ -1,57 +1,38 @@
-# Code owners for the Tier 3 paths in docs/risk-tiers.md, and nothing else.
+# Code owners for the paths that still need the owner to merge them.
 #
-# The ruleset (.github/rulesets/main.json) sets require_code_owner_review, so a
-# pull request that touches a path listed here and that someone other than the
-# owner opened cannot merge until the owner approves it on GitHub. GitHub does
-# not ask an author for their own review, so the owner's own pull requests,
-# and anything opened with the owner's token, are not held (see
-# docs/branch-protection.md). A pull request that touches none of these paths
-# merges on the required check alone, as before. One more exception: the
-# Renovate app may bypass that review to merge its own patch, minor, digest and
-# pin updates, still only through a pull request and still behind the required
-# check (.github/rulesets/main-checks.json).
+# GitHub no longer requires code-owner review here: the ruleset
+# (.github/rulesets/main.json) sets require_code_owner_review to false, by the
+# owner's decision of 2026-11-23. What makes these paths wait for the owner is
+# the Hive's own merge gate, its human_merge_paths setting, which lists exactly
+# these paths for this repository: the Hive labels a pull request that touches
+# one of them `needs-owner-merge` and leaves it for a person to merge. That
+# setting lives on the Hive, not in this repository.
 #
-# That is why there is no catch-all `*` line: it would put every other author's
-# pull request behind the owner's approval. tests/test_codeowners.py fails if one comes back,
-# or if this list and the area/safety-critical globs in .github/labeler.yml stop
-# covering the same files. docs/branch-protection.md explains the rule and what
-# it costs a sole maintainer.
+# This file only makes GitHub ask the owner to review such a pull request. Every
+# other change, Tier 3 or not, merges on the required check and the Hive's AI
+# reviewer, with no owner review (see docs/branch-protection.md).
+#
+# tests/test_codeowners.py fails if this list stops being exactly these paths,
+# if a catch-all `*` line comes back, or if a line owns a file the
+# area/safety-critical label in .github/labeler.yml does not cover.
 
-# Every workflow, not only build.yml. Once a workflow is on main, any job in it
-# can declare the production-signing environment and get the signing key, so a
-# change to any of them from anyone but the owner waits for the owner.
-# Renovate's major updates in workflows wait too; its non-major ones merge
-# themselves on green CI.
-/.github/workflows/                                           @Danathar
-
-# The seven files AGENTS.md section 0 rule 2 names. The first, build.yml, is
-# owned by the workflows line above.
-/.github/actions/publish-native-image/                        @Danathar
+# Image signing: the public key, the signing and promotion code, the policy the
+# image installs to verify signatures, the action that installs the cosign
+# binary the signing key is handed to (#177, option B), and the action that
+# pushes the image that is then signed.
+/cosign.pub                                                   @Danathar
 /ci_tools/sign_image.py                                       @Danathar
 /ci_tools/promote_stable.py                                   @Danathar
-/ci_tools/check_akmods_cache.py                               @Danathar
-/containerfiles/zfs-akmods/install_zfs_from_akmods_cache.py   @Danathar
 /files/scripts/configure_signing_policy.py                    @Danathar
-
-# The only local action the two signing jobs in build.yml run. It installs the
-# cosign binary that receives the signing key, so it is owned like the key
-# itself (#177, option B).
 /.github/actions/install-signing-tools/                       @Danathar
+/.github/actions/publish-native-image/                        @Danathar
 
-# What the image installs onto every booted machine, the signing key, and the
-# ZFS line and base-image values.
-/files/                                                       @Danathar
-/cosign.pub                                                   @Danathar
-/ci/defaults.json                                             @Danathar
+# Every workflow, not only build.yml. The production-signing environment has a
+# branch policy but no required reviewer, so any workflow on main can ask for it
+# and be handed the cosign key. That makes every workflow part of the signing
+# path.
+/.github/workflows/                                           @Danathar
 
-# What each workflow's token may do, what keeps main behind a pull request, and
-# this file, which decides who must approve all of the above.
-/.github/policies/workflow-permissions.json                   @Danathar
+# What keeps main behind a pull request, and this file.
 /.github/rulesets/                                            @Danathar
 /.github/CODEOWNERS                                           @Danathar
-
-# The agent permission boundary.
-/.claude/settings.json                                        @Danathar
-/.claude/hooks/                                               @Danathar
-/.claude/commands/                                            @Danathar
-/tests/run_tests.py                                           @Danathar

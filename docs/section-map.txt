@@ -163,7 +163,7 @@
   joined: tests/test_agent_boundaries_doc.py
 ## What is asked, not enforced
   joined: tests/test_agent_boundaries_doc.py
-## Why CODEOWNERS lists only Tier 3
+## Why CODEOWNERS lists only the owner-merge paths
   joined: tests/test_agent_boundaries_doc.py
 
 [docs/ai-ops-runbook.md]

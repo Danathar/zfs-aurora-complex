@@ -110,10 +110,10 @@ class RulesetClaimTests(unittest.TestCase):
         self.assertEqual(contexts, ["Python Unit Tests"])
         self.assertIn("The required check is `Python Unit Tests`", doc_text())
 
-    def test_no_approval_but_the_code_owners_and_only_renovate_bypasses(self) -> None:
+    def test_no_approval_not_even_the_code_owners_and_only_renovate_bypasses(self) -> None:
         params = ruleset_rule("pull_request")["parameters"]
         self.assertEqual(params["required_approving_review_count"], 0)
-        self.assertIs(params["require_code_owner_review"], True)
+        self.assertIs(params["require_code_owner_review"], False)
         self.assertEqual(
             json.loads(RULESET.read_text("utf-8"))["bypass_actors"],
             [{"actor_id": 2740, "actor_type": "Integration", "bypass_mode": "pull_request"}],
@@ -121,9 +121,9 @@ class RulesetClaimTests(unittest.TestCase):
         self.assertEqual(json.loads(CHECKS_RULESET.read_text("utf-8"))["bypass_actors"], [])
         text = " ".join(doc_text().split())
         self.assertIn(
-            "they require no approving review except the code owner's on Tier 3 paths, and the only "
-            "bypass actor is the Renovate app, which may merge its own non-major updates without "
-            "the code owner's review but cannot skip the required check",
+            "they require no approving review, code owner review included (owner decision "
+            "2026-11-23), and the only bypass actor is the Renovate app, which may merge its own "
+            "non-major updates but cannot skip the required check",
             text,
         )
 

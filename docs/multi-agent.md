@@ -264,10 +264,13 @@ gh pr list --state merged --limit 1000 --json mergedBy \
 
 A merge to `main` builds, signs and promotes the image, so the required checks are
 the gate. The rulesets require a pull request and a passing `Python Unit Tests`;
-they require no approving review except the code owner's on Tier 3 paths, and
-the only bypass actor is the Renovate app, which may merge its own non-major
-updates without the code owner's review but cannot skip the required check.
-They apply to the Hive app as to anyone else.
+they require no approving review, code owner review included (owner decision
+2026-11-23), and the only bypass actor is the Renovate app, which may merge its
+own non-major updates but cannot skip the required check. They apply to the
+Hive app as to anyone else. What keeps image signing, workflows, the rulesets
+and `CODEOWNERS` behind a person is the Hive's own `human_merge_paths` gate, which
+labels such a pull request `needs-owner-merge` and does not merge it
+([`branch-protection.md`](./branch-protection.md#the-ruleset)).
 
 Agent sessions the maintainer runs do not merge on their own initiative.
 [`AGENTS.md`](../AGENTS.md) section 0 rule 6 says not to push, promote, tag, or
@@ -286,10 +289,16 @@ The Hive app's merges include pull requests the labeler marked
 #158 and #159. [`SECURITY-AI.md`](./SECURITY-AI.md) names "a human on the merge
 button for anything in Tier 3" among the things standing in place of an in-repo
 agent, and nothing enforced it then. The maintainer chose to enforce it (#177):
-[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the Tier 3 paths, and the
-ruleset requires the code owner's approval for them, so the Hive app can still
-merge a Tier 3 pull request, but only after the maintainer has approved it on
-GitHub. To list the Tier 3 pull requests the Hive app has merged:
+`CODEOWNERS` listed the Tier 3 paths, and the ruleset required the code owner's
+approval for them. On 2026-11-23 the owner narrowed that: code owner review is
+off, most of Tier 3 merges on the required check and the Hive's AI reviewer,
+and only the paths [`.github/CODEOWNERS`](../.github/CODEOWNERS) now lists
+(image signing, workflows, the rulesets and `CODEOWNERS`) wait for a person,
+held by the Hive's `human_merge_paths` gate. Workflows stay on the list because
+the `production-signing` environment has a branch policy but no required
+reviewer, so any workflow on `main` can ask for it and be handed the cosign
+key. That makes every workflow part of the signing path. To list the Tier 3
+pull requests the Hive app has merged:
 
 ```bash
 gh pr list --state merged --limit 1000 --json number,mergedBy,labels \

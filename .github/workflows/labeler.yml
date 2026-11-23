@@ -42,10 +42,10 @@ name: Labeler
 # the diff under `area/ci` (.github/labeler.yml is not itself safety-critical or
 # code-owned), and the required "Python Unit Tests" check fails a pull request
 # that drops a Tier 3 path from the safety-critical globs without also editing
-# docs/risk-tiers.md and the code-owned CODEOWNERS
-# (tests/test_labeler_config.py, tests/test_codeowners.py). CODEOWNERS still
-# holds the Tier 3 files themselves for any author but the owner, whatever the
-# labels say.
+# docs/risk-tiers.md (tests/test_labeler_config.py), or that drops one of the
+# owner-merge paths CODEOWNERS lists (tests/test_codeowners.py). The Hive's
+# human_merge_paths gate still holds those paths for a person to merge,
+# whatever the labels say.
 #
 # This job never checks out or executes the pull request's code. Do not add a
 # checkout of the head ref, or any step that runs code from the pull request,

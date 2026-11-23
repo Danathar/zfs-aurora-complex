@@ -24,8 +24,8 @@ much review a change needs is [`risk-tiers.md`](./risk-tiers.md).
 
 | Gate | What it stops | Holds for | Explained in |
 | --- | --- | --- | --- |
-| [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. Its one bypass actor, the Renovate app, may only merge a pull request past code owner review; nothing may bypass the required check in [`main-checks.json`](../.github/rulesets/main-checks.json). | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
-| [`.github/CODEOWNERS`](../.github/CODEOWNERS), with the ruleset's `require_code_owner_review` | Merging a pull request that touches a Tier 3 path before the owner has approved it on GitHub. | every author but the owner: a pull request opened as the owner, including by an agent using the owner's token, is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
+| [`.github/rulesets/main.json`](../.github/rulesets/main.json) | Any change reaching `main` except as a pull request merge. Deleting or rewriting `main`. Its one bypass actor, the Renovate app, may only merge a pull request past its rules; nothing may bypass the required check in [`main-checks.json`](../.github/rulesets/main-checks.json). | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
+| The Hive's `human_merge_paths` setting, mirrored by [`.github/CODEOWNERS`](../.github/CODEOWNERS) | The Hive merging a pull request that touches image signing, a workflow, the rulesets or `CODEOWNERS`: it labels it `needs-owner-merge` and leaves it for a person. | the Hive only: GitHub does not enforce it, since the ruleset's `require_code_owner_review` is `false`, so a person or Renovate merging is not held | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | The required `Python Unit Tests` check in [`test.yml`](../.github/workflows/test.yml) | Merging a pull request whose unit suite or `ruff check` fails. | every agent and every person | [branch-protection.md](./branch-protection.md#the-ruleset) |
 | [`.github/policies/workflow-permissions.json`](../.github/policies/workflow-permissions.json) | A workflow's `GITHUB_TOKEN` gaining a scope the policy file does not grant: the unit suite fails until the same pull request changes both. | every agent | [SECURITY-AI.md](./SECURITY-AI.md#what-an-agent-may-do-unattended) |
 | [`.claude/settings.json`](../.claude/settings.json) | Signing, registry pushes and deletes, merging, dispatching a workflow, releases, secrets, labels, the force-push and delete spellings a prefix rule can see, `git reset --hard`, `git clean`, destructive `zpool` and `zfs` commands, and reading `cosign.key`, `cosign.key.*`, `.env`, `.pem`/`.p12` files or SSH keys named `id_rsa`/`id_ed25519` (a key under another name is not denied). It asks before an ordinary push, commit or pull request. | Claude Code sessions only | [SECURITY-AI.md](./SECURITY-AI.md#the-agent-permission-boundary) |
@@ -51,11 +51,11 @@ token here would be a second trust boundary, so there is none
 These are real rules, and nothing mechanical stops an agent breaking them.
 Review is what catches it.
 
-- **A person merges what is not Tier 3.** The ruleset needs no approval outside
-  the Tier 3 paths, because a sole maintainer cannot approve their own pull
-  request. So a token that can write contents could merge a green pull request
-  that touches none of them through the API. Only Claude Code sessions have the
-  merge command denied.
+- **Who may merge.** The ruleset needs no approval, because a sole maintainer
+  cannot approve their own pull request, and the Hive's owner-merge gate binds
+  only the Hive. So a token that can write contents could merge any green pull
+  request through the API, one that touches an owner-merge path included. Only
+  Claude Code sessions have the merge command denied.
 - **Never weaken a fail-closed check.** [`AGENTS.md`](../AGENTS.md) section 0
   rule 1. No test can tell a relaxed guard from a fixed cause.
 - **The safety-critical statement.** [`CONTRIBUTING.md`](../CONTRIBUTING.md)
@@ -63,34 +63,39 @@ Review is what catches it.
   fails when it is missing or empty.
 - **Evidence in proportion to reach.** [`risk-tiers.md`](./risk-tiers.md) says
   how much evidence each tier needs. The `area/*` labels describe the tier;
-  they do not block a merge. For Tier 3 the code-owner gate above does, for
-  pull requests the owner did not open, but it checks that the owner approved,
-  not what the review covered.
+  they do not block a merge. For the owner-merge paths the Hive's gate above
+  leaves the merge to a person, but it checks who merges, not what the review
+  covered.
 - **No approval labels from automation.** The settings file denies creating,
   editing or deleting a label. Adding one to a pull request with `gh pr edit`
   only prompts.
   [`SECURITY-AI.md`](./SECURITY-AI.md#labels-carry-authority--automation-must-not-apply-them)
   explains why.
 
-## Why CODEOWNERS lists only Tier 3
+## Why CODEOWNERS lists only the owner-merge paths
 
-A `CODEOWNERS` file is the usual way to put a gate on part of a repository, and
-here it gates exactly one tier. The ruleset sets `require_code_owner_review` to
-`true` and needs no other approval, for the reason above.
-[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the Tier 3 paths from
-[`risk-tiers.md`](./risk-tiers.md) and nothing else, so a pull request from
-anyone but the owner that touches one waits for the owner's approval, and any
-other pull request does not. The owner's own pull requests are not held: GitHub
-does not ask an author for their own review. A catch-all `*` line would put
-every other author's pull request behind that approval.
+Owner decision 2026-11-23 (Danathar): ordinary changes merge without the
+owner's review; only image signing, workflows, the rulesets and `CODEOWNERS`
+still need the owner. Workflows are on the list because the
+`production-signing` environment has a branch policy but no required reviewer,
+so any workflow on `main` can ask for it and be handed the cosign key. That
+makes every workflow part of the signing path. The ruleset sets
+`require_code_owner_review` to `false` and needs no other approval, so
+`CODEOWNERS` no longer blocks a merge.
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the paths the Hive's
+`human_merge_paths` setting lists, and nothing else, so GitHub asks the owner
+to review a pull request that touches one. The Hive is what holds such a pull
+request for a person to merge. A catch-all `*` line would ask the owner to
+review every pull request.
 
-One exception, by the owner's choice: Renovate merges its own patch, minor,
-digest and pin updates without that approval, through a bypass that can only
-merge a pull request and cannot skip the required check. AGENTS.md section 9,
-"Owner's standing decisions", already approves those updates with green CI.
+Renovate still merges its own patch, minor, digest and pin updates, through a
+bypass that can only merge a pull request and cannot skip the required check.
+AGENTS.md section 9, "Owner's standing decisions", already approves those
+updates with green CI.
 [`branch-protection.md`](./branch-protection.md#renovate-merges-its-own-non-major-updates)
 explains how it is set up and what still waits for the owner.
 
 When there is a second reviewer,
 [`branch-protection.md`](./branch-protection.md#when-there-is-a-second-reviewer)
-is where the ruleset changes, and the second reviewer joins the Tier 3 lines.
+is where the ruleset changes, and the second reviewer joins the `CODEOWNERS`
+lines.

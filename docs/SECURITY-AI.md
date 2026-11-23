@@ -116,11 +116,14 @@ promotes to a machine someone daily-drives. The ruleset stops a direct push
 to `main`, but it is the last gate, not a reason to add more ways to reach it.
 
 What stands in place of an in-repo agent: Hive's own gating, this policy, the
-CI gates, the ruleset on `main`, and a human on the merge button for anything in
-Tier 3 ([`risk-tiers.md`](./risk-tiers.md)). That last one is enforced for
-every author but the owner: the ruleset requires the code owner's approval for
-every path [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists, it lists the
-Tier 3 paths, and GitHub does not hold the owner's own pull requests to it
+CI gates, the ruleset on `main`, and a human on the merge button for image
+signing, workflows, the rulesets and `CODEOWNERS`. Owner decision 2026-11-23 (Danathar):
+ordinary changes, the rest of Tier 3 ([`risk-tiers.md`](./risk-tiers.md))
+included, merge on the required check and the Hive's AI reviewer without the
+owner's review. The human on the merge button is enforced by the Hive, not by
+GitHub: its `human_merge_paths` setting lists the paths
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) lists, and it leaves a pull
+request that touches one for a person to merge
 ([`branch-protection.md`](./branch-protection.md#the-ruleset)). The `.acmm.yml` file records the
 omission as a deliberate waiver of `acmm:ai-fix-workflow`,
 `acmm:copilot-review-apply` and `acmm:github-actions-ai`, and says what
@@ -129,10 +132,14 @@ provides each instead.
 Any new workflow here must also be unable to affect the build: no
 `packages: write`, no `contents: write` to `main`, no dispatch of `build.yml`,
 and no use of the `production-signing` environment or `SIGNING_SECRET`.
-`.github/CODEOWNERS` owns every file under `.github/workflows/`, so a pull
-request from anyone but the owner that adds or changes a workflow cannot merge
-until the owner approves it: once on `main`, any job can declare that
-environment and be handed the key.
+Once on `main`, any job can declare that environment and be handed the key:
+the environment has a branch policy but no required reviewer. So a workflow
+change is Tier 3, needs the safety-critical statement, and waits for a person
+to merge it: `.github/workflows/**` is in the Hive's `human_merge_paths` and
+in `.github/CODEOWNERS`. The required check also fails when a workflow other
+than `build.yml` reads `SIGNING_SECRET` (`tests/test_security_ai_doc.py`) or a
+token gains a scope the policy file does not grant
+(`tests/test_workflow_permissions_policy.py`).
 
 ## Labels carry authority — automation must not apply them
 
