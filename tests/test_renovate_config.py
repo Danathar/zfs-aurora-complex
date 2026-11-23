@@ -507,7 +507,7 @@ class PackageRuleTests(unittest.TestCase):
         self.assertIs(self.rules[0], on[0], "a later rule must be able to turn automerge back off")
 
     def test_renovate_merges_through_its_own_pr_merge_not_githubs_auto_merge(self) -> None:
-        """GitHub's native auto-merge would wait for code owner review and ignore the bypass."""
+        """GitHub's native auto-merge was ruled out: it waited for code owner review (off since 2026-11-23) and ignored the bypass."""
         self.assertIs(self.config["platformAutomerge"], False)
         self.assertEqual(self.config["automergeType"], "pr")
         for rule in self.rules:

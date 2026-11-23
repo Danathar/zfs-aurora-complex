@@ -1,13 +1,15 @@
 """
 Script: tests/test_codeowners.py
-What: Joins `.github/CODEOWNERS` to the `area/safety-critical` globs in `.github/labeler.yml` and to the ruleset that makes it a gate.
-Doing: Parses each CODEOWNERS line, resolves it against the tracked tree, and checks both ways that it owns exactly the files the safety-critical label matches.
-Why: The ruleset requires the code owner's approval for these paths, and that approval is the only thing that keeps a person on the merge button for Tier 3. A path missing here merges on green checks alone, and a catch-all line puts every pull request behind an approval a sole maintainer cannot give their own.
-Goal: Make a dropped line, a stray `*`, or a code-owner flag turned off fail here, in the pull request that does it.
+What: Joins `.github/CODEOWNERS` to the owner-merge paths, to the `area/safety-critical` globs in `.github/labeler.yml`, and to the ruleset.
+Doing: Parses each CODEOWNERS line, checks it is exactly the eight owner-merge paths, resolves each against the tracked tree, and checks every owned file also carries the safety-critical label.
+Why: By the owner's decision of 2026-11-23, GitHub no longer requires code-owner review. The Hive's human_merge_paths setting holds the image-signing paths, the rulesets and this file for a person to merge, and CODEOWNERS mirrors that list so GitHub asks the owner to review them. A line dropped here stops that request for a signing path; a catch-all line would ask the owner to review every pull request.
+Goal: Make a dropped or added line, a stray `*`, or code-owner review turned back on in the ruleset fail here, in the pull request that does it.
+
+The Hive setting itself is not in this repository, so OWNER_MERGE_PATHS below
+is the copy of it this test checks against. Change both together.
 
 tests/test_labeler_config.py already joins the label to the Tier 3 list in
-docs/risk-tiers.md both ways, so joining CODEOWNERS to the label is enough to
-join it to the page.
+docs/risk-tiers.md both ways, so the owner-merge paths are also Tier 3.
 """
 
 from __future__ import annotations
@@ -24,6 +26,19 @@ LABELER = REPO_ROOT / ".github" / "labeler.yml"
 RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
 
 OWNER = "@Danathar"
+
+# The paths the Hive's auto_merge.human_merge_paths lists for this repository
+# (owner decision 2026-11-23), in CODEOWNERS syntax.
+OWNER_MERGE_PATHS = (
+    "/cosign.pub",
+    "/ci_tools/sign_image.py",
+    "/ci_tools/promote_stable.py",
+    "/files/scripts/configure_signing_policy.py",
+    "/.github/actions/install-signing-tools/",
+    "/.github/actions/publish-native-image/",
+    "/.github/rulesets/",
+    "/.github/CODEOWNERS",
+)
 
 
 def entries() -> list[tuple[str, list[str]]]:
@@ -55,12 +70,11 @@ class CodeownersTests(unittest.TestCase):
         cls.entries = entries()
         cls.tracked = tracked_files()
 
-    def test_the_file_has_rules(self) -> None:
-        self.assertGreater(len(self.entries), 10)
+    def test_the_file_lists_exactly_the_owner_merge_paths(self) -> None:
+        self.assertEqual(sorted(p for p, _ in self.entries), sorted(OWNER_MERGE_PATHS))
 
     def test_there_is_no_catch_all_line(self) -> None:
-        # A catch-all puts every pull request behind the owner's approval, and the owner
-        # cannot approve their own.
+        # A catch-all would ask the owner to review every pull request.
         for pattern, _ in self.entries:
             with self.subTest(pattern=pattern):
                 self.assertNotIn("*", pattern)
@@ -73,7 +87,7 @@ class CodeownersTests(unittest.TestCase):
                 self.assertTrue(pattern.startswith("/"), pattern)
 
     def test_every_line_is_owned_by_the_owner(self) -> None:
-        # A line with no owner un-owns its path, which turns the gate off for it.
+        # A line with no owner un-owns its path, so GitHub stops asking the owner to review it.
         for pattern, owners in self.entries:
             with self.subTest(pattern=pattern):
                 self.assertEqual(owners, [OWNER])
@@ -84,13 +98,15 @@ class CodeownersTests(unittest.TestCase):
                 self.assertNotEqual(owned(pattern, self.tracked), [], f"{pattern} owns nothing")
 
     def test_the_file_owns_itself(self) -> None:
-        # Otherwise a pull request could drop a Tier 3 line and merge without the owner.
+        # The Hive holds a change to this file for the owner too, so it lists itself.
         self.assertIn("/.github/CODEOWNERS", [pattern for pattern, _ in self.entries])
 
-    def test_the_ruleset_requires_code_owner_review(self) -> None:
+    def test_the_ruleset_does_not_require_code_owner_review(self) -> None:
+        # Owner decision 2026-11-23. Turning it back on would put every pull request that
+        # touches these paths behind an approval, which the docs no longer describe.
         rules = json.loads(RULESET.read_text(encoding="utf-8"))["rules"]
         (pull_request,) = [rule for rule in rules if rule["type"] == "pull_request"]
-        self.assertIs(pull_request["parameters"]["require_code_owner_review"], True)
+        self.assertIs(pull_request["parameters"]["require_code_owner_review"], False)
 
 
 @unittest.skipIf(yaml is None, "PyYAML not installed")
@@ -103,19 +119,12 @@ class CodeownersMatchTheSafetyLabel(unittest.TestCase):
         regexes = [glob_to_regex(g) for g in globs]
         cls.labelled = {f for f in cls.tracked if any(r.match(f) for r in regexes)}
 
-    def test_every_safety_critical_file_is_owned(self) -> None:
-        self.assertGreater(len(self.labelled), 5)
-        self.assertEqual(
-            sorted(self.labelled - self.owned),
-            [],
-            "area/safety-critical files no CODEOWNERS line owns; they merge without the owner",
-        )
-
     def test_every_owned_file_is_safety_critical(self) -> None:
+        self.assertGreater(len(self.owned), 5)
         self.assertEqual(
             sorted(self.owned - self.labelled),
             [],
-            "CODEOWNERS owns files that are not Tier 3; they now wait for the owner too",
+            "CODEOWNERS owns files that are not Tier 3",
         )
 
 
