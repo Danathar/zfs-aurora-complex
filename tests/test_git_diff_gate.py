@@ -2358,6 +2358,26 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "mapfile GIT_CONFIG_COUNT < /dev/null; git log -p -1",
+        "refused",
+        "mapfile turns the variable it names into an array, which bash does not export",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "readarray -t GIT_CONFIG_COUNT <<< 0; git log -p -1",
+        "refused",
+        "readarray is mapfile under another name",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "mapfile -t FOO < /dev/null; git log -1",
+        "allowed",
+        "mapfile into another variable leaves git's settings alone",
+    ),
+    Row(
+        "environment",
         "read -r -a GIT_CONFIG_KEY_0 <<< x; git log -p -1",
         "refused",
         "read -a turns the key into an array, which bash does not export",
@@ -4027,6 +4047,12 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         'names_settings_env "${word}" && refuse "${SETTINGS_ENV_MSG}"\n    done\n    ;;&',
         'names_settings_env "${word}" && true\n    done\n    ;;&',
         "read GIT_CONFIG_COUNT <<< 0; git log -p -1",
+    ),
+    (
+        "mapfile and readarray naming the settings environment",
+        "  read | mapfile | readarray)",
+        "  read)",
+        "mapfile GIT_CONFIG_COUNT < /dev/null; git log -p -1",
     ),
     (
         "read's array name joined to -a",

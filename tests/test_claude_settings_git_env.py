@@ -192,6 +192,8 @@ class SettingsEnvTests(unittest.TestCase):
             "GIT_CONFIG_COUNT=0; git log -p -1",
             "printf -v GIT_CONFIG_COUNT 0; git log -p -1",
             "read GIT_CONFIG_COUNT <<< 0; git log -p -1",
+            "mapfile GIT_CONFIG_COUNT < /dev/null; git log -p -1",
+            "readarray -t GIT_CONFIG_COUNT <<< 0; git log -p -1",
             "let GIT_CONFIG_COUNT=0; git log -p -1",
             "for GIT_CONFIG_COUNT in 0; do git log -p -1; done",
             "select GIT_CONFIG_COUNT in 0; do break; done <<< 1; git log -p -1",
