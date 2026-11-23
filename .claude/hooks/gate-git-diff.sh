@@ -1013,7 +1013,7 @@ XARGS_MSG='blocked: xargs adds the words it reads from standard input (or from t
 GH_JQ_ENV_MSG='blocked: gh evaluates its --jq (-q) filter with gojq, which hands the filter the whole process environment through the `env` builtin and `$ENV`, so `gh pr view 1 --json number --jq env` prints every variable this shell holds -- GH_TOKEN, GITHUB_TOKEN, ANTHROPIC_API_KEY and whatever else is exported -- under the Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh run view:*) and Bash(gh run list:*) allow rows with no prompt. Those rows are there to read pull requests, issues and runs, not the environment, and no Read(...) deny rule stands in front of a variable. A filter naming `env` or `$ENV` is refused wherever it stands in the filter, a quoted string included, and so is a filter bash rewrites before gh sees it -- a $ or a backtick outside single quotes, a brace, an unquoted glob or extglob -- since `{e,}nv` and `$(echo env)` reach gh as env. Name the fields you want, in single quotes: --jq '"'"'.title'"'"', --jq '"'"'.jobs[].conclusion'"'"'.'
 
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal text
-SETTINGS_ENV_MSG='blocked: this command takes git'"'"'s settings environment (GIT_CONFIG_COUNT, GIT_CONFIG_KEY_*, GIT_CONFIG_VALUE_*) away from git or overwrites it. .claude/settings.json sets safe.bareRepository=explicit through those variables so git refuses a bare repository a branch commits; without them git falls back to safe.bareRepository=all, and `git log -p` loads the planted folder'"'"'s config and runs the diff textconv program it names. `unset GIT_CONFIG_COUNT`, `export -n`, `declare +x` / `typeset +x` / `local +x`, `env -u GIT_CONFIG_COUNT` (or --unset), a bare `GIT_CONFIG_COUNT=0` statement, and the two that empty the whole environment -- `env -i` (or a lone -, or --ignore-environment) and bash'"'"'s `exec -c` -- each made the planted program run, so they are refused wherever they stand in the string, behind any wrapper, whatever command follows. Run the command without touching those variables; removing or un-exporting any other variable is not affected.'
+SETTINGS_ENV_MSG='blocked: this command takes git'"'"'s settings environment (GIT_CONFIG_COUNT, GIT_CONFIG_KEY_*, GIT_CONFIG_VALUE_*) away from git or overwrites it. .claude/settings.json sets safe.bareRepository=explicit through those variables so git refuses a bare repository a branch commits; without them git falls back to safe.bareRepository=all, and `git log -p` loads the planted folder'"'"'s config and runs the diff textconv program it names. `unset GIT_CONFIG_COUNT`, `export -n`, `declare +x` / `typeset +x` / `local +x`, `env -u GIT_CONFIG_COUNT` (or --unset), a bare `GIT_CONFIG_COUNT=0` statement, `printf -v GIT_CONFIG_COUNT 0`, `read GIT_CONFIG_COUNT`, `mapfile GIT_CONFIG_COUNT` (and `readarray`), `let GIT_CONFIG_COUNT=0`, `for GIT_CONFIG_COUNT in 0`, `select GIT_CONFIG_COUNT in 0`, an arithmetic command such as `(( GIT_CONFIG_COUNT = 0 ))`, and the two that empty the whole environment -- `env -i` (or a lone -, or --ignore-environment) and bash'"'"'s `exec -c` -- each made the planted program run, so they are refused wherever they stand in the string, behind any wrapper, whatever command follows. Run the command without touching those variables; removing or un-exporting any other variable is not affected.'
 
 command_is_gated() {
   local joined="$1" prefix
@@ -1493,7 +1493,44 @@ check_settings_env_segment() {
       [[ "${word}" == *=* ]] && refuse "${SETTINGS_ENV_MSG}"
     done
     ;;
-  git | echo | printf | grep | egrep | fgrep) ;; # git reads its own operands; the others only print or match
+  printf)
+    # `printf -v NAME` writes its output into NAME instead of printing it.
+    value=''
+    for ((j = 0; j < ${#rest[@]}; j++)); do
+      case "${rest[j]}" in
+      -v)
+        ((j++))
+        value="${rest[j]-}"
+        ;;
+      -v*) value="${rest[j]#-v}" ;;
+      *) break ;;
+      esac
+      names_settings_env "${value}" && refuse "${SETTINGS_ENV_MSG}"
+    done
+    ;;
+  read | mapfile | readarray)
+    # read assigns each name it is given, and -a assigns an array, which bash
+    # does not export. mapfile and readarray turn the name they are given into
+    # an array the same way. The name may sit in the option word (`-raNAME`); an
+    # option value that only looks like one (a -p prompt) refuses more.
+    for word in "${rest[@]}"; do
+      [[ "${word}" =~ ^-[^-]*a(.+)$ ]] && word="${BASH_REMATCH[1]}"
+      names_settings_env "${word}" && refuse "${SETTINGS_ENV_MSG}"
+    done
+    ;;&
+  let)
+    # Each word is an arithmetic expression that may assign any name in it
+    # (`GIT_CONFIG_COUNT=0`, `GIT_CONFIG_COUNT--`, `x = GIT_CONFIG_COUNT = 0`).
+    for word in "${rest[@]}"; do
+      [[ "${word}" == *GIT_CONFIG* ]] && refuse "${SETTINGS_ENV_MSG}"
+    done
+    ;;&
+  for | select)
+    # `for NAME in ...` (or `for NAME; do`) assigns NAME on each pass, and
+    # `select NAME in ...` assigns the word picked from its menu the same way.
+    names_settings_env "${rest[0]-}" && refuse "${SETTINGS_ENV_MSG}"
+    ;;&
+  git | echo | grep | egrep | fgrep) ;; # git reads its own operands; the others only print or match
   *)
     # A program the wrapper walk does not step over (`flock /tmp/l env -i
     # git`, `watch env -i git`, `setsid env -u NAME git`) runs the words
@@ -1513,11 +1550,36 @@ check_settings_env_segment() {
   return 0
 }
 
+# An arithmetic command, `(( ... ))`, the way `let` reads it: each word is part
+# of an expression that may assign any name in it, and with spaces around the
+# operator (`(( GIT_CONFIG_COUNT = 0 ))`, `(( GIT_CONFIG_COUNT-- ))`) no word has
+# the shape of an assignment. `(` is a separator, so the command is the words
+# after two opening separators with none between them. Two subshells written
+# `( (` read the same way, which can only refuse more.
+check_settings_env_arith() {
+  local word
+  for word in "$@"; do
+    [[ "${word}" == *GIT_CONFIG* ]] && refuse "${SETTINGS_ENV_MSG}"
+  done
+  return 0
+}
+
 segment_words=()
+# How many opening separators (`(` or `$(`) in a row stand before the words.
+open_run=0
 for ((idx = 0; idx < ${#words[@]}; idx++)); do
   case "${kinds[idx]}" in
   sep)
+    ((open_run >= 2)) && check_settings_env_arith "${segment_words[@]}"
     check_settings_env_segment "${segment_words[@]}"
+    # shellcheck disable=SC2016 # the literal `$(` is the separator's name
+    if [[ "${words[idx]}" != '(' && "${words[idx]}" != '$(' ]]; then
+      open_run=0
+    elif ((${#segment_words[@]})); then
+      open_run=1
+    else
+      ((open_run++))
+    fi
     segment_words=()
     ;;
   word) segment_words+=("${words[idx]}") ;;
