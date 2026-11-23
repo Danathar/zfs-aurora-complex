@@ -273,7 +273,7 @@ WRAPPER_PATH_MSG='blocked: a wrapper written as a path (`./shim/nohup git diff H
 BRACE_MSG='blocked: bash expands braces before git sees the words, and this gate reads the words as typed, so a brace rebuilds both spellings it refuses: `git diff {/dev/null,./cosign.key}` passes the operand scan as one word and reaches git as two operands (the plain-file read), and `--outpu{t,t}=FILE` matches no word here and reaches git as --output=FILE. Expanding braces correctly means reimplementing bash inside a hook, so a brace bash could expand -- a { followed, anywhere later in the word, by a comma or a .. and then a }, or a ${VAR} -- is refused instead, and so is a process substitution (`git diff <(...)`), which supplies an operand this gate never saw. Write the command out in full. A brace with neither, such as HEAD@{1} or main@{upstream}, is a literal to bash and is not refused; a .. between two reflog entries (HEAD@{2}..HEAD@{1}) has the refused shape, so write HEAD~2..HEAD~1. Only words of a git invocation are affected: awk and jq programs elsewhere in the string are not.'
 
 # shellcheck disable=SC2016 # the backticks quote command spellings for the reader
-GIT_GLOBAL_MSG='blocked: a git global option written before the subcommand reaches the same primitives from outside the part an allow rule matches. `-c diff.external=/tmp/evil` runs that program once per changed path -- the config spelling of GIT_EXTERNAL_DIFF -- and `-c core.sshCommand`, `-c credential.helper` and `-c alias.x=!cmd` are the same shape; `--config-env` names an environment variable to take the value from; `-C <dir>` moves git to another directory, so `git -C /home/<user> diff -- .netrc .profile` printed a file outside this checkout while the containment test below resolved both operands inside it; and `--exec-path` is the value form of GIT_EXEC_PATH, which the environment rule refuses in every other spelling. `--git-dir <dir>` and `--bare` (which is `--git-dir=.`) point git at another repository and so at its config: a bare repository committed into a branch names a diff.x.textconv program that `git --git-dir=evil log -p` runs, and safe.bareRepository=explicit in .claude/settings.json allows exactly this spelling, because naming the directory is what makes it explicit; and `--work-tree <dir>` makes git compare tracked paths against another directory, which prints a file outside this checkout as -C does. So -c, -C, --config-env, --exec-path, --git-dir, --bare and --work-tree are refused between the name and the subcommand rather than stepped over. --namespace, --super-prefix and --attr-source only rename what git reports and are still stepped over.'
+GIT_GLOBAL_MSG='blocked: a git global option written before the subcommand reaches the same primitives from outside the part an allow rule matches. `-c diff.external=/tmp/evil` runs that program once per changed path -- the config spelling of GIT_EXTERNAL_DIFF -- and `-c core.sshCommand`, `-c credential.helper` and `-c alias.x=!cmd` are the same shape; `--config-env` names an environment variable to take the value from; `-C <dir>` moves git to another directory, so `git -C /home/<user> diff -- .netrc .profile` printed a file outside this checkout while the containment test below resolved both operands inside it; and `--exec-path` is the value form of GIT_EXEC_PATH, which the environment rule refuses in every other spelling. `--git-dir <dir>` and `--bare` (which is `--git-dir=.`) point git at another repository and so at its config: a bare repository committed into a branch names a diff.x.textconv program that `git --git-dir=evil log -p` runs, and safe.bareRepository=explicit in .claude/settings.json allows exactly this spelling, because naming the directory is what makes it explicit; and `--work-tree <dir>` makes git compare tracked paths against another directory, which prints a file outside this checkout as -C does; and `--shallow-file <file>` reads that file as the shallow list and quotes its first line back, so `git --shallow-file .env log -1` prints a .env line. So -c, -C, --config-env, --exec-path, --git-dir, --bare, --work-tree and --shallow-file are refused between the name and the subcommand rather than stepped over. --namespace, --super-prefix and --attr-source only rename what git reports and are still stepped over.'
 
 # shellcheck disable=SC2016 # the backticks quote command spellings for the reader
 GLOB_MSG='blocked: bash expands a glob before git sees the words, so one word here is several operands at git and the operand scan never reaches the count it refuses at: `git diff /home/<user>/.ssh/*` is a single word to this gate and two operands to git, which prints the file. "A glob cannot leave the working directory" is no reason to expand it and check the result either, because the Read(...) deny rules this gate stands in front of name paths inside the checkout -- ./cosign.key, ./.env, **/*.pem. So a `*`, `?` or `[` bash would expand in a word of a git invocation is refused rather than expanded, for the reason the brace and $ rules give: expanding correctly means reimplementing bash in a hook. Quote the pathspec (`git diff -- '"'"'*.md'"'"'`), which is git'"'"'s own glob and is matched against repository content rather than the filesystem, or write the paths out.'
@@ -1015,6 +1015,9 @@ GH_JQ_ENV_MSG='blocked: gh evaluates its --jq (-q) filter with gojq, which hands
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal text
 SETTINGS_ENV_MSG='blocked: this command takes git'"'"'s settings environment (GIT_CONFIG_COUNT, GIT_CONFIG_KEY_*, GIT_CONFIG_VALUE_*) away from git or overwrites it. .claude/settings.json sets safe.bareRepository=explicit through those variables so git refuses a bare repository a branch commits; without them git falls back to safe.bareRepository=all, and `git log -p` loads the planted folder'"'"'s config and runs the diff textconv program it names. `unset GIT_CONFIG_COUNT`, `export -n`, `declare +x` / `typeset +x` / `local +x`, `env -u GIT_CONFIG_COUNT` (or --unset), a bare `GIT_CONFIG_COUNT=0` statement, `printf -v GIT_CONFIG_COUNT 0`, `read GIT_CONFIG_COUNT`, `mapfile GIT_CONFIG_COUNT` (and `readarray`), `let GIT_CONFIG_COUNT=0`, `for GIT_CONFIG_COUNT in 0`, `select GIT_CONFIG_COUNT in 0`, an arithmetic command such as `(( GIT_CONFIG_COUNT = 0 ))`, and the two that empty the whole environment -- `env -i` (or a lone -, or --ignore-environment) and bash'"'"'s `exec -c` -- each made the planted program run, so they are refused wherever they stand in the string, behind any wrapper, whatever command follows. Run the command without touching those variables; removing or un-exporting any other variable is not affected.'
 
+# shellcheck disable=SC2016 # the message quotes shell spellings as literal text
+REACH_ENV_MSG='blocked: this string assigns HOME, XDG_CONFIG_HOME or PATH in a statement of its own and then runs git or an allow-listed command. Those variables are already exported, so the new value reaches every later command of the string as surely as a leading `NAME=value` does: with HOME or XDG_CONFIG_HOME re-pointed, git reads planted/.gitconfig (or planted/git/config) as its global configuration, and a diff.external or diff textconv program a branch commits there runs under `git diff HEAD~1 HEAD` or `git log -p`; with PATH re-pointed, bash looks git up in a directory a branch commits and runs the file it finds there. `HOME=planted;`, `read HOME`, `printf -v HOME`, `mapfile PATH` and `for HOME in ...` each assign it. Run the command without changing those variables; reading them (`cd "$HOME"`) and assigning any other name are not affected.'
+
 command_is_gated() {
   local joined="$1" prefix
   for prefix in "${GATED_PREFIXES[@]}"; do
@@ -1588,6 +1591,108 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
 done
 check_settings_env_segment "${segment_words[@]}"
 
+# Whether a word (`NAME` or `NAME=value`, quotes already removed) names a
+# variable git or bash takes configuration or the git binary from, and that a
+# shell already exports: HOME and XDG_CONFIG_HOME locate git's global
+# configuration, and PATH locates git itself. An array subscript or a `+=`
+# assigns the same variable.
+names_reach_env() {
+  local name="${1%%=*}"
+  name="${name%%\[*}"
+  name="${name%+}"
+  case "${name}" in
+  HOME | XDG_CONFIG_HOME | PATH) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+# A statement of its own that assigns one of those variables reaches every
+# later command of the string, because the variable is already exported: a
+# leading `NAME=value` in front of git is refused by GATED_ENV_MSG, but
+# `HOME=planted; git diff HEAD~1 HEAD` carries no assignment in the git
+# command at all, and git then reads planted/.gitconfig, whose diff.external
+# runs. `read`, `mapfile`/`readarray`, `printf -v` and a `for`/`select` loop
+# assign a name the same way. A leading assignment in front of some other
+# command reaches that command only and is not counted. Like the export
+# family, it is refused only when git or a gated command runs after it
+# (`reach_idx` against `gate_idx`), so a string that runs neither is left to
+# the permission prompt.
+reach_idx=-1
+note_reach() {
+  ((reach_idx < 0)) && reach_idx=$1
+  return 0
+}
+check_reach_segment() {
+  local -a at=("$@")
+  local n=${#at[@]} i=0 k first piece
+  ((n)) || return 0
+  while ((i < n)); do
+    case "${words[at[i]]}" in
+    '{' | '!' | if | then | else | elif | do | while | until | time) ((i++)) ;;
+    *) break ;;
+    esac
+  done
+  first=${i}
+  while ((i < n)); do
+    piece="${words[at[i]]}"
+    [[ "${piece}" =~ ^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?= ]] || break
+    ((i++))
+  done
+  if ((i == n)); then
+    for ((k = first; k < n; k++)); do
+      names_reach_env "${words[at[k]]}" && note_reach "${at[k]}"
+    done
+    return 0
+  fi
+  while ((i < n)) && [[ "${words[at[i]]}" == command || "${words[at[i]]}" == builtin ]]; do
+    ((i++))
+  done
+  ((i < n)) || return 0
+  case "${words[at[i]]}" in
+  mapfile | readarray | read)
+    # Every word that is not an option is read as a name; an option value
+    # that only looks like one (a -p prompt) refuses more.
+    for ((k = i + 1; k < n; k++)); do
+      piece="${words[at[k]]}"
+      [[ "${piece}" =~ ^-[^-]*a(.+)$ ]] && piece=${BASH_REMATCH[1]}
+      names_reach_env "${piece}" && note_reach "${at[k]}"
+    done
+    ;;
+  printf)
+    for ((k = i + 1; k < n; k++)); do
+      piece="${words[at[k]]}"
+      if [[ "${piece}" == -v ]]; then
+        ((k + 1 < n)) && names_reach_env "${words[at[k + 1]]}" && note_reach "${at[k + 1]}"
+        ((k++))
+      elif [[ "${piece}" == -v?* ]]; then
+        names_reach_env "${piece#-v}" && note_reach "${at[k]}"
+      else
+        k=${n} # the format: printf reads no option after it
+      fi
+    done
+    ;;
+  select | for)
+    ((i + 1 < n)) && names_reach_env "${words[at[i + 1]]}" && note_reach "${at[i + 1]}"
+    ;;
+  *) ;;
+  esac
+  return 0
+}
+
+reach_segment=()
+for ((idx = 0; idx < ${#words[@]}; idx++)); do
+  case "${kinds[idx]}" in
+  sep)
+    check_reach_segment "${reach_segment[@]+"${reach_segment[@]}"}"
+    reach_segment=()
+    ;;
+  word) reach_segment+=("${idx}") ;;
+  *) ;;
+  esac
+done
+check_reach_segment "${reach_segment[@]+"${reach_segment[@]}"}"
+((reach_idx >= 0 && gate_idx > reach_idx)) && refuse "${REACH_ENV_MSG}"
+
 # The whole string with quoting removed, for the one test that is a substring
 # match rather than a word: the shell removes quotes and backslashes on the
 # way to git, so `--no-'index'` and `--no-\index` both reach it as
@@ -1872,8 +1977,14 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     # the repository whose config git loads -- the one spelling the settings
     # env's safe.bareRepository=explicit still lets reach a bare repository
     # committed into a branch -- and the third is -C for the files git reads.
+    # `--shallow-file` reads the file it names as git's shallow list and
+    # quotes the first line it cannot parse, so `git --shallow-file .env log
+    # -1` prints a .env line; it also takes its value as the next word, so a
+    # scan that stepped over the option alone read that value as the
+    # subcommand and never saw a `--git-dir` after it.
     -c* | -C* | --config-env | --config-env=* | --exec-path | --exec-path=* | \
-      --git-dir | --git-dir=* | --bare | --work-tree | --work-tree=*)
+      --git-dir | --git-dir=* | --bare | --work-tree | --work-tree=* | \
+      --shallow-file | --shallow-file=*)
       refuse "${GIT_GLOBAL_MSG}"
       ;;
     --namespace | --super-prefix | --attr-source)

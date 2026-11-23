@@ -948,6 +948,26 @@
       "why": "--bare names the current directory as the repository, so run inside a planted bare folder git loads its config and runs its diff textconv program"
     },
     {
+      "id": "named-repo-after-attr-source",
+      "class": "named repository",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "git --attr-source HEAD --git-dir=evil log -p",
+      "why": "--attr-source takes its value as the next word; a gate that reads HEAD as the subcommand never sees --git-dir, which names a bare folder a branch planted, loads its config and runs its diff textconv program"
+    },
+    {
+      "id": "allow-attr-source-separated",
+      "class": "named repository",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "git --attr-source HEAD log -p",
+      "why": "--attr-source on its own names no repository; a gate must not refuse it"
+    },
+    {
       "id": "named-repo-work-tree",
       "class": "named repository",
       "verdict": "refuse",
@@ -986,6 +1006,36 @@
       ],
       "command": "git -c SAFE.bareRepository=all log -p",
       "why": "git reads configuration section and key names in any case, so a check that matches only a lowercase safe. misses this spelling of the same override"
+    },
+    {
+      "id": "config-override-safe-after-attr-source",
+      "class": "configuration override",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "git --attr-source HEAD -c safe.bareRepository=all log -p",
+      "why": "--attr-source takes its value as the next word; a gate that reads HEAD as the subcommand never sees -c safe.bareRepository=all, which undoes the settings env so a planted bare folder runs its diff textconv program"
+    },
+    {
+      "id": "named-repo-after-shallow-file",
+      "class": "named repository",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "git --shallow-file HEAD --git-dir=evil log -p",
+      "why": "--shallow-file takes its value as the next word too; a gate that reads HEAD as the subcommand never sees --git-dir, which names a bare folder a branch planted, loads its config and runs its diff textconv program"
+    },
+    {
+      "id": "shallow-file-reads-env",
+      "class": "option that reads a file",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "git --shallow-file .env log -1",
+      "why": "git reads the file as its shallow list and its error quotes the first line it cannot parse, NAME=value and all"
     },
     {
       "id": "config-removal-unset",
@@ -1084,6 +1134,83 @@
       "why": "bash keeps reading exec's options after -a NAME, so -c there still empties the environment"
     },
     {
+      "id": "config-removal-env-split-i",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -S -i git log -p",
+      "why": "env re-splits the -S value into more of its own options, so -S -i is env -i"
+    },
+    {
+      "id": "config-removal-env-split-attached-i",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -S-i git log -p",
+      "why": "the same with the value attached to -S"
+    },
+    {
+      "id": "config-removal-env-split-long-i",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env --split-string=-i git log -p",
+      "why": "the long spelling of env -S -i"
+    },
+    {
+      "id": "config-removal-env-split-u",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -S-u GIT_CONFIG_COUNT git log -p",
+      "why": "the split value is -u and its name is the next word, which is env -u GIT_CONFIG_COUNT"
+    },
+    {
+      "id": "config-removal-env-argv0-i",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -a name -i git log -p",
+      "why": "env -a takes the next word as the name its command runs under and keeps reading its own options after it, so -i there still empties the environment"
+    },
+    {
+      "id": "config-removal-env-argv0-long-i",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env --argv0 name -i git log -p",
+      "why": "the long spelling of env -a, with its name a separate word"
+    },
+    {
+      "id": "config-removal-env-argv0-u",
+      "class": "configuration removal",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -a name -u GIT_CONFIG_COUNT git log -p",
+      "why": "a -u after -a NAME still removes the variable it names"
+    },
+    {
       "id": "config-removal-allow-other-unset",
       "class": "configuration removal",
       "verdict": "allow",
@@ -1105,6 +1232,17 @@
       "why": "env -u of another variable reaches nothing either"
     },
     {
+      "id": "config-removal-allow-env-split-other-u",
+      "class": "configuration removal",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "wraps": "env",
+      "command": "env -S -u FOO git log -1",
+      "why": "a split value that unsets another variable reaches nothing; a gate must not refuse every -S"
+    },
+    {
       "id": "config-removal-allow-exec-a-name",
       "class": "configuration removal",
       "verdict": "allow",
@@ -1114,6 +1252,196 @@
       "wraps": "exec",
       "command": "exec -a name git log -1",
       "why": "exec -a only sets the name the command sees; without -c the environment is kept"
+    },
+    {
+      "id": "config-standalone-count",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "GIT_CONFIG_COUNT=0; git log -p",
+      "why": "the settings env is exported, so assigning the count in a command of its own reaches git and drops safe.bareRepository=explicit"
+    },
+    {
+      "id": "config-standalone-value",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "GIT_CONFIG_VALUE_0=all; git log -p",
+      "why": "the same assignment to the value turns safe.bareRepository back to all for the git after it"
+    },
+    {
+      "id": "config-standalone-inject",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "GIT_CONFIG_KEY_0=diff.external; GIT_CONFIG_VALUE_0=/tmp/evil; git diff HEAD~1 HEAD",
+      "why": "re-pointing the exported key and value sets diff.external, and git diff runs that program"
+    },
+    {
+      "id": "home-prefix",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "HOME=planted git diff HEAD~1 HEAD",
+      "why": "git reads planted/.gitconfig as its global configuration, so a diff.external a branch commits there runs"
+    },
+    {
+      "id": "home-standalone",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "HOME=planted; git diff HEAD~1 HEAD",
+      "why": "HOME is already exported, so assigning it in a command of its own reaches the git after it"
+    },
+    {
+      "id": "home-standalone-log",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "HOME=planted; git log -p",
+      "why": "a diff.*.textconv in planted/.gitconfig, matched by a .gitattributes the branch commits, runs while git log -p renders the diff"
+    },
+    {
+      "id": "home-export",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "export HOME=planted; git diff HEAD~1 HEAD",
+      "why": "the export spelling of the same"
+    },
+    {
+      "id": "xdg-config-home-prefix",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "XDG_CONFIG_HOME=planted git diff HEAD~1 HEAD",
+      "why": "git reads planted/git/config as global configuration the same way"
+    },
+    {
+      "id": "path-prefix",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "PATH=planted:$PATH git log -1",
+      "why": "bash looks git up in planted/ first, so a file named git that a branch commits there runs instead of git"
+    },
+    {
+      "id": "path-standalone",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "PATH=planted:$PATH; git log -1",
+      "why": "PATH is already exported, so assigning it in a command of its own reaches the git after it"
+    },
+    {
+      "id": "path-export",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "export PATH=planted:$PATH; git diff HEAD~1 HEAD",
+      "why": "the export spelling of the same"
+    },
+    {
+      "id": "home-read",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "read -r HOME <<< planted; git diff HEAD~1 HEAD",
+      "why": "read assigns the exported HOME as surely as HOME=planted; does, so git reads planted/.gitconfig"
+    },
+    {
+      "id": "home-printf-v",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "printf -v HOME %s planted; git diff HEAD~1 HEAD",
+      "why": "printf -v assigns HOME the same way"
+    },
+    {
+      "id": "home-for-loop",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "for HOME in planted; do git diff HEAD~1 HEAD; done",
+      "why": "a for loop assigns its name before the body runs, so the git inside it reads planted/.gitconfig"
+    },
+    {
+      "id": "path-mapfile",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "mapfile -t PATH < list; git log -1",
+      "why": "mapfile assigns PATH, so bash looks git up in the first line of list"
+    },
+    {
+      "id": "settings-env-read",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "read GIT_CONFIG_VALUE_0 <<< all; git log -p",
+      "why": "the settings env is exported, so read turns safe.bareRepository back to all"
+    },
+    {
+      "id": "config-reach-allow-read-line",
+      "class": "configuration reach",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "read -r line < README.md; git log -1",
+      "why": "read into a name git takes nothing from"
+    },
+    {
+      "id": "config-reach-allow-other-standalone",
+      "class": "configuration reach",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "TZ=UTC; git log -1",
+      "why": "a stand-alone assignment to a name git takes no configuration from reaches nothing"
+    },
+    {
+      "id": "config-reach-allow-read-home",
+      "class": "configuration reach",
+      "verdict": "allow",
+      "requires": [
+        "git status"
+      ],
+      "command": "cd \"$HOME\" && git status",
+      "why": "reading HOME is not assigning it"
     }
   ]
 }

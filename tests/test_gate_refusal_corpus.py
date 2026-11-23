@@ -52,11 +52,33 @@ OPTIONAL_FIELDS = {"wraps"}
 
 # SHA-256 of the canonical tests/fixtures/gate-refusal-corpus.json in
 # Danathar/atomic-image-builder. Copy the file from there; never edit it here.
-CANONICAL_SHA256 = "9bb984ef871ff8ad63b113d48976f4eea4cbb44be270574fc7a9b3819865bd56"
+CANONICAL_SHA256 = "64246cb4d92cf1226a9eb07d3f1381942850fb090cfa59fcf50e23eb5c212558"
+
+# Allow rows this gate refuses on purpose, each with the rule that refuses it.
+# They are still run: each one is asserted to be refused, so a gate that
+# starts letting one through fails here until the entry is removed, and an
+# allow row that is not listed cannot be over-refused silently. Refuse rows
+# are never listed here (Danathar/goodreads-mcp#467,
+# Danathar/aurora-zfs-simple#523).
+OVER_REFUSED: dict[str, str] = {
+    "config-removal-allow-env-split-other-u": (
+        "env -S (--split-string) is refused outright after env (CMD_MSG): it splits "
+        "a quoted string into a command the name scan never sees as words"
+    ),
+}
 
 
 # git global options whose value can be the next word (`git -C dir log`).
-GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
+GIT_OPTIONS_WITH_VALUE = {
+    "-C",
+    "-c",
+    "--attr-source",
+    "--shallow-file",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--config-env",
+}
 
 
 def allow_prefixes(settings: dict) -> list[str]:
@@ -531,11 +553,31 @@ class CorpusVerdictTests(unittest.TestCase):
         # skipped and the verdict test would pass on nothing.
         self.assertGreaterEqual(len(self.rows), 20)
 
+    def test_every_over_refused_entry_is_an_allow_row_that_runs_here(self) -> None:
+        # An entry for a row that left the corpus, became a refuse row, or no
+        # longer applies here would excuse nothing and hide nothing; it goes.
+        rows = {row["id"]: row for row in self.rows}
+        for row_id, reason in OVER_REFUSED.items():
+            with self.subTest(row=row_id):
+                self.assertIn(row_id, rows, "not a corpus row this repository runs")
+                self.assertEqual(
+                    rows[row_id]["verdict"], ALLOW, "only an allow row can be over-refused"
+                )
+                self.assertTrue(reason.strip())
+
     def test_every_row_this_repository_allows_is_decided_the_way_it_says(self) -> None:
         for row in self.rows:
             with self.subTest(row=row["id"], command=row["command"]):
                 verdict, result = decide(row["command"], self.hook, self.project)
                 self.assertIn(result.returncode, (0, 2), result.stderr)
+                if row["id"] in OVER_REFUSED:
+                    self.assertEqual(
+                        verdict,
+                        REFUSE,
+                        f"{row['command']!r} is listed as over-refused on purpose "
+                        f"({OVER_REFUSED[row['id']]}) but is now allowed; remove the entry",
+                    )
+                    continue
                 self.assertEqual(
                     verdict,
                     row["verdict"],
