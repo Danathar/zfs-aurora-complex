@@ -2470,6 +2470,25 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "echo $(( GIT_CONFIG_COUNT = 0 )); git log -p -1",
+        "refused",
+        "an arithmetic expansion after a word assigns in the current shell like (( ))",
+        "settings environment",
+    ),
+    Row(
+        "environment",
+        "( echo GIT_CONFIG_COUNT ); git log -1",
+        "allowed",
+        "one opening parenthesis at the start is a subshell, whose words only print the name",
+    ),
+    Row(
+        "environment",
+        "echo x && ( echo GIT_CONFIG_COUNT ); git log -1",
+        "allowed",
+        "a separator that is not a parenthesis does not count toward the two that open (( ))",
+    ),
+    Row(
+        "environment",
         "git grep -n 'env -i' -- .claude",
         "allowed",
         "env -i as a search pattern is an operand of git grep, not a wrapper",
