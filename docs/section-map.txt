@@ -151,6 +151,8 @@
   joined: tests/test_git_diff_gate.py
 ## The agent permission boundary
   joined: tests/test_agent_permission_boundary.py
+### What the hook refuses, by class
+  joined: tests/test_gate_refusal_docs.py
 ## What a branch or pull request can actually cause here
   joined: tests/test_security_ai_doc.py
 ## If you find a vulnerability
