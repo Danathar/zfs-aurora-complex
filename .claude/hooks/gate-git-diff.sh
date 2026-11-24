@@ -1016,7 +1016,7 @@ GH_JQ_ENV_MSG='blocked: gh evaluates its --jq (-q) filter with gojq, which hands
 SETTINGS_ENV_MSG='blocked: this command takes git'"'"'s settings environment (GIT_CONFIG_COUNT, GIT_CONFIG_KEY_*, GIT_CONFIG_VALUE_*) away from git or overwrites it. .claude/settings.json sets safe.bareRepository=explicit through those variables so git refuses a bare repository a branch commits; without them git falls back to safe.bareRepository=all, and `git log -p` loads the planted folder'"'"'s config and runs the diff textconv program it names. `unset GIT_CONFIG_COUNT`, `export -n`, `declare +x` / `typeset +x` / `local +x`, `env -u GIT_CONFIG_COUNT` (or --unset), a bare `GIT_CONFIG_COUNT=0` statement, `printf -v GIT_CONFIG_COUNT 0`, `read GIT_CONFIG_COUNT`, `mapfile GIT_CONFIG_COUNT` (and `readarray`), `let GIT_CONFIG_COUNT=0`, `for GIT_CONFIG_COUNT in 0`, `select GIT_CONFIG_COUNT in 0`, an arithmetic command such as `(( GIT_CONFIG_COUNT = 0 ))`, and the two that empty the whole environment -- `env -i` (or a lone -, or --ignore-environment) and bash'"'"'s `exec -c` -- each made the planted program run, so they are refused wherever they stand in the string, behind any wrapper, whatever command follows. Run the command without touching those variables; removing or un-exporting any other variable is not affected.'
 
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal text
-REACH_ENV_MSG='blocked: this string assigns HOME, XDG_CONFIG_HOME or PATH in a statement of its own and then runs git or an allow-listed command. Those variables are already exported, so the new value reaches every later command of the string as surely as a leading `NAME=value` does: with HOME or XDG_CONFIG_HOME re-pointed, git reads planted/.gitconfig (or planted/git/config) as its global configuration, and a diff.external or diff textconv program a branch commits there runs under `git diff HEAD~1 HEAD` or `git log -p`; with PATH re-pointed, bash looks git up in a directory a branch commits and runs the file it finds there. `HOME=planted;`, `read HOME`, `printf -v HOME`, `mapfile PATH` and `for HOME in ...` each assign it. Run the command without changing those variables; reading them (`cd "$HOME"`) and assigning any other name are not affected.'
+REACH_ENV_MSG='blocked: this string assigns HOME, XDG_CONFIG_HOME or PATH in a statement of its own and then runs git or an allow-listed command. Those variables are already exported, so the new value reaches every later command of the string as surely as a leading `NAME=value` does: with HOME or XDG_CONFIG_HOME re-pointed, git reads planted/.gitconfig (or planted/git/config) as its global configuration, and a diff.external or diff textconv program a branch commits there runs under `git diff HEAD~1 HEAD` or `git log -p`; with PATH re-pointed, bash looks git up in a directory a branch commits and runs the file it finds there. `HOME=planted;`, `read HOME`, `printf -v HOME`, `mapfile PATH`, `for HOME in ...`, `getopts a PATH`, `let PATH=1` and `(( PATH = 1 ))` each assign it. Run the command without changing those variables; reading them (`cd "$HOME"`) and assigning any other name are not affected.'
 
 command_is_gated() {
   local joined="$1" prefix
@@ -1674,16 +1674,60 @@ check_reach_segment() {
   select | for)
     ((i + 1 < n)) && names_reach_env "${words[at[i + 1]]}" && note_reach "${at[i + 1]}"
     ;;
+  getopts)
+    # `getopts OPTSTRING NAME` stores the option it reads (or `?`) in NAME.
+    ((i + 2 < n)) && names_reach_env "${words[at[i + 2]]}" && note_reach "${at[i + 2]}"
+    ;;
+  let)
+    # Each word is an arithmetic expression that may assign any name in it:
+    # `let PATH=1` makes bash look git up in a folder named 1.
+    for ((k = i + 1; k < n; k++)); do
+      expr_names_reach_env "${words[at[k]]}" && note_reach "${at[k]}"
+    done
+    ;;
   *) ;;
   esac
   return 0
 }
 
+# Whether an arithmetic expression (a `let` word, or the words of `(( ... ))`)
+# names HOME, XDG_CONFIG_HOME or PATH as a whole name. It may assign any name
+# it holds, so reading one (`(( x = PATH ))`) refuses more, which is the safe
+# side; `MYPATH` or `HOME2` is another name and is not counted.
+expr_names_reach_env() {
+  [[ "$1" =~ (^|[^A-Za-z0-9_])(HOME|XDG_CONFIG_HOME|PATH)([^A-Za-z0-9_]|$) ]]
+}
+
+# An arithmetic command, `(( PATH = 1 ))`, or an arithmetic expansion after a
+# word (`: $(( PATH = 1 ))`) assigns in the current shell the way `let` does,
+# and with spaces no word has an assignment's shape. As for the settings
+# environment above, the command is the words after two opening separators
+# with none between them.
+check_reach_arith() {
+  local k
+  for k in "$@"; do
+    expr_names_reach_env "${words[k]}" && note_reach "${k}"
+  done
+  return 0
+}
+
 reach_segment=()
+# How many opening separators in a row stand before the words, as `open_run`
+# counts them for the settings environment.
+reach_open=0
 for ((idx = 0; idx < ${#words[@]}; idx++)); do
   case "${kinds[idx]}" in
   sep)
+    ((reach_open >= 2)) && check_reach_arith "${reach_segment[@]+"${reach_segment[@]}"}"
     check_reach_segment "${reach_segment[@]+"${reach_segment[@]}"}"
+    # shellcheck disable=SC2016 # the literal `$(` is the separator's name
+    if [[ "${words[idx]}" != '(' && "${words[idx]}" != '$(' ]]; then
+      reach_open=0
+    elif ((${#reach_segment[@]})); then
+      reach_open=1
+    else
+      ((reach_open++))
+    fi
     reach_segment=()
     ;;
   word) reach_segment+=("${idx}") ;;

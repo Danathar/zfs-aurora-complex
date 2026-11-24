@@ -293,7 +293,8 @@ write a file, or run a program, that a prefix rule cannot see.
   variables (`GIT_CONFIG_COUNT=0;`). git then reads `planted/.gitconfig`, or runs
   a `git` file a branch committed under `planted/`. The other ways to assign a
   name are refused as well: `read HOME`, `printf -v HOME`, `mapfile PATH`,
-  `let`, `select` and `for HOME in ...`.
+  `let PATH=1`, an arithmetic command or expansion (`(( PATH = 1 ))`),
+  `getopts a PATH`, `select` and `for HOME in ...`.
 - **Environment.** A variable that changes what git runs
   (`GIT_EXTERNAL_DIFF=prog git diff HEAD~1 HEAD`), written before the command or
   exported earlier in the same string, runs that program once per changed path.
