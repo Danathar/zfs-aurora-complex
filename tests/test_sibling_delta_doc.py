@@ -5,15 +5,18 @@ Doing: Reads each table's rows, set-compares their names to the files on disk, a
 Why: Most of `ci_tools/`, every build step in `.github/actions/`, the test tools in `tests/` and the code that runs inside the image build are shared with the sister repository, and fixes made to one copy have repeatedly not reached the other. The page is the only record of which differences are meant, and a record that misses a file records nothing about it.
 Goal: Make a new module, build step, test tool or image build file with no row, a row for a removed one, or a `port pending` row that names no issue fail here.
 
-Whether a row is *true* -- whether the two copies really match, or a
-difference really is deliberate -- is a review question; this file does not
-fetch the sister repository. It checks only that every module has been given
-an answer in one of the allowed shapes.
+Whether a difference really is deliberate is a review question. Whether a
+`same` row is true is not: given a checkout of the sister repository in
+SIBLING_DELTA_SISTER_CHECKOUT, SameRowsMatchSisterTests compares every `same`
+row byte for byte. Without that variable it is skipped, so the suite still
+runs offline; this file never fetches the sister itself.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -109,6 +112,38 @@ def status_problem(status: str) -> str | None:
     return "is not `same`, `differs on purpose: ...`, `port pending: ...` or `only here: ...`"
 
 
+# How each table's row name maps to a repository-relative path.
+SECTION_PATHS = {
+    "Modules": "ci_tools/{}",
+    "Shared build steps": ".github/actions/{}/action.yml",
+    "Test tools": "tests/{}",
+    "Image build files": "{}",
+}
+SISTER_ENV = "SIBLING_DELTA_SISTER_CHECKOUT"
+
+
+def same_row_paths() -> list[str]:
+    """Repository-relative paths of every row whose status is `same`."""
+
+    return sorted(
+        template.format(name)
+        for heading, template in SECTION_PATHS.items()
+        for name, status in section_rows(heading).items()
+        if status == "same"
+    )
+
+
+def same_rows_that_differ(paths: list[str], here: Path, sister: Path) -> list[str]:
+    """The paths among `paths` whose bytes differ between `here` and `sister`, or that the sister lacks."""
+
+    return [
+        path
+        for path in paths
+        if not (sister / path).is_file()
+        or (here / path).read_bytes() != (sister / path).read_bytes()
+    ]
+
+
 class SiblingDeltaTests(unittest.TestCase):
     def setUp(self) -> None:
         self.rows = module_rows()
@@ -201,6 +236,47 @@ class SiblingDeltaTests(unittest.TestCase):
 
     def test_the_last_sister_commit_reviewed_is_recorded(self) -> None:
         self.assertRegex(LEDGER.read_text(encoding="utf-8"), SISTER_COMMIT_RE)
+
+
+@unittest.skipUnless(os.environ.get(SISTER_ENV), f"{SISTER_ENV} names no sister checkout")
+class SameRowsMatchSisterTests(unittest.TestCase):
+    def test_every_same_row_is_byte_identical_in_the_sister(self) -> None:
+        sister = Path(os.environ[SISTER_ENV])
+        self.assertTrue((sister / "ci_tools").is_dir(), f"{sister} is not a sister checkout")
+        self.assertEqual(
+            same_rows_that_differ(same_row_paths(), REPO_ROOT, sister),
+            [],
+            "docs/sibling-delta.md says `same` but the sister's copy differs",
+        )
+
+
+class SameRowCompareTests(unittest.TestCase):
+    def test_every_section_contributes_same_rows(self) -> None:
+        paths = same_row_paths()
+        for prefix in ("ci_tools/", ".github/actions/", "shared/"):
+            with self.subTest(prefix=prefix):
+                self.assertTrue(any(path.startswith(prefix) for path in paths))
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue((REPO_ROOT / path).is_file(), path)
+
+    def test_a_changed_or_missing_sister_copy_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as here, tempfile.TemporaryDirectory() as sister:
+            here_root, sister_root = Path(here), Path(sister)
+            for name, mine, theirs in (
+                ("same.py", b"a", b"a"),
+                ("changed.py", b"a", b"b"),
+                ("missing.py", b"a", None),
+            ):
+                (here_root / name).write_bytes(mine)
+                if theirs is not None:
+                    (sister_root / name).write_bytes(theirs)
+            self.assertEqual(
+                same_rows_that_differ(
+                    ["changed.py", "missing.py", "same.py"], here_root, sister_root
+                ),
+                ["changed.py", "missing.py"],
+            )
 
 
 class StatusFormTests(unittest.TestCase):
