@@ -247,6 +247,89 @@ the table:
   command, and on the ruleset, which refuses any push that is not a pull
   request merge ([`branch-protection.md`](./branch-protection.md)).
 
+### What the hook refuses, by class
+
+The refusals the hook is held to are listed in
+[`tests/fixtures/gate-refusal-corpus.json`](../tests/fixtures/gate-refusal-corpus.json),
+each row under a class. `tests/test_gate_refusal_docs.py` fails when a class in
+that file is not described here, so this list cannot fall behind the hook without
+a check saying so. Each class below is a way an allow-listed command can read or
+write a file, or run a program, that a prefix rule cannot see.
+
+- **Plain-file read.** `git diff` compares two operands as a plain file read as
+  soon as either one is not a revision, with no flag at all
+  (`git diff /dev/null ./.env`), and `git diff --no-index` asks for the same
+  mode by name. Either one prints any file this user can read.
+- **Write through git.** `--output=FILE` (and the space form) makes `git log` or
+  `git diff` write its output over the named path.
+- **Redirection.** An output redirection on a git command truncates its target
+  before git starts, even when it comes before the command name, and an input
+  redirection (`git log --stdin <.env`) hands a file to git on standard input.
+- **Option that reads a file.** `git blame --contents FILE` prints every line of
+  FILE, `skopeo inspect --registries-conf FILE` parses FILE and quotes the first
+  line it cannot read, and `git --shallow-file FILE` reads FILE as its shallow
+  list and quotes the first line it cannot parse, so each one prints a line of a
+  `.env` file.
+- **Named repository.** `git --git-dir`, `git --bare` and `git --work-tree` point
+  git at another repository, and so at its configuration. A bare folder a branch
+  commits names a diff program that `git --git-dir=evil log -p` runs, and
+  `safe.bareRepository=explicit` allows exactly that spelling, because naming the
+  directory is what makes it explicit. `--shallow-file` is refused in the same
+  place, and a gate that reads a global option's value as the subcommand (for
+  example the word after `--attr-source` or `--shallow-file`) is the reason the
+  hook reads those values as values.
+- **Configuration override.** `git -c safe.bareRepository=all` and
+  `--config-env` set a key at the same level as the settings environment, so the
+  later value wins. Section and key names are matched in any case.
+- **Configuration removal.** `.claude/settings.json` sets
+  `safe.bareRepository=explicit` through `GIT_CONFIG_COUNT` and its key and value
+  variables. Anything that removes or un-exports them is refused wherever it
+  stands in the string: `unset`, `export -n`, `declare +x` (and `typeset`),
+  `env -u` and `env --unset`, `env -i` (or a lone `-`, or
+  `--ignore-environment`), `env -S` carrying any of those, and bash's `exec -c`.
+- **Configuration reach.** `HOME`, `XDG_CONFIG_HOME` and `PATH` are already
+  exported, so a statement of their own (`HOME=planted;`, `export HOME=planted;`)
+  reaches the git that follows, and so does an assignment to the settings
+  variables (`GIT_CONFIG_COUNT=0;`). git then reads `planted/.gitconfig`, or runs
+  a `git` file a branch committed under `planted/`. The other ways to assign a
+  name are refused as well: `read HOME`, `printf -v HOME`, `mapfile PATH`,
+  `let`, `select` and `for HOME in ...`.
+- **Environment.** A variable that changes what git runs
+  (`GIT_EXTERNAL_DIFF=prog git diff HEAD~1 HEAD`), written before the command or
+  exported earlier in the same string, runs that program once per changed path.
+- **`gh --jq` environment.** `gh pr view 1 --json number --jq env` and the
+  `$ENV` spelling hand the filter the whole process environment, `GH_TOKEN`
+  included.
+- **Shell expansion.** A word the shell rewrites before the command sees it hides
+  the operand the hook is reading: a brace (`git diff {/dev/null,./.env}`), an
+  unquoted tilde, a command substitution or backtick, and ANSI-C quoting
+  (`$'--output=cosign.pub'`).
+- **Name spelling.** The command name itself can be spelled by the shell: a brace
+  (`{git,} diff`), a wildcard (`/usr/bin/g?t`), an extglob after
+  `shopt -s extglob`, `$'git'`, a backslash-newline pair inside `bash -c`, or a
+  file named `git` that a wildcard matches in the current directory.
+- **Unlisted program.** A program the hook neither checks nor steps over
+  (`setarch`, `prlimit`, `strace`) or a shell handed a string (`script -qc '...'`,
+  `sh -c '...'`) is read as commands of its own.
+- **Wrapper.** A wrapper that no allow rule covers, such as `timeout`, `flock`,
+  `watch`, `taskset`, `chrt`, `unshare`, `ionice`, `xargs`, `env -S` and
+  `find -exec`, is refused when the command behind it is one the hook refuses,
+  because bypass and auto modes prompt for nothing.
+- **Compound command.** A string of several commands (`;`, `&&`, a newline) is
+  read command by command, so an allowed first command does not cover a later
+  one.
+- **Push and local ref.** The corpus also holds `git push` deletions
+  (`--delete`, `-d`, a `:branch` refspec, `--prune`) and `git branch -D`, `-f`
+  and `-M`. The allow list here reaches neither command: `git push` is `ask`, its
+  force and delete spellings that a prefix rule can see are `deny`, and
+  `git branch` is not allow-listed, so a person sees each of them first and the
+  hook has nothing to add. They are listed so a future allow rule for either
+  command meets a corpus row that already refuses it.
+
+A class is described here by name and by its commonest spellings, not by every
+row. The corpus is the complete list, and the hook is
+[`.claude/hooks/gate-git-diff.sh`](../.claude/hooks/gate-git-diff.sh).
+
 ## What a branch or pull request can actually cause here
 
 Worth stating precisely, because "opens a pull request" sounds inert and is not
