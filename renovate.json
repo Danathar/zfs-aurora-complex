@@ -91,8 +91,9 @@
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"]
     },
     {
-      "description": "Wait three days before taking a new GitHub Actions release. Non-major action updates merge without the owner (rule above), and a compromised action usually ships as a fresh release that is found and pulled within days; this is the window in which it can be caught before it reaches a workflow that signs images.",
+      "description": "Wait three days before taking a new GitHub Actions release. Non-major action updates merge without the owner (rule above), and a compromised action usually ships as a fresh release that is found and pulled within days; this is the window in which it can be caught before it reaches a workflow that signs images. Job containers are left out: the build container is pinned by digest in build.yml and in ci/defaults.json, and only the build.yml copy is read by the github-actions manager, so a wait here would hold that copy back while the other moves and split the pin across two files (Danathar/zfs-kinoite-complex#618). Digest-only container updates often have no release date, so a wait on them could also stall indefinitely.",
       "matchManagers": ["github-actions"],
+      "matchDepTypes": ["!container"],
       "minimumReleaseAge": "3 days"
     },
     {
