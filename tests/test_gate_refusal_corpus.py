@@ -52,7 +52,7 @@ OPTIONAL_FIELDS = {"wraps"}
 
 # SHA-256 of the canonical tests/fixtures/gate-refusal-corpus.json in
 # Danathar/atomic-image-builder. Copy the file from there; never edit it here.
-CANONICAL_SHA256 = "92c8ffaa5ff8566ca1bae6a303d0b299144b9ef89ac7ccd2a19fcf132a05a036"
+CANONICAL_SHA256 = "358a28365d9d6b71ca29a561bce82e47978b3fffb1fd9f59129b8f6223caab46"
 
 # Allow rows this gate refuses on purpose, each with the rule that refuses it.
 # They are still run: each one is asserted to be refused, so a gate that

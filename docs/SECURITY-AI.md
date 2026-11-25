@@ -295,6 +295,20 @@ write a file, or run a program, that a prefix rule cannot see.
   name are refused as well: `read HOME`, `printf -v HOME`, `mapfile PATH`,
   `let PATH=1`, an arithmetic command or expansion (`(( PATH = 1 ))`),
   `getopts a PATH`, `select` and `for HOME in ...`.
+- **Directory change.** Every operand check resolves paths against the checkout,
+  so `cd /some/dir && git diff -- a.env b` passed as two in-tree operands, then
+  git ran outside any repository, fell back to `--no-index` on its own and printed
+  both files. It is the shell's spelling of `git -C DIR`, which is refused for the
+  same reason. Once an earlier command of the string runs `cd`, `pushd` or `popd`
+  (also behind `builtin` or `command`) to anywhere that may be outside the
+  checkout, a later git or allow-listed command is refused. A change stays
+  allowed only when it is a literal relative path with no `..` whose real path is
+  inside the checkout, so `cd tests && git log -1` still runs and a committed
+  symlink that points out does not. A bare `cd`, `cd -`, an option, a `~`, `$`,
+  backtick, brace or glob target, an absolute path other than the checkout
+  itself, every `popd`, and a relative name while CDPATH is set or assigned in the
+  string all count as leaving. `cd "$CLAUDE_PROJECT_DIR"` is refused as well,
+  because the string can assign that name first.
 - **Environment.** A variable that changes what git runs
   (`GIT_EXTERNAL_DIFF=prog git diff HEAD~1 HEAD`), written before the command or
   exported earlier in the same string, runs that program once per changed path.

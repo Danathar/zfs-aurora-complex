@@ -3639,6 +3639,112 @@ CORPUS: tuple[Row, ...] = (
         "the runner refuses the pytest options that relocate collection or write a path "
         "itself (settings.json, _note_test_runners); this gate does not second-guess it",
     ),
+    # --- 6. a directory change that moves git out of the checkout ----------
+    #
+    # Every operand check resolves paths against the checkout, so a cd earlier in
+    # the string runs git where those checks no longer hold (#356).
+    Row(
+        "directory change",
+        "cd /tmp && git diff -- x .env",
+        "refused",
+        "git runs outside any repository, falls back to --no-index and prints /tmp/.env "
+        "while both operands look in-tree",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd /tmp; git log -1",
+        "refused",
+        "the same move ended by ; rather than &&",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "(cd /tmp && git diff -- x .env)",
+        "refused",
+        "the same move inside a subshell",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "pushd /tmp && git log -1",
+        "refused",
+        "pushd moves the shell as cd does",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd && git log -1",
+        "refused",
+        "a cd with no operand goes to HOME",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "popd && git log -1",
+        "refused",
+        "popd returns to a directory this string does not name",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "builtin cd /tmp && git log -1",
+        "refused",
+        "builtin runs the same cd",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "command cd /tmp && git log -1",
+        "refused",
+        "command runs the same cd",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd tests/.. && git log -1",
+        "refused",
+        "a .. component may leave the checkout, and the check reads the spelling",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd $(pwd) && git log -1",
+        "refused",
+        "a substitution is not a literal path",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd \"$CLAUDE_PROJECT_DIR\" && git log -1",
+        "refused",
+        "the string can assign that name before the cd, so it names nothing the gate can trust",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd tests && git log -1",
+        "allowed",
+        "a literal relative directory with no .. stays inside the checkout",
+    ),
+    Row(
+        "directory change",
+        "cd ./tests && git log -1",
+        "allowed",
+        "a leading ./ is still a literal relative directory inside the checkout",
+    ),
+    Row(
+        "directory change",
+        "echo cd /tmp && git log -1",
+        "allowed",
+        "cd here is an argument of echo, not a command",
+    ),
+    Row(
+        "directory change",
+        "git log -1 && cd /tmp",
+        "allowed",
+        "git ran before the directory changed",
+    ),
 )
 
 
@@ -4197,6 +4303,18 @@ MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
         "      ((reach_open++))",
         "      :",
         "(( PATH = 1 )); git log -1",
+    ),
+    (
+        "refusing git after a directory change that may leave the checkout",
+        'if [[ -n "${left_dir}" ]] && ((cmd_gated || cmd_git)); then',
+        "if false; then",
+        "cd /tmp && git diff -- x .env",
+    ),
+    (
+        "reading a .. component of a directory change as leaving the checkout",
+        '[[ "/${target}/" == */../* ]] && return 0',
+        ":",
+        "cd tests/.. && git log -1",
     ),
     (
         "stepping over another wrapper's option values",

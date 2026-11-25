@@ -1018,6 +1018,69 @@ SETTINGS_ENV_MSG='blocked: this command takes git'"'"'s settings environment (GI
 # shellcheck disable=SC2016 # the message quotes shell spellings as literal text
 REACH_ENV_MSG='blocked: this string assigns HOME, XDG_CONFIG_HOME or PATH in a statement of its own and then runs git or an allow-listed command. Those variables are already exported, so the new value reaches every later command of the string as surely as a leading `NAME=value` does: with HOME or XDG_CONFIG_HOME re-pointed, git reads planted/.gitconfig (or planted/git/config) as its global configuration, and a diff.external or diff textconv program a branch commits there runs under `git diff HEAD~1 HEAD` or `git log -p`; with PATH re-pointed, bash looks git up in a directory a branch commits and runs the file it finds there. `HOME=planted;`, `read HOME`, `printf -v HOME`, `mapfile PATH`, `for HOME in ...`, `getopts a PATH`, `let PATH=1` and `(( PATH = 1 ))` each assign it. Run the command without changing those variables; reading them (`cd "$HOME"`) and assigning any other name are not affected.'
 
+# shellcheck disable=SC2016 # the message quotes shell spellings as literal text
+CHDIR_MSG='blocked: an earlier command of this string runs cd, pushd or popd to a directory that may be outside this checkout, and git or an allow-listed command runs after it. Every operand check here resolves paths against the checkout, so `cd /some/dir && git diff -- a.env b` passed as two in-tree operands, then git ran outside any repository, fell back to --no-index on its own and printed both files. It is the shell'"'"'s spelling of `git -C DIR`, which is refused for the same reason. A cd into a literal relative path inside the checkout (`cd tests`) is not refused; a bare `cd`, `cd -`, an option, a `~`, `$`, backtick, brace or glob target, an absolute path other than the checkout itself, a `..` component, every `popd`, a symlink that points out, and a relative name while CDPATH is set or assigned in the string all count as leaving. Run the command from the checkout and name the paths.'
+
+# Whether the leading words of a command, kept so far, are only the builtins that run
+# the next word as a shell builtin (`builtin cd`, `command -p cd`), so the word
+# that follows still names the command.
+words_only_step_over_builtins() {
+  local -a seen=()
+  local word
+  read -ra seen <<<"$1"
+  for word in "${seen[@]+"${seen[@]}"}"; do
+    case "${word}" in
+    builtin | command | -p | --) ;;
+    *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+# Whether the cd, pushd or popd command just read may move the shell out of
+# the checkout (0 when it may, 1 when it stays inside). Only a command with
+# one operand that is a literal path can be shown to stay: the operand has to
+# be a relative path with no `..` component whose real path, symlinks
+# resolved, is inside the checkout, or the checkout itself. A path that does
+# not exist yet is read lexically, as a cd to it fails and moves nothing.
+cd_may_leave() {
+  local target raw root resolved cur next rest part
+  [[ "${cmd_cd_name}" == popd ]] && return 0
+  ((${#cd_args[@]} == 1)) || return 0
+  target="${cd_args[0]}"
+  raw="${cd_raws[0]}"
+  [[ -z "${target}" || "${target}" == [-+]* ]] && return 0
+  case "${raw}" in
+  '~'* | *'$'* | *'`'* | *'*'* | *'?'* | *'['* | *'{'*) return 0 ;;
+  *) ;;
+  esac
+  root=$(pwd -P) || return 0
+  if [[ "${target}" == /* ]]; then
+    resolved=$(CDPATH='' cd -P -- "${target}" 2>/dev/null && pwd -P) || return 0
+    [[ "${resolved}" == "${root}" ]] && return 1
+    return 0
+  fi
+  [[ "/${target}/" == */../* ]] && return 0
+  if [[ -n "${CDPATH-}" || "${command_string}" == *CDPATH* ]] && [[ "${target}" != ./* ]]; then
+    return 0
+  fi
+  cur="${root}"
+  rest="${target}"
+  while [[ -n "${rest}" ]]; do
+    part="${rest%%/*}"
+    if [[ "${rest}" == */* ]]; then rest="${rest#*/}"; else rest=''; fi
+    [[ -z "${part}" || "${part}" == . ]] && continue
+    next="${cur}/${part}"
+    if [[ -L "${next}" ]]; then
+      cur=$(CDPATH='' cd -P -- "${next}" 2>/dev/null && pwd -P) || return 0
+    else
+      cur="${next}"
+    fi
+  done
+  [[ "${cur}" == "${root}" || "${cur}" == "${root}/"* ]] && return 1
+  return 0
+}
+
 command_is_gated() {
   local joined="$1" prefix
   for prefix in "${GATED_PREFIXES[@]}"; do
@@ -1062,6 +1125,14 @@ check_gated_command() {
   # prefix all the same.
   ((cmd_gated && cmd_assign)) && refuse "${GATED_ENV_MSG}"
   ((cmd_git && cmd_assign)) && refuse "${GATED_ENV_MSG}"
+  # A directory change that may leave the checkout, earlier in the string,
+  # moves this command out from under every operand check above.
+  if [[ -n "${left_dir}" ]] && ((cmd_gated || cmd_git)); then
+    refuse "blocked: \`${left_dir}\` may move the shell out of this checkout before this command runs. ${CHDIR_MSG#blocked: }"
+  fi
+  if ((cmd_cd)) && [[ -z "${left_dir}" ]] && cd_may_leave; then
+    left_dir="${cmd_cd_name}${cd_args[@]+" ${cd_args[*]}"}"
+  fi
   return 0
 }
 
@@ -1130,6 +1201,10 @@ reset_command() {
   cmd_export=0
   cmd_xargs=0
   cmd_gh_jq=0
+  cmd_cd=0
+  cmd_cd_name=''
+  cd_args=()
+  cd_raws=()
 }
 
 # The words of a command from its *name* onward: a leading assignment
@@ -1149,6 +1224,11 @@ cmd_export=0  # its name is export/declare/typeset/readonly: its own words assig
 cmd_xargs=0   # an xargs in its wrapper chain appends words this gate never sees
 cmd_gh_jq=0   # the next word of this gh command is its --jq/-q filter
 cmd_stack=()  # the outer command's state, while a `$(...)` is being read
+cmd_cd=0       # its name is cd, pushd or popd, so its operand is read when it ends
+cmd_cd_name='' # which of the three
+cd_args=()     # the operands of that command, quotes removed
+cd_raws=()     # the same operands as typed
+left_dir=''    # the first directory change that may leave the checkout, as typed
 export_idx=-1 # the first word that an export-family command assigns
 allexport=0   # `set -a`/`set -o allexport` ran: every later bare assignment exports
 gate_idx=-1   # the last word at which a gated command or git is running
@@ -1173,6 +1253,12 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
     # write.
     # shellcheck disable=SC2016 # the literal `$(` is the separator's name
     if [[ "${words[idx]}" == '$(' ]]; then
+      # A directory change whose operand is a substitution is not a literal
+      # path: it may leave, and the arrays below belong to the inner command.
+      if ((cmd_cd)) && [[ -z "${left_dir}" ]]; then
+        left_dir="${cmd_cd_name}${cd_args[@]+" ${cd_args[*]}"} \$(...)"
+      fi
+      cmd_cd=0
       cmd_stack+=("${cmd_writes} ${cmd_cosign} ${cmd_skopeo} ${cmd_assign} ${cmd_named} ${cmd_gated} ${cmd_git} ${cmd_export} ${cmd_xargs} ${cmd_prefix}")
       reset_command
       continue
@@ -1181,6 +1267,9 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
       check_gated_command
       read -r cmd_writes cmd_cosign cmd_skopeo cmd_assign cmd_named cmd_gated cmd_git cmd_export cmd_xargs cmd_prefix <<<"${cmd_stack[-1]}"
       unset 'cmd_stack[-1]'
+      cmd_cd=0
+      cd_args=()
+      cd_raws=()
       continue
     fi
     check_gated_command
@@ -1213,6 +1302,16 @@ for ((idx = 0; idx < ${#words[@]}; idx++)); do
   ((${xargs_words[idx]:-0})) && cmd_xargs=1
   ((cmd_named)) || ((${command_names[idx]:-0})) || continue
   cmd_named=1
+  # The directory-change builtins, in the name position or behind `builtin` /
+  # `command`; every word after the name is one of its operands.
+  if ((cmd_cd)); then
+    cd_args+=("${words[idx]}")
+    cd_raws+=("${raw_words[idx]}")
+  elif [[ "${words[idx]}" == cd || "${words[idx]}" == pushd || "${words[idx]}" == popd ]] &&
+    words_only_step_over_builtins "${cmd_prefix}"; then
+    cmd_cd=1
+    cmd_cd_name="${words[idx]}"
+  fi
   if ((cmd_gated == 0)); then
     # The words so far cannot grow into a gated prefix and this word may still
     # be the name (a wrapper's own option came first): start over here. Without
