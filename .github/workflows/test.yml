@@ -108,5 +108,5 @@ jobs:
         run: |
           status=0
           python3 tests/mutation_check.py --base "origin/$BASE_REF" > mutation-report.md || status=$?
-          cat mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+          tee -a "$GITHUB_STEP_SUMMARY" < mutation-report.md
           exit "$status"
