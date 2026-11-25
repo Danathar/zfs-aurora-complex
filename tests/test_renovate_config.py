@@ -607,6 +607,12 @@ class PackageRuleTests(unittest.TestCase):
         for narrowing in ("matchManagers", "matchFileNames", "matchDepTypes", "matchUpdateTypes"):
             with self.subTest(key=narrowing):
                 self.assertNotIn(narrowing, matching[0])
+        # A shared group is not enough: a setting only one copy gets, such as a release-age
+        # wait, holds that copy back while the other moves, and the group's PR splits the pin.
+        resolved = [resolve_package_rules(self.rules, copy) for copy in DEVCONTAINER_DEPENDENCIES]
+        for settings in resolved:
+            settings.pop("description", None)
+        self.assertEqual(resolved[0], resolved[1])
 
     def test_the_weekly_group_gathers_every_minor_patch_and_digest_update(self) -> None:
         """One Renovate PR a week, instead of one per dependency, and it merges itself.
