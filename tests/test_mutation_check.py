@@ -2,7 +2,7 @@
 Script: tests/test_mutation_check.py
 What: Tests for tests/mutation_check.py, the diff-scoped mutation run.
 Doing: Stubs the cosmic-ray processes and work database, which only a mutation run installs; everything else is real.
-Why: The diff parsing, the annotation spans, the bash mutants of the git guard hook, the report, the committed ledger and the test files chosen per module decide what the check can see, and a check that silently sees less reads as evidence.
+Why: The diff parsing, the annotation spans, the bash mutants of the git guard hook, the YAML mutants of the workflow and action wiring, the report, the committed ledger and the test files chosen per module decide what the check can see, and a check that silently sees less reads as evidence.
 Goal: Pin each of those, and join the module list to the --cov paths test.yml measures.
 """
 
@@ -30,6 +30,7 @@ from mutation_check import (
     HOOK,
     HOOK_TESTS,
     MEASURED,
+    WIRING_FILES,
     annotation_spans,
     bash_mutants,
     case_alternatives,
@@ -40,10 +41,14 @@ from mutation_check import (
     imports_target,
     kept_operator,
     load_ledger,
+    names_target,
+    naming_pattern,
     outcomes,
     report,
     survivors,
     worth_running,
+    yaml_mutants,
+    yaml_tests,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -606,6 +611,254 @@ class CheckHookTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], mutation_check.test_command(("tests/t.py",)))
         self.assertEqual(run.call_args.kwargs["timeout"], mutation_check.TIMEOUT_SECONDS)
 
+WIRING = textwrap.dedent(
+    """\
+    on:
+      workflow_call:
+        outputs:
+          held:
+            description: >-
+              Held.
+            value: ${{ jobs.a.outputs.held }}
+    env:
+      TOP: ${{ vars.TOP }}
+    jobs:
+      a:
+        if: ${{ github.event_name == 'push' }}
+        outputs:
+          held: ${{ steps.prepare.outputs.held }}
+        steps:
+          - uses: ./x
+            with:
+              # held: ${{ a comment }}
+              held: ${{ needs.b.outputs.held }}
+              plain: value
+              repo: ghcr.io/${{ inputs.org }}
+              quoted: "${{ inputs.q }}"  # why
+          - with:
+              first: ${{ inputs.first }}
+            run: |
+              echo "${{ inputs.x }}"
+              x: ${{ inputs.y }}
+    """
+)
+
+
+class YamlMutantsTests(unittest.TestCase):
+    def mutants(self, source: str, lines=None):
+        lines = set(range(1, source.count("\n") + 2)) if lines is None else lines
+        return yaml_mutants(source, lines)
+
+    def test_deletes_and_empties_each_wiring_line_in_with_env_and_outputs(self) -> None:
+        self.assertEqual(
+            self.mutants(WIRING),
+            [
+                (7, "yaml/DeleteLine", None),
+                (7, "yaml/EmptyValue", '        value: ""'),
+                (9, "yaml/DeleteLine", None),
+                (9, "yaml/EmptyValue", '  TOP: ""'),
+                (14, "yaml/DeleteLine", None),
+                (14, "yaml/EmptyValue", '      held: ""'),
+                (19, "yaml/DeleteLine", None),
+                (19, "yaml/EmptyValue", '          held: ""'),
+                (22, "yaml/DeleteLine", None),
+                (22, "yaml/EmptyValue", '          quoted: ""'),
+                (24, "yaml/DeleteLine", None),
+                (24, "yaml/EmptyValue", '          first: ""'),
+            ],
+        )
+
+    def test_only_the_changed_lines_are_mutated(self) -> None:
+        self.assertEqual(
+            [(n, op) for n, op, _ in self.mutants(WIRING, {12, 14, 20, 99})],
+            [(14, "yaml/DeleteLine"), (14, "yaml/EmptyValue")],
+        )
+
+    def test_a_line_outside_the_wiring_blocks_is_not_mutated(self) -> None:
+        # An `if:`, a comment, a plain value, an expression inside a longer
+        # value, and a line of a `run: |` block are not hand-offs.
+        self.assertEqual(self.mutants(WIRING, {12, 18, 20, 21, 26, 27}), [])
+
+    def test_a_value_line_outside_an_outputs_block_is_not_mutated(self) -> None:
+        source = "inputs:\n  v:\n    value: ${{ inputs.w }}\nwith:\n  v:\n    value: ${{ a }}\n"
+        self.assertEqual(self.mutants(source), [])
+
+    def test_each_kind_of_hand_off_in_the_real_tree_gets_both_mutants(self) -> None:
+        # yaml_tests picks this file for both targets, so naming one exact line
+        # here would kill that line's mutants whatever the wiring tests check.
+        # Every line of each kind is read instead, and one is enough.
+        for target, pattern in (
+            (
+                ".github/actions/prepare-main-akmods/action.yml",
+                r" +value: \$\{\{ steps\.resolve\.outputs\.\w+ \}\}",
+            ),
+            (".github/workflows/build.yml", r" +\w+: \$\{\{ steps\.prepare\.outputs\.\w+ \}\}"),
+            (
+                ".github/workflows/build.yml",
+                r" +\w+: \$\{\{ needs\.build-zfs-akmods\.outputs\.\w+ \}\}",
+            ),
+        ):
+            with self.subTest(target=target, pattern=pattern):
+                source = (ROOT / target).read_text(encoding="utf-8")
+                rows = source.splitlines()
+                numbers = [n for n, row in enumerate(rows, 1) if re.fullmatch(pattern, row)]
+                self.assertGreater(len(numbers), 1)
+                for number in numbers:
+                    self.assertEqual(
+                        [op for _, op, _ in yaml_mutants(source, {number})],
+                        ["yaml/DeleteLine", "yaml/EmptyValue"],
+                    )
+
+
+class YamlTestsTests(unittest.TestCase):
+    def test_a_workflow_is_named_by_its_path_whole_or_in_quoted_parts(self) -> None:
+        pattern = naming_pattern(".github/workflows/build.yml")
+        for text in (
+            'read(".github/workflows/build.yml")',
+            'ROOT / ".github" / "workflows" / "build.yml"',
+            "ROOT / '.github'/'workflows'/'build.yml'",
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(pattern.search(text))
+        for text in (
+            '".github/workflows/build.yml.bak"',
+            '".github/workflows/build.yaml"',
+            '"build.yml"',
+            '".github/workflows/build-pr.yml"',
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(pattern.search(text))
+
+    def test_an_action_is_named_by_its_directory(self) -> None:
+        pattern = naming_pattern(".github/actions/prepare-main-akmods/action.yml")
+        for text in (
+            '"./.github/actions/prepare-main-akmods"',
+            'ROOT / ".github" / "actions" / "prepare-main-akmods" / "action.yml"',
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(pattern.search(text))
+        self.assertFalse(pattern.search('".github/actions/prepare-main-akmods-x"'))
+        self.assertFalse(pattern.search('".github/actions/prepare"'))
+
+    def test_a_workflow_is_named_by_its_directory_and_file_name_apart(self) -> None:
+        directory = 'WORKFLOW_DIR = ROOT / ".github" / "workflows"\n'
+        target = ".github/workflows/build.yml"
+        self.assertTrue(names_target(directory + 'read(WORKFLOW_DIR / "build.yml")', target))
+        self.assertFalse(names_target(directory + 'read(WORKFLOW_DIR / "build-pr.yml")', target))
+        self.assertFalse(names_target(directory + "# build.yml in a comment", target))
+        self.assertFalse(names_target('read("build.yml")', target))
+        # An action is named by its own directory, not by "action.yml".
+        self.assertFalse(
+            names_target(
+                'ROOT / ".github" / "actions" / "other" / "action.yml"',
+                ".github/actions/prepare-main-akmods/action.yml",
+            )
+        )
+
+    def test_finds_the_test_files_that_read_a_workflow_and_an_action(self) -> None:
+        for target, test in (
+            (".github/workflows/build.yml", "tests/test_workflow_build_container.py"),
+            (
+                ".github/actions/prepare-main-akmods/action.yml",
+                "tests/test_workflow_build_container.py",
+            ),
+            (
+                ".github/actions/prepare-main-akmods/action.yml",
+                "tests/test_action_prepare_main_akmods.py",
+            ),
+        ):
+            with self.subTest(target=target, test=test):
+                found = yaml_tests(target)
+                self.assertIn(test, found)
+                self.assertEqual(list(found), sorted(set(found)))
+
+    def test_the_pathspecs_cover_every_workflow_and_action(self) -> None:
+        listed = set(tracked(*WIRING_FILES))
+        self.assertIn(".github/workflows/build.yml", listed)
+        self.assertIn(".github/actions/prepare-main-akmods/action.yml", listed)
+
+
+class CheckYamlTests(unittest.TestCase):
+    TARGET = ".github/workflows/w.yml"
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.path = self.root / self.TARGET
+        self.path.parent.mkdir(parents=True)
+        self.original = b"jobs:\r\n  a:\n    outputs:\n      x: ${{ steps.s.outputs.x }}\n    y: 1\n"
+        self.path.write_bytes(self.original)
+
+    def run_check(self, run_mutant, *, diff="@@ -4 +4 @@\n", tests=("tests/test_w.py",)):
+        git = mock.Mock(return_value=diff)
+        baseline = mock.Mock()
+        found_tests = mock.Mock(return_value=tests)
+        with mock.patch.multiple(
+            mutation_check,
+            ROOT=self.root,
+            git=git,
+            run_mutant=run_mutant,
+            baseline=baseline,
+            yaml_tests=found_tests,
+        ):
+            result = mutation_check.check_yaml(self.TARGET, "origin/main")
+        git.assert_called_once_with("diff", "-U0", "origin/main", "--", self.TARGET)
+        return result, baseline, found_tests
+
+    def test_runs_the_naming_tests_against_each_mutant_written_in_place(self) -> None:
+        seen = []
+
+        def run_mutant(tests):
+            seen.append(self.path.read_bytes())
+            self.assertEqual(tests, ("tests/test_w.py",))
+            return ["killed", "survived"][len(seen) - 1]
+
+        (counts, found), baseline, found_tests = self.run_check(run_mutant)
+        self.assertEqual(
+            seen,
+            [
+                b"jobs:\r\n  a:\n    outputs:\n    y: 1\n",
+                b'jobs:\r\n  a:\n    outputs:\n      x: ""\n    y: 1\n',
+            ],
+        )
+        baseline.assert_called_once_with(("tests/test_w.py",))
+        found_tests.assert_called_once_with(self.TARGET)
+        self.assertEqual(counts, {"killed": 1, "survived": 1})
+        self.assertEqual(
+            found,
+            [
+                {
+                    "module": self.TARGET,
+                    "line_number": 4,
+                    "operator": "yaml/EmptyValue",
+                    "line": "x: ${{ steps.s.outputs.x }}",
+                }
+            ],
+        )
+        self.assertEqual(self.path.read_bytes(), self.original)
+
+    def test_restores_the_original_bytes_when_a_run_is_interrupted(self) -> None:
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_check(mock.Mock(side_effect=KeyboardInterrupt))
+        self.assertEqual(self.path.read_bytes(), self.original)
+
+    def test_a_change_with_no_wiring_line_runs_nothing(self) -> None:
+        run_mutant = mock.Mock()
+        result, baseline, found_tests = self.run_check(run_mutant, diff="@@ -5 +5 @@\n")
+        self.assertEqual(result, ({}, []))
+        run_mutant.assert_not_called()
+        baseline.assert_not_called()
+        found_tests.assert_not_called()
+
+    def test_a_wiring_line_in_a_file_no_test_names_is_untested(self) -> None:
+        run_mutant = mock.Mock()
+        result, baseline, _ = self.run_check(run_mutant, tests=())
+        self.assertIsNone(result)
+        run_mutant.assert_not_called()
+        baseline.assert_not_called()
+        self.assertEqual(self.path.read_bytes(), self.original)
+
 
 class ConfigTextTests(unittest.TestCase):
     def values(self, text: str) -> dict[str, object]:
@@ -651,7 +904,9 @@ class LedgerTests(unittest.TestCase):
         keys = [(entry["module"], entry["operator"], entry["line"]) for entry in data["accepted"]]
         self.assertEqual(len(keys), len(set(keys)), "a ledger entry is listed twice")
         self.assertEqual(load_ledger(mutation_check.LEDGER), set(keys))
-        measured = set(tracked(*(f"{directory}/*.py" for directory in MEASURED), HOOK))
+        measured = set(
+            tracked(*(f"{directory}/*.py" for directory in MEASURED), HOOK, *WIRING_FILES)
+        )
         for entry in data["accepted"]:
             with self.subTest(entry=entry):
                 self.assertEqual(set(entry), {"module", "operator", "line", "reason"})
@@ -665,6 +920,11 @@ class LedgerTests(unittest.TestCase):
                     lines = {n + 1 for n, row in enumerate(rows) if row == entry["line"]}
                     self.assertIn(
                         entry["operator"], {op for _, op, _ in bash_mutants(source, lines)}
+                    )
+                elif entry["module"].startswith(".github/"):
+                    lines = {n + 1 for n, row in enumerate(rows) if row == entry["line"]}
+                    self.assertIn(
+                        entry["operator"], {op for _, op, _ in yaml_mutants(source, lines)}
                     )
                 else:
                     self.assertTrue(kept_operator(entry["operator"]))
@@ -891,6 +1151,8 @@ class MainTests(unittest.TestCase):
                 "diff", "--name-only", "--diff-filter=d", "origin/main", "--",
                 "ci_tools/*.py", "shared/*.py", "containerfiles/zfs-akmods/*.py",
                 "files/scripts/*.py", ".claude/hooks/gate-git-diff.sh",
+                ".github/workflows/*.yml", ".github/workflows/*.yaml",
+                ".github/actions/*/action.yml", ".github/actions/*/action.yaml",
             ),
         )
         check.assert_not_called()
@@ -952,6 +1214,47 @@ class MainTests(unittest.TestCase):
             mutation_check,
             git=mock.Mock(return_value=f"{HOOK}\n"),
             check_hook=mock.Mock(return_value=({"survived": 1}, found)),
+        ), mock.patch.object(mutation_check.os, "chdir"), contextlib.redirect_stdout(stdout):
+            code = mutation_check.main(["--base", "b", "--ledger", str(ledger)])
+        self.assertEqual(code, 0)
+        self.assertIn("No surviving mutant outside the ledger.", stdout.getvalue())
+
+    def test_a_changed_workflow_gets_the_yaml_mutants_and_its_survivors_are_reported(
+        self,
+    ) -> None:
+        workflow = ".github/workflows/build.yml"
+        action = ".github/actions/prepare-main-akmods/action.yml"
+        found = [
+            {"module": workflow, "line_number": 9, "operator": "yaml/DeleteLine", "line": "a: b"}
+        ]
+        results = {workflow: ({"killed": 1, "survived": 1}, found), action: None}
+        check_yaml = mock.Mock(side_effect=lambda target, base: results[target])
+        with mock.patch.object(mutation_check, "check_yaml", check_yaml):
+            code, out, _, _, check, _ = self.run_main(
+                ["--base", "b"], changed=f"{workflow}\n{action}\n"
+            )
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            [c.args for c in check_yaml.call_args_list], [(action, "b"), (workflow, "b")]
+        )
+        check.assert_not_called()
+        self.assertIn(f"- `{workflow}`: 1 killed, 1 survived", out)
+        self.assertIn(f"| `{workflow}:9` | `yaml/DeleteLine` | `a: b` |", out)
+        self.assertIn(f"- `{action}`: no test file names it", out)
+
+    def test_an_accepted_yaml_survivor_is_not_reported(self) -> None:
+        workflow = ".github/workflows/build.yml"
+        found = [
+            {"module": workflow, "line_number": 9, "operator": "yaml/EmptyValue", "line": "ok"}
+        ]
+        ledger = Path(self.tmp.name) / "yaml-ledger.json"
+        entry = {"module": workflow, "operator": "yaml/EmptyValue", "line": "ok", "reason": "r"}
+        ledger.write_text(json.dumps({"accepted": [entry]}))
+        stdout = io.StringIO()
+        with mock.patch.multiple(
+            mutation_check,
+            git=mock.Mock(return_value=f"{workflow}\n"),
+            check_yaml=mock.Mock(return_value=({"survived": 1}, found)),
         ), mock.patch.object(mutation_check.os, "chdir"), contextlib.redirect_stdout(stdout):
             code = mutation_check.main(["--base", "b", "--ledger", str(ledger)])
         self.assertEqual(code, 0)
