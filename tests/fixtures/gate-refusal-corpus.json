@@ -1474,6 +1474,56 @@
       "why": "let into a name git takes nothing from"
     },
     {
+      "id": "path-arithmetic",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": "(( PATH = 1 )); git log -1",
+      "why": "an arithmetic command assigns PATH with no NAME=value word, so bash looks git up in a folder named 1 a branch can commit"
+    },
+    {
+      "id": "home-arithmetic",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "(( HOME = 1 )); git diff HEAD~1 HEAD",
+      "why": "the same assignment to the exported HOME, so git reads 1/.gitconfig and runs the diff.external it names"
+    },
+    {
+      "id": "xdg-config-home-arithmetic-expansion",
+      "class": "configuration reach",
+      "verdict": "refuse",
+      "requires": [
+        "git log"
+      ],
+      "command": ": $(( XDG_CONFIG_HOME = 1 )); git log -p -1",
+      "why": "an arithmetic expansion assigns as the command does, so git reads 1/git/config and runs the textconv it names"
+    },
+    {
+      "id": "config-reach-allow-arithmetic-counter",
+      "class": "configuration reach",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "(( i = 1 )); git log -1",
+      "why": "arithmetic on a name git takes nothing from"
+    },
+    {
+      "id": "config-reach-allow-subshell-path-word",
+      "class": "configuration reach",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "( echo PATH ); git log -1",
+      "why": "a subshell that prints the word PATH assigns nothing"
+    },
+    {
       "id": "config-reach-allow-read-line",
       "class": "configuration reach",
       "verdict": "allow",
@@ -1500,8 +1550,68 @@
       "requires": [
         "git status"
       ],
-      "command": "cd \"$HOME\" && git status",
+      "command": "echo \"$HOME\" && git status",
       "why": "reading HOME is not assigning it"
+    },
+    {
+      "id": "dir-change-cd-plain-file",
+      "class": "directory change",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "cd /tmp && git diff -- x .env",
+      "why": "git runs outside any repository, falls back to --no-index with no flag and prints /tmp/.env, while both operands look like in-tree paths"
+    },
+    {
+      "id": "dir-change-cd-semicolon",
+      "class": "directory change",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "cd /tmp; git diff -- x .env",
+      "why": "the same move ended by ; rather than &&"
+    },
+    {
+      "id": "dir-change-subshell",
+      "class": "directory change",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "(cd /tmp && git diff -- x .env)",
+      "why": "the same move inside a subshell"
+    },
+    {
+      "id": "dir-change-pushd",
+      "class": "directory change",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "pushd /tmp && git diff -- x .env",
+      "why": "pushd moves the shell as cd does"
+    },
+    {
+      "id": "dir-change-bare-cd",
+      "class": "directory change",
+      "verdict": "refuse",
+      "requires": [
+        "git diff"
+      ],
+      "command": "cd && git diff -- .netrc .env",
+      "why": "a cd with no operand goes to HOME and prints two files there"
+    },
+    {
+      "id": "dir-change-allow-inside",
+      "class": "directory change",
+      "verdict": "allow",
+      "requires": [
+        "git log"
+      ],
+      "command": "cd tests && git log -1",
+      "why": "a literal relative directory with no .. stays inside the checkout"
     }
   ]
 }

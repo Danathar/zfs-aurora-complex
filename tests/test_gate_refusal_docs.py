@@ -54,6 +54,7 @@ CLASS_KEYWORDS: dict[str, tuple[str, ...]] = {
         "exec -c",
         "GIT_CONFIG",
     ),
+    "directory change": ("directory change", "pushd", "popd"),
     "environment": ("GIT_EXTERNAL_DIFF",),
     "gh --jq environment": ("--jq", "$ENV"),
     "local ref": ("git branch -D",),
