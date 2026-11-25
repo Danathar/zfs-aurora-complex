@@ -2554,6 +2554,104 @@ CORPUS: tuple[Row, ...] = (
     ),
     Row(
         "environment",
+        "XDG_CONFIG_HOME=x; git log -1",
+        "refused",
+        "a bare assignment re-points git's global configuration as HOME does",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "{ HOME=x; git log -1; }",
+        "refused",
+        "`{` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "! HOME=x; git log -1",
+        "refused",
+        "`!` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "if HOME=x; then git log -1; fi",
+        "refused",
+        "`if` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "if true; then HOME=x; git log -1; fi",
+        "refused",
+        "`then` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "if false; then :; else HOME=x; git log -1; fi",
+        "refused",
+        "`else` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "if false; then :; elif HOME=x; then git log -1; fi",
+        "refused",
+        "`elif` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "for d in a; do HOME=x; git log -1; done",
+        "refused",
+        "`do` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "while HOME=x; do git log -1; done",
+        "refused",
+        "`while` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "until HOME=x; do :; done; git log -1",
+        "refused",
+        "`until` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "time HOME=x; git log -1",
+        "refused",
+        "`time` in front of an assignment is a reserved word, so the assignment still runs in the current shell",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "readarray PATH < f; git log -1",
+        "refused",
+        "readarray assigns the name it is given as mapfile does",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "printf -vPATH x; git log -1",
+        "refused",
+        "printf takes the name joined to -v as well as after it",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
+        "select HOME in a; do git log -1; done",
+        "refused",
+        "select assigns its name as for does",
+        "assigns HOME, XDG_CONFIG_HOME or PATH",
+    ),
+    Row(
+        "environment",
         "git grep -n 'env -i' -- .claude",
         "allowed",
         "env -i as a search pattern is an operand of git grep, not a wrapper",
@@ -3639,6 +3737,13 @@ CORPUS: tuple[Row, ...] = (
         "the runner refuses the pytest options that relocate collection or write a path "
         "itself (settings.json, _note_test_runners); this gate does not second-guess it",
     ),
+    Row(
+        "options",
+        "git --shallow-file=.env log -1",
+        "refused",
+        "the joined spelling names the same file git quotes a line of",
+        "a git global option written before the subcommand",
+    ),
     # --- 6. a directory change that moves git out of the checkout ----------
     #
     # Every operand check resolves paths against the checkout, so a cd earlier in
@@ -3732,6 +3837,87 @@ CORPUS: tuple[Row, ...] = (
         "cd ./tests && git log -1",
         "allowed",
         "a leading ./ is still a literal relative directory inside the checkout",
+    ),
+    Row(
+        "directory change",
+        "command -p cd /tmp && git log -1",
+        "refused",
+        "command runs the same cd behind its own -p",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "builtin -- cd /tmp && git log -1",
+        "refused",
+        "-- ends builtin's options and the same cd follows",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd ~ && git log -1",
+        "refused",
+        "a ~ is HOME",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd \"`x`\" && git log -1",
+        "refused",
+        "a quoted backtick substitution is not a literal path",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd tes* && git log -1",
+        "refused",
+        "a * is expanded by bash after the check reads it",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd test? && git log -1",
+        "refused",
+        "a ? is expanded the same way",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd test[s] && git log -1",
+        "refused",
+        "a [ opens a pattern bash expands the same way",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "cd {tests,x} && git log -1",
+        "refused",
+        "a brace is expanded the same way",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "CDPATH=/tmp; cd tests && git log -1",
+        "refused",
+        "with CDPATH assigned, bash searches it for a relative name",
+        "may move the shell out of this checkout",
+    ),
+    Row(
+        "directory change",
+        "CDPATH=/tmp; cd ./tests && git log -1",
+        "allowed",
+        "bash does not search CDPATH for a name that starts with ./",
+    ),
+    Row(
+        "directory change",
+        "cd tests/. && git log -1",
+        "allowed",
+        "a . component names the same directory",
+    ),
+    Row(
+        "directory change",
+        "cd . && git log -1",
+        "allowed",
+        "the checkout itself is inside the checkout",
     ),
     Row(
         "directory change",
@@ -4433,6 +4619,23 @@ class CorpusTests(GateRunner, unittest.TestCase):
                     self.assertRefused(row.command, row.message)
                 else:
                     self.assertAllowed(row.command)
+
+    def test_a_directory_change_is_read_through_a_symlink(self) -> None:
+        # A branch can commit a symlink, so a tidy relative name is judged by
+        # where it lands, not by its spelling.
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as outside:
+            Path(root, "tests").mkdir()
+            Path(root, "links").mkdir()
+            Path(root, "links", "out").symlink_to(outside)
+            Path(root, "links", "in").symlink_to("../tests")
+            for command, code in (
+                ("cd links/out && git log -1", 2),
+                ("cd links/./out && git log -1", 2),
+                ("cd links/in && git log -1", 0),
+            ):
+                with self.subTest(command=command):
+                    result = self.run_gate(command, cwd=Path(root))
+                    self.assertEqual(result.returncode, code, result.stderr)
 
     def test_the_corpus_covers_every_family_and_both_decisions(self) -> None:
         # Guards against the table quietly becoming a list of refusals, or a
