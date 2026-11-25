@@ -1,7 +1,7 @@
 """
 Script: tests/mutation_check.py
-What: Mutation-tests the lines a change touches in the measured modules and the git guard hook, and reports the survivors.
-Doing: Runs cosmic-ray over only the changed lines of each changed module, runs only the test files that import that module, does the same for the changed lines of .claude/hooks/gate-git-diff.sh with a few bash operators of its own, and prints a Markdown report of every surviving mutant .mutation-survivors.json has not accepted.
+What: Mutation-tests the lines a change touches in the measured modules, the git guard hook and the workflow and action YAML, and reports the survivors.
+Doing: Runs cosmic-ray over only the changed lines of each changed module, runs only the test files that import that module, does the same for the changed lines of .claude/hooks/gate-git-diff.sh with a few bash operators of its own and for the changed `${{ }}` wiring lines of .github/workflows/ and .github/actions/ with two YAML operators, and prints a Markdown report of every surviving mutant .mutation-survivors.json has not accepted.
 Why: Line coverage says a rule ran; it does not say a test would notice the rule breaking. Run by hand against #210, 27 of the 62 mutants on its changed lines survived the tests (#243).
 Goal: Report, on the pull request that adds it, a change whose tests would not notice it breaking.
 
@@ -34,12 +34,24 @@ a `refuse` call into `:`, swap `-eq`/`-ne` and `==`/`!=`, and flip a `x=1` or
 hook. Their survivors go in the same report and the same ledger
 (Danathar/akmods#192 for the ruling, #329 here).
 
+A workflow under .github/workflows/ or a composite action under
+.github/actions/ passes values between steps, jobs and actions in one-line
+`${{ }}` hand-offs that no unit test executes. Each changed line of the form
+`<key>: ${{ <expr> }}` inside a `with:`, `env:` or `outputs:` block, or an
+output's `value: ${{ <expr> }}`, gets two mutants (see yaml_mutants): the line
+deleted, and its value replaced with "". Each runs against the test files
+whose text names the YAML file's repository path, for a workflow its directory
+and its file name apart, or for an action its directory (see names_target). A changed wiring line in a file no test names is
+reported the way a module no test imports is. Their survivors go in the same
+report and the same ledger (#349).
+
 It mutates the files in place, one mutant at a time, and restores each file
 afterwards: cosmic-ray for a Python module, a try/finally that rewrites the
-original bytes for the hook. Run it in a checkout you are not editing.
+original bytes for the hook and the YAML. Run it in a checkout you are not editing.
 
 Exit status: 0 when no unaccepted mutant survives, 1 when one does or when a
-changed module has no test file that imports it, 2 when the unmodified tests
+changed module has no test file that imports it (or a changed wiring line is
+in a file no test file names), 2 when the unmodified tests
 fail or cosmic-ray itself fails.
 """
 
@@ -90,6 +102,15 @@ KEPT_SWAPS = {
     },
 }
 
+# The workflow and composite-action files whose `${{ }}` wiring lines get the
+# YAML mutants, as git pathspecs.
+WIRING_FILES = (
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".github/actions/*/action.yml",
+    ".github/actions/*/action.yaml",
+)
+
 TIMEOUT_SECONDS = 120.0
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
@@ -99,6 +120,14 @@ TEST_SWAPS = {"-eq": "-ne", "-ne": "-eq", "==": "!=", "!=": "=="}
 TEST_WORD = re.compile(r"(?<!\S)(-eq|-ne|==|!=)(?!\S)")
 FLAG = re.compile(r"(?<![^\s;])[A-Za-z_]\w*=([01])(?![^\s;)])")
 REFUSE = re.compile(r"(?<![^\s;&|(])refuse(?![^\s;)])")
+
+# A YAML line whose whole value is one `${{ }}` expression, quoted or not,
+# and a line that opens a mapping: a key with no value on the same line.
+WIRING = re.compile(
+    r"""^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*): +(?P<q>["']?)\$\{\{.*\}\}(?P=q) *(?:#.*)?$"""
+)
+MAPPING_KEY = re.compile(r"^ *(?:- +)?([A-Za-z_][\w-]*): *(?:#.*)?$")
+WIRING_BLOCKS = ("with", "env", "outputs")
 
 
 def kept_operator(name: str) -> bool:
@@ -232,6 +261,95 @@ def bash_mutants(source: str, lines: set[int]) -> list[tuple[int, str, str]]:
                     operator, start, end = f"bash/FlipFlag_{old}_{new}", *match.span(1)
                 found.append((number, operator, line[:start] + new + line[end:]))
     return found
+
+
+def yaml_parents(rows: list[str], index: int) -> list[str | None]:
+    """The keys of the mappings that hold line `index` of `rows`, innermost first.
+
+    A parent is the nearest line above with less indentation, skipping blank
+    lines and comments. One that does not open a mapping, such as a list item
+    with a value or a `run: |` block, is None.
+    """
+    indent = len(rows[index]) - len(rows[index].lstrip(" "))
+    keys = []
+    for row in reversed(rows[:index]):
+        stripped = row.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        level = len(row) - len(row.lstrip(" "))
+        if level >= indent:
+            continue
+        match = MAPPING_KEY.match(row)
+        keys.append(match.group(1) if match else None)
+        indent = level
+        if level == 0:
+            break
+    return keys
+
+
+def yaml_mutants(source: str, lines: set[int]) -> list[tuple[int, str, str | None]]:
+    """(line number, operator, mutated line or None to delete it) per YAML mutant.
+
+    The operators are the ones #349 names, for a changed `<key>: ${{ <expr> }}`
+    line directly inside a `with:`, `env:` or `outputs:` block, or a `value:`
+    line of one output in an `outputs:` block: delete the line, and replace
+    its value with "".
+    """
+    rows = source.splitlines()
+    found = []
+    for number in sorted(n for n in lines if 1 <= n <= len(rows)):
+        match = WIRING.match(rows[number - 1])
+        if not match:
+            continue
+        parents = yaml_parents(rows, number - 1)
+        if not (
+            (parents[:1] and parents[0] in WIRING_BLOCKS)
+            or (match["key"] == "value" and parents[1:2] == ["outputs"])
+        ):
+            continue
+        found.append((number, "yaml/DeleteLine", None))
+        found.append((number, "yaml/EmptyValue", f'{match["indent"]}{match["key"]}: ""'))
+    return found
+
+
+def naming_pattern(target: str) -> re.Pattern:
+    """A pattern for the text that names `target`, or for an action its directory.
+
+    It matches the path written whole, `.github/workflows/build.yml`, or as
+    quoted parts joined by `/`, `".github" / "workflows" / "build.yml"`.
+    """
+    parts = target.split("/")
+    if parts[:2] == [".github", "actions"]:
+        parts = parts[:3]
+    joint = r"""(?:/|["'] */ *["'])"""
+    return re.compile(joint.join(re.escape(part) for part in parts) + r"(?![\w.-])")
+
+
+def names_target(text: str, target: str) -> bool:
+    """Whether the text of a test file names the YAML file `target`.
+
+    A workflow test may build the path from a constant for the directory,
+    `WORKFLOW_DIR / "build.yml"`, so the directory and the quoted file name
+    anywhere in the text also name a workflow.
+    """
+    if naming_pattern(target).search(text):
+        return True
+    directory, _, name = target.rpartition("/")
+    return (
+        directory == ".github/workflows"
+        and re.search(rf"""["']{re.escape(name)}["']""", text) is not None
+        and naming_pattern(directory).search(text) is not None
+    )
+
+
+def yaml_tests(target: str) -> tuple[str, ...]:
+    """Every tracked test file whose text names the YAML file `target`."""
+    names = git("ls-files", "tests/test_*.py", "tests/**/test_*.py").splitlines()
+    return tuple(
+        name
+        for name in sorted(set(names))
+        if names_target((ROOT / name).read_text(encoding="utf-8"), target)
+    )
 
 
 def annotation_spans(source: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
@@ -405,8 +523,9 @@ def report(
 ) -> tuple[str, int]:
     """Markdown for every changed module, and how many findings are new.
 
-    A result of None is a changed module no test file imports: every mutant in
-    it would survive, so it counts as one finding without running any.
+    A result of None is a changed module no test file imports, or a changed
+    workflow or action no test file names: every mutant in it would survive,
+    so it counts as one finding without running any.
     """
     out = ["## Mutation check", ""]
     if not results:
@@ -416,7 +535,8 @@ def report(
     untested = []
     for target, result in results.items():
         if result is None:
-            out.append(f"- `{target}`: no test file imports it")
+            reader = "names" if target.startswith(".github/") else "imports"
+            out.append(f"- `{target}`: no test file {reader} it")
             untested.append(target)
             continue
         counts, found = result
@@ -427,8 +547,8 @@ def report(
     if untested:
         out += [
             (
-                f"{len(untested)} changed module(s) have no test file that imports them, "
-                "so no test can notice a change to them breaking."
+                f"{len(untested)} changed file(s) have no test file that imports or names "
+                "them, so no test can notice a change to them breaking."
             ),
             "",
         ]
@@ -515,36 +635,36 @@ def stop_on_signal(number: int, _frame) -> None:
     raise SystemExit(128 + number)
 
 
-def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
-    """Mutate the lines of HOOK that differ from `base`; return the outcome.
+def mutate_in_place(
+    target: str, tests: tuple[str, ...], mutants: list[tuple[int, str, str | None]]
+) -> tuple[dict[str, int], list[dict]]:
+    """Write each mutant over `target` in turn and run `tests` against it.
 
-    Each mutant is written over the hook in place, so the tests run the hook
-    they always run. The original bytes are written back however the run ends.
+    A mutated line of None deletes the line. The tests run the file they
+    always run. The original bytes are written back however the run ends.
     """
-    baseline(HOOK_TESTS)
-    path = ROOT / HOOK
+    path = ROOT / target
     original = path.read_bytes()
-    source = original.decode("utf-8")
-    rows = source.splitlines(keepends=True)
-    lines = changed_lines(git("diff", "-U0", base, "--", HOOK))
+    rows = original.decode("utf-8").splitlines(keepends=True)
     counts, found = {}, []
     # SIGTERM and SIGHUP end Python without running a `finally`, which would
-    # leave a mutant as the live PreToolUse hook: a timeout(1), a closed
-    # terminal or a cancelled tool call sends one. Raising instead lets the
-    # `finally` below write the original back (#332).
+    # leave a mutant in place, for the hook as the live PreToolUse hook: a
+    # timeout(1), a closed terminal or a cancelled tool call sends one.
+    # Raising instead lets the `finally` below write the original back (#332).
     previous = {number: signal.signal(number, stop_on_signal) for number in STOP_SIGNALS}
     try:
-        for number, operator, mutated in bash_mutants(source, lines):
+        for number, operator, mutated in mutants:
             row = rows[number - 1]
             ending = row[len(row.rstrip("\r\n")) :]
-            text = "".join([*rows[: number - 1], mutated + ending, *rows[number:]])
+            replacement = [] if mutated is None else [mutated + ending]
+            text = "".join([*rows[: number - 1], *replacement, *rows[number:]])
             path.write_bytes(text.encode("utf-8"))
-            outcome = run_mutant(HOOK_TESTS)
+            outcome = run_mutant(tests)
             counts[outcome] = counts.get(outcome, 0) + 1
             if outcome == "survived":
                 found.append(
                     {
-                        "module": HOOK,
+                        "module": target,
                         "line_number": number,
                         "operator": operator,
                         "line": row.strip(),
@@ -555,6 +675,31 @@ def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
         for number, handler in previous.items():
             signal.signal(number, handler)
     return counts, found
+
+
+def check_hook(base: str) -> tuple[dict[str, int], list[dict]]:
+    """Mutate the lines of HOOK that differ from `base`; return the outcome."""
+    baseline(HOOK_TESTS)
+    source = (ROOT / HOOK).read_bytes().decode("utf-8")
+    lines = changed_lines(git("diff", "-U0", base, "--", HOOK))
+    return mutate_in_place(HOOK, HOOK_TESTS, bash_mutants(source, lines))
+
+
+def check_yaml(target: str, base: str) -> tuple[dict[str, int], list[dict]] | None:
+    """Mutate the wiring lines of the YAML file `target` that differ from `base`.
+
+    None when there is a mutant but no test file names `target`: every
+    mutant would survive, so the report counts it as one finding.
+    """
+    source = (ROOT / target).read_bytes().decode("utf-8")
+    mutants = yaml_mutants(source, changed_lines(git("diff", "-U0", base, "--", target)))
+    if not mutants:
+        return {}, []
+    tests = yaml_tests(target)
+    if not tests:
+        return None
+    baseline(tests)
+    return mutate_in_place(target, tests, mutants)
 
 
 def main(argv=None) -> int:
@@ -574,7 +719,7 @@ def main(argv=None) -> int:
     # it no longer exists to mutate.
     changed = git(
         "diff", "--name-only", "--diff-filter=d", args.base, "--",
-        *(f"{directory}/*.py" for directory in MEASURED), HOOK,
+        *(f"{directory}/*.py" for directory in MEASURED), HOOK, *WIRING_FILES,
     ).splitlines()
     results = {}
     os.chdir(ROOT)
@@ -583,6 +728,9 @@ def main(argv=None) -> int:
             for target in sorted(changed):
                 if target == HOOK:
                     results[target] = check_hook(args.base)
+                    continue
+                if target.startswith(".github/"):
+                    results[target] = check_yaml(target, args.base)
                     continue
                 tests = importing_tests(target)
                 results[target] = check(target, tests, args.base, Path(workdir)) if tests else None
