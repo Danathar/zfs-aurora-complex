@@ -915,7 +915,9 @@ class LedgerTests(unittest.TestCase):
                 self.assertTrue(entry["reason"].strip())
                 source = (ROOT / entry["module"]).read_text(encoding="utf-8")
                 rows = [line.strip() for line in source.splitlines()]
-                self.assertEqual(rows.count(entry["line"]), 1, "an entry must match exactly one line")
+                self.assertEqual(
+                    rows.count(entry["line"]), 1, "an entry must match exactly one line"
+                )
                 if entry["module"] == HOOK:
                     # The operator must still be one bash_mutants makes on that line.
                     lines = {n + 1 for n, row in enumerate(rows) if row == entry["line"]}
