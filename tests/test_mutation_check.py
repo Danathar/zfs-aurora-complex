@@ -898,7 +898,8 @@ class LedgerTests(unittest.TestCase):
     def test_the_committed_ledger_names_real_live_mutation_sites(self) -> None:
         # An entry whose line has since been edited would quietly accept
         # nothing, and one naming a skipped swap could never match; both
-        # are rot a reader would trust.
+        # are rot a reader would trust. One whose line occurs more than once
+        # in its module accepts survivors on lines its reason never looked at.
         data = json.loads(mutation_check.LEDGER.read_text(encoding="utf-8"))
         self.assertTrue(data["description"])
         keys = [(entry["module"], entry["operator"], entry["line"]) for entry in data["accepted"]]
@@ -914,7 +915,9 @@ class LedgerTests(unittest.TestCase):
                 self.assertTrue(entry["reason"].strip())
                 source = (ROOT / entry["module"]).read_text(encoding="utf-8")
                 rows = [line.strip() for line in source.splitlines()]
-                self.assertIn(entry["line"], rows)
+                self.assertEqual(
+                    rows.count(entry["line"]), 1, "an entry must match exactly one line"
+                )
                 if entry["module"] == HOOK:
                     # The operator must still be one bash_mutants makes on that line.
                     lines = {n + 1 for n, row in enumerate(rows) if row == entry["line"]}
