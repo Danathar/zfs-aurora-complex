@@ -20,9 +20,11 @@ scheduled runs.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
+import time
 import urllib.request
 from dataclasses import dataclass
 
@@ -66,6 +68,14 @@ COMPARE_FILES_CAP = 300
 # before it moves `:latest`, so the newest one matches unless a promotion was
 # cancelled between the two copies or `:latest` was moved by hand.
 MAX_AUDIT_TAGS_INSPECTED = 10
+# Seconds the audit-tag walk may spend before it gives up and reports the
+# shipped commit as unknown, which builds. Each registry call is bounded by
+# `REGISTRY_METADATA_TIMEOUT` (120s), so ten slow inspects alone could outlast
+# the preflight job's `timeout-minutes: 10` and fail the run instead. The
+# deadline is checked before each inspect, so the walk ends at most one call
+# past it: 180s plus one 120s inspect plus the 30s compare stays near half the
+# job limit.
+AUDIT_TAG_WALK_DEADLINE = 180.0
 
 
 @dataclass(frozen=True)
@@ -173,13 +183,14 @@ def find_shipped_commit(*, image_org: str, image_name: str, latest_digest: str, 
     from upstream Aurora and names Aurora's commit, not this repository's.
 
     Tags are inspected from the highest run number down, and the first one
-    whose digest is `:latest`'s wins. Any registry error returns "", which the
-    caller turns into a build: not knowing what shipped is never read as
-    "everything shipped".
+    whose digest is `:latest`'s wins. Any registry error, or running past
+    `AUDIT_TAG_WALK_DEADLINE`, returns "", which the caller turns into a build:
+    not knowing what shipped is never read as "everything shipped".
     """
     if not latest_digest:
         return ""
     repository_ref = f"docker://ghcr.io/{image_org}/{image_name}"
+    deadline = time.monotonic() + AUDIT_TAG_WALK_DEADLINE
     try:
         tags = list_repository_tags(repository_ref, creds=creds)
         audit_tags = sorted(
@@ -188,6 +199,12 @@ def find_shipped_commit(*, image_org: str, image_name: str, latest_digest: str, 
             reverse=True,
         )
         for tag in audit_tags[:MAX_AUDIT_TAGS_INSPECTED]:
+            if time.monotonic() >= deadline:
+                print(
+                    f"Gave up on the audit tags of {repository_ref} after "
+                    f"{AUDIT_TAG_WALK_DEADLINE:.0f}s"
+                )
+                return ""
             inspect_json = skopeo_inspect_json(f"{repository_ref}:{tag}", creds=creds)
             if str(inspect_json.get("Digest") or "") == latest_digest:
                 return tag.split("-")[2]
@@ -202,6 +219,10 @@ def fetch_commit_comparison(*, repository: str, base: str, head: str) -> dict:
 
     The preflight checkout is depth 1, so `git diff` would need a fetch first;
     the API needs only the job's `GITHUB_TOKEN`, which has `contents: read`.
+
+    `http.client.HTTPException` is caught as well as `OSError`: a connection
+    that drops while the body is read raises `IncompleteRead`, which is not an
+    `OSError`, and an uncaught raise here would fail the scheduled run.
     """
     headers = {
         "Accept": "application/vnd.github+json",
@@ -216,7 +237,7 @@ def fetch_commit_comparison(*, repository: str, base: str, head: str) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read())
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, http.client.HTTPException) as exc:
         raise CiToolError(f"Failed to compare {base}...{head} in {repository}: {exc}") from exc
     if not isinstance(payload, dict):
         raise CiToolError(f"Unexpected compare payload for {base}...{head} in {repository}")
