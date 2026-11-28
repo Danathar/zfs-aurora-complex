@@ -9,6 +9,7 @@ Goal: Keep the schedule-only cadence signal explicit and testable.
 from __future__ import annotations
 
 import contextlib
+import http.client
 import io
 import json
 import os
@@ -20,6 +21,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from ci_tools.check_stable_signal import (
+    AUDIT_TAG_WALK_DEADLINE,
     COMPARE_FILES_CAP,
     MAX_AUDIT_TAGS_INSPECTED,
     PUSH_PATHS_IGNORE,
@@ -477,6 +479,39 @@ class UnshippedCommitsGateTests(unittest.TestCase):
         self.assertTrue(decision.should_build)
         self.assertEqual(decision.reason, "unshipped-commits-source-unknown")
 
+    def test_audit_tag_walk_past_its_deadline_builds(self) -> None:
+        # A registry slow enough to use up the walk's deadline must end in a
+        # build, not in the preflight job's own timeout.
+        now = [1000.0]
+
+        def list_tags(repository_ref: str, *, creds: str | None) -> list[str]:
+            del repository_ref, creds
+            now[0] += AUDIT_TAG_WALK_DEADLINE
+            return ["stable-9-aaaaaaa"]
+
+        with _patched_registry_inspect(_same_signal_inspect), patch(
+            "ci_tools.check_stable_signal.resolve_latest_zfs_version",
+            return_value="2.4.3",
+        ), patch(
+            "ci_tools.check_stable_signal.list_repository_tags", side_effect=list_tags
+        ), patch(
+            "ci_tools.check_stable_signal.time.monotonic", side_effect=lambda: now[0]
+        ), patch(
+            "ci_tools.check_stable_signal.fetch_commit_comparison",
+            side_effect=AssertionError("unexpected compare call"),
+        ):
+            decision = evaluate_stable_signal_gate(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                stable_signal_image="ghcr.io/ublue-os/aurora-dx:stable",
+                zfs_minor_version="2.4",
+                creds="actor:token",
+                repository="Danathar/zfs-aurora-complex",
+                head_sha=HEAD_SHA,
+            )
+        self.assertTrue(decision.should_build)
+        self.assertEqual(decision.reason, "unshipped-commits-source-unknown")
+
     def test_behind_or_diverged_history_builds(self) -> None:
         for status in ("behind", "diverged"):
             with self.subTest(status=status):
@@ -569,6 +604,18 @@ class UnshippedCommitsReasonTests(unittest.TestCase):
         fetch.assert_called_once()
         self.assertEqual(reason, "unshipped-commits")
 
+    def test_connection_dropped_mid_body_builds_with_compare_failed(self) -> None:
+        # `IncompleteRead` is an `http.client.HTTPException`, not an `OSError`.
+        handle = MagicMock()
+        handle.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"{", 100)
+        with patch(
+            "ci_tools.check_stable_signal.urllib.request.urlopen", return_value=handle
+        ):
+            reason = unshipped_commits_reason(
+                repository="o/r", shipped_commit=SHIPPED_SHA7, head_sha=HEAD_SHA
+            )
+        self.assertEqual(reason, "unshipped-commits-compare-failed")
+
 
 class FindShippedCommitTests(unittest.TestCase):
     REPO = "docker://ghcr.io/danathar/zfs-aurora-complex"
@@ -639,6 +686,40 @@ class FindShippedCommitTests(unittest.TestCase):
         self.assertEqual(found, "")
         self.assertEqual(len(inspected), MAX_AUDIT_TAGS_INSPECTED)
 
+    def test_walk_gives_up_at_its_deadline(self) -> None:
+        # Each inspect takes 100 fake seconds. The third tag would match, but
+        # the deadline has passed before it is reached.
+        now = [1000.0]
+        inspected: list[str] = []
+        tags = ["stable-3-ccccccc", "stable-2-bbbbbbb", "stable-1-aaaaaaa"]
+
+        def inspect(image_ref: str, *, creds: str | None = None) -> dict:
+            del creds
+            inspected.append(image_ref)
+            now[0] += 100.0
+            if image_ref.endswith(":stable-1-aaaaaaa"):
+                return {"Digest": "sha256:latest"}
+            return {"Digest": "sha256:other"}
+
+        with patch(
+            "ci_tools.check_stable_signal.list_repository_tags", return_value=tags
+        ), patch(
+            "ci_tools.check_stable_signal.skopeo_inspect_json", side_effect=inspect
+        ), patch(
+            "ci_tools.check_stable_signal.time.monotonic", side_effect=lambda: now[0]
+        ):
+            found = find_shipped_commit(
+                image_org="danathar",
+                image_name="zfs-aurora-complex",
+                latest_digest="sha256:latest",
+                creds="actor:token",
+            )
+        self.assertEqual(AUDIT_TAG_WALK_DEADLINE, 180.0)
+        self.assertEqual(found, "")
+        self.assertEqual(
+            inspected, [f"{self.REPO}:stable-3-ccccccc", f"{self.REPO}:stable-2-bbbbbbb"]
+        )
+
     def test_empty_latest_digest_is_unknown_without_registry_calls(self) -> None:
         with patch("ci_tools.check_stable_signal.list_repository_tags") as list_tags:
             found = find_shipped_commit(
@@ -694,6 +775,14 @@ class FetchCommitComparisonTests(unittest.TestCase):
         with patch(
             "ci_tools.check_stable_signal.urllib.request.urlopen", side_effect=error
         ), self.assertRaisesRegex(CiToolError, "Failed to compare a...b in o/r: HTTP Error 404"):
+            fetch_commit_comparison(repository="o/r", base="a", head="b")
+
+    def test_connection_dropped_mid_body_raises_a_tool_error(self) -> None:
+        handle = MagicMock()
+        handle.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"{", 100)
+        with patch(
+            "ci_tools.check_stable_signal.urllib.request.urlopen", return_value=handle
+        ), self.assertRaisesRegex(CiToolError, "Failed to compare a...b in o/r: IncompleteRead"):
             fetch_commit_comparison(repository="o/r", base="a", head="b")
 
     def test_non_json_and_non_object_payloads_raise(self) -> None:

@@ -124,7 +124,7 @@ It returns one of:
 | `current-latest-missing-stable-signal-labels` | `:latest` exists but predates this gate, or was built by a non-schedule event before provenance was recorded | yes |
 | `current-latest-missing-zfs-version-label` | `:latest` exists but predates the `zfs-version` label | yes |
 | `unshipped-commits` | no upstream signal moved, but main has a commit since the one `:latest` was built from that changes a path outside `on.push.paths-ignore` | yes |
-| `unshipped-commits-source-unknown` | no `stable-*` audit tag among the newest ten shares `:latest`'s digest, so the commit `:latest` came from is unknown | yes |
+| `unshipped-commits-source-unknown` | the commit `:latest` came from is unknown: `:latest` reports no digest, the registry lookup of the audit tags failed, the lookup ran past its 180-second deadline, or no `stable-*` audit tag among the newest ten shares `:latest`'s digest | yes |
 | `unshipped-commits-compare-failed` | the GitHub compare call failed (including a 404 after a force-push) or returned a payload the gate cannot read | yes |
 | `unshipped-commits-history-diverged` | main is behind, or has diverged from, the commit `:latest` was built from | yes |
 | `unshipped-commits-file-list-truncated` | the compare API listed its maximum of 300 files, all ignored, so the rest are unknown | yes |
@@ -137,7 +137,9 @@ change would never ship. The gate finds the commit `:latest` was built from
 through the `stable-<run>-<sha7>` audit tag promotion writes with the same
 digest (the image's `org.opencontainers.image.revision` label names upstream
 Aurora's commit, not this repository's), and asks the GitHub compare API which
-files changed between it and the current main. A change counts only if it
+files changed between it and the current main. The audit tag carries only the
+7-character SHA prefix, so main counts as shipped when its SHA starts with that
+prefix; a false match is about a 1 in 2^28 chance per night, which is accepted. A change counts only if it
 touches a path a push would have built for: the gate keeps a literal copy of
 `on.push.paths-ignore`, matched with GitHub's glob rules, and a test keeps the
 copy equal to the workflow. A rename counts if either name is outside those
