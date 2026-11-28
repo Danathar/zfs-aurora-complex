@@ -174,6 +174,46 @@ class BuildImageStepOrderTests(unittest.TestCase):
         )
 
 
+class StableSignalGateReasonTableTests(unittest.TestCase):
+    """The gate-reason table lists exactly the reasons check_stable_signal.py returns."""
+
+    GATE = "ci_tools/check_stable_signal.py"
+
+    def table_reasons(self) -> list[str]:
+        section = doc().split("| Reason | Meaning | Builds? |\n|---|---|---|\n", 1)[1]
+        rows = []
+        for line in section.splitlines():
+            row = re.match(r"^\| `([a-z-]+)` \|", line)
+            if not row:
+                break
+            rows.append(row.group(1))
+        return rows
+
+    def code_reasons(self) -> set[str]:
+        source = read(self.GATE)
+        return set(re.findall(r'reason="([a-z-]+)"', source)) | set(
+            re.findall(r'return "(unshipped-commits[a-z-]*)"', source)
+        )
+
+    def test_every_reason_the_gate_returns_has_one_row(self) -> None:
+        rows = self.table_reasons()
+        self.assertEqual(len(rows), len(set(rows)), "a reason has two rows")
+        self.assertEqual(set(rows), self.code_reasons())
+
+    def test_the_table_has_a_row_per_reason_including_the_unshipped_ones(self) -> None:
+        rows = self.table_reasons()
+        self.assertEqual(len(rows), 13)
+        for reason in (
+            "unshipped-commits",
+            "unshipped-commits-source-unknown",
+            "unshipped-commits-compare-failed",
+            "unshipped-commits-history-diverged",
+            "unshipped-commits-file-list-truncated",
+        ):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, rows)
+
+
 class CrunKrunPinTests(unittest.TestCase):
     """Run build-image.sh's own crun-krun lines with rpm and dnf5 stubbed."""
 

@@ -123,7 +123,31 @@ It returns one of:
 | `current-latest-missing` | no `:latest` has ever been published | yes |
 | `current-latest-missing-stable-signal-labels` | `:latest` exists but predates this gate, or was built by a non-schedule event before provenance was recorded | yes |
 | `current-latest-missing-zfs-version-label` | `:latest` exists but predates the `zfs-version` label | yes |
+| `unshipped-commits` | no upstream signal moved, but main has a commit since the one `:latest` was built from that changes a path outside `on.push.paths-ignore` | yes |
+| `unshipped-commits-source-unknown` | no `stable-*` audit tag among the newest ten shares `:latest`'s digest, so the commit `:latest` came from is unknown | yes |
+| `unshipped-commits-compare-failed` | the GitHub compare call failed (including a 404 after a force-push) or returned a payload the gate cannot read | yes |
+| `unshipped-commits-history-diverged` | main is behind, or has diverged from, the commit `:latest` was built from | yes |
+| `unshipped-commits-file-list-truncated` | the compare API listed its maximum of 300 files, all ignored, so the rest are unknown | yes |
 | `not-schedule-event` | push or manual run; the gate is bypassed entirely | yes |
+
+The `unshipped-commits` reasons exist because a scheduled run cancels a push
+build still in progress (the `concurrency` group in `build.yml`). Without them
+the scheduled run would then skip on `stable-signal-unchanged`, and the merged
+change would never ship. The gate finds the commit `:latest` was built from
+through the `stable-<run>-<sha7>` audit tag promotion writes with the same
+digest (the image's `org.opencontainers.image.revision` label names upstream
+Aurora's commit, not this repository's), and asks the GitHub compare API which
+files changed between it and the current main. A change counts only if it
+touches a path a push would have built for: the gate keeps a literal copy of
+`on.push.paths-ignore`, matched with GitHub's glob rules, and a test keeps the
+copy equal to the workflow. A rename counts if either name is outside those
+paths. This check runs only after every other build reason, so it can add
+builds but never block one, including a ZFS patch. Every case it cannot settle
+builds, with its own reason, rather than failing the run. Two consequences are
+intended: a push build that *failed* also leaves its commit unshipped, so the
+next scheduled run retries it and a broken main fails every night until it is
+fixed; and while no audit tag matches `:latest`, every scheduled run builds
+until one promotes.
 
 The `zfs-version` label baked onto the image is *not* sourced from this gate's
 own resolution, unlike the stable-signal labels. It comes from the real
