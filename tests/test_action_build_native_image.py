@@ -49,10 +49,17 @@ ACTION_PATH = REPO_ROOT / ".github" / "actions" / "build-native-image" / "action
 ANNOUNCE_STEP = "Show pinned akmods cache input"
 BUILD_STEP = "Build image with buildah"
 
-# PATH must reach the stub and must NOT reach a real buildah, which lives in /usr/bin on a
-# runner. Only the stub directory plus a shell is offered, so an unstubbed call fails with
-# "command not found" instead of contacting a registry.
+# PATH must reach the stubs and must NOT let a real buildah win: it lives in /usr/bin. The
+# stub directory goes first and holds a stub for every container tool, so a real one is never
+# resolved even when /usr/bin is still on PATH for the shell's own utilities.
 SAFE_PATH = "/usr/bin:/bin"
+CONTAINER_TOOLS = ("buildah", "podman", "skopeo", "cosign")
+
+# Prints the first PATH entry, then where each container tool resolves.
+PROBE_BODY = (
+    'printf "%s\\n" "${PATH%%:*}"; '
+    'for tool in buildah podman skopeo cosign; do command -v "${tool}"; done'
+)
 
 # One realistic set of `with:` values, matching what .github/workflows/build.yml passes: the
 # base and akmods refs arrive already digest-pinned by the preceding jobs.
@@ -184,6 +191,7 @@ class BuildActionStepTests(unittest.TestCase):
         *,
         inputs: dict[str, str] | None = None,
         stub_exit: int = 0,
+        body: str | None = None,
     ) -> Result:
         supplied = dict(FULL_INPUTS)
         supplied.update(inputs or {})
@@ -192,9 +200,10 @@ class BuildActionStepTests(unittest.TestCase):
             root = Path(tmp)
             bindir = root / "bin"
             bindir.mkdir()
-            stub = bindir / "buildah"
-            stub.write_text(STUB, encoding="utf-8")
-            stub.chmod(0o755)
+            for tool in CONTAINER_TOOLS:
+                stub = bindir / tool
+                stub.write_text(STUB, encoding="utf-8")
+                stub.chmod(0o755)
 
             argv_log = root / "argv"
             argv_log.touch()
@@ -210,10 +219,13 @@ class BuildActionStepTests(unittest.TestCase):
             }
             env.update(_step_env(step_name, supplied))
 
+            # No stdin and no rc files: a socket on stdin makes bash load ~/.bashrc, which can
+            # put /usr/bin ahead of the stubs and run the real buildah on a developer machine.
             completed = subprocess.run(
-                ["bash", "-c", _step_body(step_name)],
+                ["bash", "--norc", "--noprofile", "-c", body or _step_body(step_name)],
                 env=env,
                 cwd=tmp,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -224,6 +236,40 @@ class BuildActionStepTests(unittest.TestCase):
             if recorded and recorded[-1] == "":
                 recorded.pop()
             return Result(completed, recorded)
+
+    # -- the harness itself ------------------------------------------------
+
+    def test_container_tools_resolve_to_the_stubs_and_never_to_a_real_binary(self) -> None:
+        """
+        buildah, podman, skopeo and cosign all resolve inside the stub directory.
+
+        A real tool resolved here would build, push or sign against the developer's own
+        container storage and registry credentials. The probe runs through the same `_run` as
+        every other case, so it sees exactly the PATH and shell flags the steps see.
+        """
+
+        result = self._run(BUILD_STEP, body=PROBE_BODY)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        stub_dir = lines[0]
+        self.assertNotIn(stub_dir, SAFE_PATH.split(":"))
+        self.assertEqual(
+            lines[1:],
+            [f"{stub_dir}/{tool}" for tool in CONTAINER_TOOLS],
+            "a container tool resolved to something other than the stub directory",
+        )
+
+    def test_the_steps_run_without_stdin_or_rc_files(self) -> None:
+        """
+        A socket on stdin makes bash load `~/.bashrc`, and a `.bashrc` that puts `/usr/bin`
+        first hides the stub directory. Closing stdin and skipping rc files keeps PATH as set.
+        """
+
+        result = self._run(BUILD_STEP, body='if read -r line; then echo data; else echo eof; fi; echo "${-}"')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stdin_state, flags = result.stdout.splitlines()
+        self.assertEqual(stdin_state, "eof")
+        self.assertNotIn("i", flags, "the shell must not be interactive")
 
     # -- the build contract ------------------------------------------------
 
